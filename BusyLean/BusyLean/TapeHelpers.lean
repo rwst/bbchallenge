@@ -67,6 +67,19 @@ theorem replicate_append {α : Type} (a b : Nat) (x : α) :
     zeros a ++ zeros b = zeros (a + b) :=
   replicate_append a b false
 
+-- Commutation: replicate n x ++ x :: L = x :: replicate n x ++ L
+@[simp] theorem replicate_cons_comm {α : Type} (n : Nat) (x : α) (L : List α) :
+    List.replicate n x ++ x :: L = x :: (List.replicate n x ++ L) := by
+  induction n with
+  | zero => simp
+  | succ n ih => simp [List.replicate, List.cons_append, ih]
+
+@[simp] theorem ones_true_cons (n : Nat) (L : List Sym) :
+    ones n ++ true :: L = true :: (ones n ++ L) := replicate_cons_comm n true L
+
+@[simp] theorem zeros_false_cons (n : Nat) (L : List Sym) :
+    zeros n ++ false :: L = false :: (zeros n ++ L) := replicate_cons_comm n false L
+
 -- listHead / listTail lemmas for common patterns
 
 @[simp] theorem listHead_cons {α : Type} (a : α) (l : List α) (d : α) :
