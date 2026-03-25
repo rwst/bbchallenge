@@ -12,58 +12,37 @@ example : run antihydra (initConfig 6) 1 =
     { state := some stB, left := [true], head := false, right := [] } := by decide
 
 -- ============================================================
--- Test 2: tm_follow chaining to reach 58 steps
+-- Test 2: tm_follow for manual chaining
 -- ============================================================
 
--- 10 steps
 theorem init_10 : run antihydra (initConfig 6) 10 =
     ⟨some stE, [true, true, true], true, [false]⟩ := by decide
 
--- 20 = 10 + 10
 theorem step_20 : run antihydra ⟨some stE, [true, true, true], true, [false]⟩ 10 =
     ⟨some stB, [true], true, [false, true, true, true, false]⟩ := by decide
 
--- 30 = 20 + 10
-theorem step_30 :
-    run antihydra ⟨some stB, [true], true, [false, true, true, true, false]⟩ 10 =
-    ⟨some stB, [true, true, true, true, true, false, true], false, []⟩ := by decide
-
--- 40 = 30 + 10
-theorem step_40 :
-    run antihydra ⟨some stB, [true, true, true, true, true, false, true], false, []⟩ 10 =
-    ⟨some stD, [], false, [true, false, false, true, true, true, true, true, true, false]⟩ := by
-  decide
-
--- 48 = 40 + 8
-theorem step_48 :
-    run antihydra ⟨some stD, [], false,
-      [true, false, false, true, true, true, true, true, true, false]⟩ 8 =
-    ⟨some stA, [false, true, true], true,
-      [false, true, true, true, true, true, true, false]⟩ := by decide
-
--- 58 = 48 + 10
-theorem step_58 :
-    run antihydra ⟨some stA, [false, true, true], true,
-      [false, true, true, true, true, true, true, false]⟩ 10 =
-    ⟨some stE, [true, true, true, true, true, true, true, true, false, true, true],
-      false, []⟩ := by decide
-
--- Chain them all: 58 steps from init
-theorem init_58 : run antihydra (initConfig 6) 58 =
-    ⟨some stE, [true, true, true, true, true, true, true, true, false, true, true],
-      false, []⟩ := by
+theorem init_20 : run antihydra (initConfig 6) 20 =
+    run antihydra (⟨some stE, [true, true, true], true, [false]⟩) 10 := by
   tm_follow init_10
-  tm_follow step_20
-  tm_follow step_30
-  tm_follow step_40
-  tm_follow step_48
-  tm_follow step_58
 
 -- ============================================================
--- Test 3: symbolic step with simp
+-- Test 3: tm_chain for automatic chaining
 -- ============================================================
 
--- State A reading true: move right, write true, stay in A
+-- 58 steps in one shot — automatically splits into 10-step chunks
+example : run antihydra (initConfig 6) 58 =
+    ⟨some stE, [true, true, true, true, true, true, true, true, false, true, true],
+      false, []⟩ := by tm_chain
+
+-- Custom chunk size
+example : run antihydra (initConfig 6) 58 =
+    ⟨some stE, [true, true, true, true, true, true, true, true, false, true, true],
+      false, []⟩ := by tm_chain 15
+
+-- ============================================================
+-- Test 4: symbolic step with simp
+-- ============================================================
+
 example (L R : List Sym) :
     step antihydra { state := some stA, left := L, head := true, right := R } =
     { state := some stA, left := true :: L, head := listHead R false,
@@ -71,10 +50,19 @@ example (L R : List Sym) :
   simp [step, antihydra]
 
 -- ============================================================
--- Test 4: Cryptid machine parses and runs
+-- Test 5: Cryptid machine
 -- ============================================================
 
 def cryptid : TM 6 := tm! "1RB0RB_1LC1RE_1LF0LD_1RA1LD_1RC1RB_---1LC"
 
 example : run cryptid (initConfig 6) 1 =
     { state := some stB, left := [true], head := false, right := [] } := by decide
+
+-- ============================================================
+-- Test 6: BB(2) champion halts in 6 steps
+-- ============================================================
+
+def bb2 : TM 2 := tm! "1RB1LB_1LA---"
+
+example : run bb2 (initConfig 2) 6 =
+    ⟨none, [true], true, [true, true]⟩ := by tm_chain

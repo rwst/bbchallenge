@@ -25,6 +25,9 @@ Domain-specific tactics inspired by BusyCoq's `step`, `follow`, `es`, `ind`.
   to rewrite `run tm c₁ (k₁ + m) = c₃` into `run tm c₂ m = c₃`.
 
 - `tm_finish` — Close `run tm c 0 = c'` or `c = c'` goals.
+
+- `tm_chain` — Automatically prove `run tm c k = c'` by splitting into chunks
+  (default 10) and proving each with `decide`. Usage: `tm_chain` or `tm_chain 20`.
 -/
 
 namespace BusyLean
@@ -120,5 +123,76 @@ elab_rules : tactic
     -- If remaining steps = 0, try to close with rfl
     if bNat == 0 then
       try evalTactic (← `(tactic| rfl)) catch _ => pure ()
+
+/-- `tm_chain` automatically proves `run tm c k = c'` by splitting into chunks
+    and proving each with `decide`.
+
+    Usage: `tm_chain` (default chunk size 10) or `tm_chain 20` for custom chunk size.
+
+    This automates the manual pattern of defining intermediate theorems and
+    chaining them with `tm_follow`. -/
+syntax "tm_chain" (num)? : tactic
+
+open Lean Elab Tactic Meta in
+private def extractRunGoal (goalType : Expr) :
+    MetaM (Expr × Expr × Expr × Expr) := do
+  let_expr Eq _ goalLhs goalRhs := goalType
+    | throwError "tm_chain: goal is not an equality"
+  let .app (.app (.app _ tmExpr) cExpr) kExpr := goalLhs
+    | throwError "tm_chain: goal LHS not of the form `run tm c k`"
+  return (tmExpr, cExpr, kExpr, goalRhs)
+
+open Lean Elab Tactic Meta in
+elab_rules : tactic
+  | `(tactic| tm_chain $[$n?]?) => do
+    let chunkSize := match n? with
+      | some n => n.getNat
+      | none => 10
+    if chunkSize == 0 then throwError "tm_chain: chunk size must be > 0"
+    let goal ← getMainGoal
+    let goalType ← goal.getType
+    let (_, _, kExpr, _) ← extractRunGoal goalType
+    let some kNat ← evalNat kExpr |>.run
+      | throwError "tm_chain: can't evaluate step count"
+    if kNat == 0 then
+      evalTactic (← `(tactic| rfl))
+      return
+    if kNat ≤ chunkSize then
+      evalTactic (← `(tactic| decide))
+      return
+    -- Chain: repeatedly split off chunks and prove each with decide
+    let mut remaining := kNat
+    while remaining > chunkSize do
+      let chunk := chunkSize
+      let rest := remaining - chunk
+      -- Get fresh goal state
+      let curGoal ← getMainGoal
+      let curType ← curGoal.getType
+      let (tmExpr, cExpr, curKExpr, _) ← extractRunGoal curType
+      let curKSyn ← Term.exprToSyntax curKExpr
+      let chunkSyn ← Term.exprToSyntax (mkNatLit chunk)
+      let restSyn ← Term.exprToSyntax (mkNatLit rest)
+      -- Evaluate run tm c chunk to get intermediate config
+      let runChunkExpr ← mkAppM ``run #[tmExpr, cExpr, mkNatLit chunk]
+      let cNext ← reduce runChunkExpr
+      let cNextSyn ← Term.exprToSyntax cNext
+      -- Split and rewrite:
+      -- 1. rw total = chunk + rest
+      -- 2. rw run_add to get run tm (run tm c chunk) rest
+      -- 3. have h : run tm c chunk = cNext := by decide; rw [h]
+      let hName := Name.mkSimple s!"_chain_{remaining}"
+      let hIdent := mkIdent hName
+      evalTactic (← `(tactic|
+        rw [show $curKSyn = $chunkSyn + $restSyn from by omega]))
+      evalTactic (← `(tactic| rw [run_add]))
+      let tmSyn ← Term.exprToSyntax tmExpr
+      let cSyn ← Term.exprToSyntax cExpr
+      evalTactic (← `(tactic|
+        have $hIdent : run $tmSyn $cSyn $chunkSyn = $cNextSyn := by decide))
+      evalTactic (← `(tactic| rw [$hIdent:ident]))
+      evalTactic (← `(tactic| clear $hIdent))
+      remaining := rest
+    -- Final chunk
+    evalTactic (← `(tactic| decide))
 
 end BusyLean
