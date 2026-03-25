@@ -117,5 +117,8 @@ elab_rules : tactic
     let k1ExprLit := mkNatLit k1Nat
     -- Build proof: k = k₁ + b by omega
     evalTactic (← `(tactic| (rw [show $(← Term.exprToSyntax kExpr) = $(← Term.exprToSyntax k1ExprLit) + $(← Term.exprToSyntax bExpr) from by omega]; rw [run_add]; rw [$h:ident])))
+    -- If remaining steps = 0, try to close with rfl
+    if bNat == 0 then
+      try evalTactic (← `(tactic| rfl)) catch _ => pure ()
 
 end BusyLean

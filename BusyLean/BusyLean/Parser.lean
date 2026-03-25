@@ -87,7 +87,6 @@ elab "tm! " s:str : term <= expectedType? => do
     | .ok r => pure r
     | .error msg => throwError "tm! parse error: {msg}"
   -- Parse the generated source as Lean syntax
-  let n := Syntax.mkNumLit (toString numStates)
   let fullSrc := s!"\{ tr := {src} : TM {numStates} }"
   let env ← getEnv
   let stx ← match Parser.runParserCategory env `term fullSrc with
