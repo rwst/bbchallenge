@@ -1,0 +1,17 @@
+name = "bbchallenge"
+defaultTargets = ["Antihydra"]
+
+[leanOptions]
+autoImplicit = false
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+
+[[lean_lib]]
+name = "BusyLean"
+srcDir = "BusyLean"
+
+[[lean_lib]]
+name = "Antihydra"
+srcDir = "Antihydra"
