@@ -147,12 +147,12 @@ theorem tm_P_step (b m n p : Nat) :
   have step11 : run antihydra { state := some stE, head := true, left := true :: listTail (listTail (ones (m+2) ++ false :: ones b)), right := false :: true :: ones (n+2) ++ false :: zeros p } 1 =
     { state := some stE, head := false, left := true :: true :: listTail (listTail (ones (m+2) ++ false :: ones b)), right := true :: ones (n+2) ++ false :: zeros p } := by
     ah_simp
-  rw [show 2*n + 12 = 1 + (1 + ((n+1) + (1 + (1 + ((n+2) + (1 + (1 + (1 + (1 + 1))))))))) from by omega]
-  rw [run_add, step1, run_add, step2, run_add, step3]
-  rw [run_add, step4, run_add, step5, run_add, step6]
-  rw [run_add, step7, run_add, step8, run_add, step9]
-  rw [run_add, step10, step11]
-  simp [P_Config_Pad]
+  tm_follow step1; tm_follow step2; tm_follow step3
+  tm_follow step4; tm_follow step5; tm_follow step6
+  tm_follow step7; tm_follow step8; tm_follow step9
+  tm_follow step10; tm_follow step11
+  simp only [show 2 * n + 12 - 1 - 1 - (n + 1) - 1 - 1 - (n + 2) - 1 - 1 - 1 - 1 - 1 = 0 from by omega]
+  simp [run, P_Config_Pad]
 
 
 theorem tm_P_multistep (b m n p k : Nat) :

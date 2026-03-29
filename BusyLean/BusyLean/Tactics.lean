@@ -96,33 +96,33 @@ syntax "tm_follow " ident : tactic
 open Lean Elab Tactic Meta in
 elab_rules : tactic
   | `(tactic| tm_follow $h) => do
-    let hExpr ← elabTerm h none
-    let hType ← inferType hExpr
-    -- hType should be: run tm c₁ k₁ = c₂
-    -- Extract k₁ from it
-    let_expr Eq _ lhs _ := hType | throwError "tm_follow: hypothesis not an equality"
-    -- lhs = run tm c₁ k₁
-    let .app (.app (.app _ _tm) _c1) k1Expr := lhs
-      | throwError "tm_follow: LHS not of the form `run tm c k`"
-    -- Get the goal: run tm c₁ k = c₃
     let goal ← getMainGoal
+    -- Look up h in the local context (not elabTerm, which misses local hyps)
+    let hName := h.getId
+    let lctx := (← goal.getDecl).lctx
+    let some decl := lctx.findFromUserName? hName
+      | throwError "tm_follow: unknown hypothesis '{hName}'"
+    let hType := decl.type
+    -- hType should be: run tm c₁ k₁ = c₂
+    let_expr Eq _ lhs _ := hType | throwError "tm_follow: hypothesis '{hName}' is not an equality"
+    -- lhs = run tm c₁ k₁ — extract k₁ as an Expr (not evaluated to Nat)
+    let .app (.app (.app _ _tm) _c1) k1Expr := lhs
+      | throwError "tm_follow: hypothesis LHS not of the form `run tm c k`"
+    -- Get the goal: run tm c₁ k = c₃ — extract k
     let goalType ← goal.getType
     let_expr Eq _ goalLhs _ := goalType | throwError "tm_follow: goal not an equality"
     let .app (.app (.app _ _) _) kExpr := goalLhs
       | throwError "tm_follow: goal LHS not of the form `run tm c k`"
-    -- Compute b = k - k₁ using evalNat
-    let some k1Nat ← evalNat k1Expr |>.run | throwError "tm_follow: can't eval hypothesis step count"
-    let some kNat ← evalNat kExpr |>.run | throwError "tm_follow: can't eval goal step count"
-    if kNat < k1Nat then throwError "tm_follow: goal steps {kNat} < hypothesis steps {k1Nat}"
-    let bNat := kNat - k1Nat
-    -- Now rewrite: run tm c k = run tm (run tm c k₁) b, then apply h
-    let bExpr := mkNatLit bNat
-    let k1ExprLit := mkNatLit k1Nat
-    -- Build proof: k = k₁ + b by omega
-    evalTactic (← `(tactic| (rw [show $(← Term.exprToSyntax kExpr) = $(← Term.exprToSyntax k1ExprLit) + $(← Term.exprToSyntax bExpr) from by omega]; rw [run_add]; rw [$h:ident])))
-    -- If remaining steps = 0, try to close with rfl
-    if bNat == 0 then
-      try evalTactic (← `(tactic| rfl)) catch _ => pure ()
+    -- Rewrite: k = k₁ + (k - k₁) by omega, then run_add, then h
+    -- Keeps step counts symbolic — omega handles the arithmetic
+    let kSyn ← Term.exprToSyntax kExpr
+    let k1Syn ← Term.exprToSyntax k1Expr
+    evalTactic (← `(tactic|
+      (rw [show $kSyn = $k1Syn + ($kSyn - $k1Syn) from by omega, run_add]; rw [$h:ident])))
+    -- If remaining steps = 0 (symbolically), try to close: normalize step count, then rfl
+    try evalTactic (← `(tactic| rfl)) catch _ =>
+    try evalTactic (← `(tactic| (simp only [show $kSyn - $k1Syn = 0 from by omega, run]; rfl)))
+      catch _ => pure ()
 
 /-- `tm_chain` automatically proves `run tm c k = c'` by splitting into chunks
     and proving each with `decide`.
