@@ -5,3 +5,4 @@ import BusyLean.RunLemmas
 import BusyLean.Notation
 import BusyLean.Tactics
 import BusyLean.Nonhalt
+import BusyLean.StreamDefs

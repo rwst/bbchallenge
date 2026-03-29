@@ -372,128 +372,70 @@ lemma isValidLoopStart_eq_P_Config_Pad (c : Config 6) (hm : isValidLoopStart c) 
   · unfold P_Config_Pad; congr
   · exact ha
 
--- Right-tape padding independence: two configs that differ only in trailing zeros behave the same
+-- Right-tape padding independence via stream embedding.
+-- Two P_Config_Pad configs with different padding p have the same toSConfig,
+-- so their runs agree on state, head, and left tape. This replaces the
+-- 120-line RightPadEquiv infrastructure with ~40 lines.
 
-/-- Two right tapes are equivalent if they agree at every index (with false as default). -/
-def RightPadEquiv (R1 R2 : List Sym) : Prop :=
-  ∀ i : Nat, R1.getD i false = R2.getD i false
+/-- P_Config_Pad maps to the same SConfig regardless of padding p. -/
+lemma P_Config_Pad_toSConfig_eq (b m n p p' : Nat) :
+    (P_Config_Pad b m n p).toSConfig = (P_Config_Pad b m n p').toSConfig := by
+  apply toSConfig_padding_indep <;> simp [P_Config_Pad]
 
-lemma listHead_eq_getD_zero (R : List Sym) :
-    listHead R false = R.getD 0 false := by
-  cases R with | nil => rfl | cons x xs => rfl
-
-lemma listTail_getD (R : List Sym) (i : Nat) :
-    (listTail R).getD i false = R.getD (i + 1) false := by
-  cases R with
-  | nil => simp [listTail, List.getD]
-  | cons x xs => simp [listTail, List.getD]
-
-lemma rightPadEquiv_listHead (R1 R2 : List Sym) (h : RightPadEquiv R1 R2) :
-    listHead R1 false = listHead R2 false := by
-  rw [listHead_eq_getD_zero, listHead_eq_getD_zero]; exact h 0
-
-lemma rightPadEquiv_listTail (R1 R2 : List Sym) (h : RightPadEquiv R1 R2) :
-    RightPadEquiv (listTail R1) (listTail R2) := by
-  intro i; rw [listTail_getD, listTail_getD]; exact h (i + 1)
-
-lemma rightPadEquiv_cons (w : Sym) (R1 R2 : List Sym) (h : RightPadEquiv R1 R2) :
-    RightPadEquiv (w :: R1) (w :: R2) := by
-  intro i; cases i with | zero => rfl | succ i => simp [List.getD]; exact h i
-
-lemma step_rightPadEquiv (c1 c2 : Config 6)
-    (hs : c1.state = c2.state) (hl : c1.left = c2.left)
-    (hh : c1.head = c2.head) (hr : RightPadEquiv c1.right c2.right) :
-    (step antihydra c1).state = (step antihydra c2).state ∧
-    (step antihydra c1).left = (step antihydra c2).left ∧
-    (step antihydra c1).head = (step antihydra c2).head ∧
-    RightPadEquiv (step antihydra c1).right (step antihydra c2).right := by
-  rcases c1 with ⟨s, L, hd, R1⟩
-  rcases c2 with ⟨s2, L2, hd2, R2⟩
-  simp only at hs hl hh
-  subst hs; subst hl; subst hh
-  have hhead := rightPadEquiv_listHead _ _ hr
-  have htail := rightPadEquiv_listTail _ _ hr
+/-- The left tape after one step depends only on state, head, and left tape (not right). -/
+private lemma step_left_eq {c₁ c₂ : Config 6}
+    (hs : c₁.state = c₂.state) (hl : c₁.left = c₂.left) (hh : c₁.head = c₂.head) :
+    (step antihydra c₁).left = (step antihydra c₂).left := by
+  rcases c₁ with ⟨s, l, h, r₁⟩; rcases c₂ with ⟨_, _, _, r₂⟩
+  simp only at hs hl hh; subst hs; subst hl; subst hh
   cases s with
-  | none => exact ⟨rfl, rfl, rfl, hr⟩
+  | none => rfl
   | some q =>
-    unfold step; dsimp only []
-    generalize h : antihydra.tr q hd = tr_result
-    cases tr_result
-    · dsimp only []; exact ⟨rfl, rfl, rfl, hr⟩
-    · rename_i result
-      rcases result with ⟨q', w, d⟩
-      cases d with
-      | L => dsimp only []; exact ⟨rfl, rfl, rfl, rightPadEquiv_cons w R1 R2 hr⟩
-      | R => dsimp only []; exact ⟨rfl, rfl, hhead, htail⟩
+    cases h_tr : antihydra.tr q h with
+    | none => simp [step, h_tr]
+    | some val => obtain ⟨q', w, d⟩ := val; cases d <;> simp [step, h_tr]
 
-lemma run_rightPadEquiv (c1 c2 : Config 6) (k : Nat)
-    (hs : c1.state = c2.state) (hl : c1.left = c2.left)
-    (hh : c1.head = c2.head) (hr : RightPadEquiv c1.right c2.right) :
-    (run antihydra c1 k).state = (run antihydra c2 k).state ∧
-    (run antihydra c1 k).left = (run antihydra c2 k).left ∧
-    (run antihydra c1 k).head = (run antihydra c2 k).head ∧
-    RightPadEquiv (run antihydra c1 k).right (run antihydra c2 k).right := by
-  induction k generalizing c1 c2 with
-  | zero => exact ⟨hs, hl, hh, hr⟩
+/-- Running two padding-equivalent configs preserves left-list equality and SConfig equality. -/
+private lemma run_pad_transfer {c₁ c₂ : Config 6} (k : Nat)
+    (hl : c₁.left = c₂.left) (hsc : c₁.toSConfig = c₂.toSConfig) :
+    (run antihydra c₁ k).left = (run antihydra c₂ k).left ∧
+    (run antihydra c₁ k).toSConfig = (run antihydra c₂ k).toSConfig := by
+  induction k generalizing c₁ c₂ with
+  | zero => exact ⟨hl, hsc⟩
   | succ k ih =>
-    simp only [run]
-    have h := step_rightPadEquiv c1 c2 hs hl hh hr
-    exact ih _ _ h.1 h.2.1 h.2.2.1 h.2.2.2
+    have hsc' : (step antihydra c₁).toSConfig = (step antihydra c₂).toSConfig := by
+      rw [toSConfig_step, toSConfig_step, hsc]
+    have hs : c₁.state = c₂.state := by
+      have := congrArg SConfig.state hsc; simp [Config.toSConfig] at this; exact this
+    have hh : c₁.head = c₂.head := by
+      have := congrArg SConfig.head hsc; simp [Config.toSConfig] at this; exact this
+    exact ih (step_left_eq hs hl hh) hsc'
 
-lemma rightPadEquiv_append_zeros (R : List Sym) (p q : Nat) :
-    RightPadEquiv (R ++ zeros p) (R ++ zeros q) := by
-  intro i
-  simp only [List.getD]
-  by_cases hi : i < R.length
-  · rw [List.getElem?_append_left (by omega), List.getElem?_append_left (by omega)]
-  · have hi' : R.length ≤ i := Nat.le_of_not_lt hi
-    rw [List.getElem?_append_right (by omega), List.getElem?_append_right (by omega)]
-    simp [zeros, List.getElem?_replicate]
-    split <;> split <;> simp_all
-
-lemma rightPadEquiv_zeros (p q : Nat) :
-    RightPadEquiv (zeros p) (zeros q) := by
-  have := rightPadEquiv_append_zeros [] p q; simpa
-
-private lemma getD_false_of_all_false (R : List Sym) (h : R.all (!·) = true)
-    (i : Nat) : R.getD i false = false := by
+/-- If R.all (!·) = true, then listToSide R = Side.blank. -/
+private lemma listToSide_blank_of_all_false {R : List Sym} (h : R.all (!·) = true) :
+    listToSide R = Side.blank := by
+  ext i; simp [listToSide, Side.blank]
   induction R generalizing i with
   | nil => simp [List.getD]
   | cons x xs ih =>
+    simp only [List.all_cons, Bool.and_eq_true] at h
     cases i with
-    | zero =>
-      simp only [List.getD, List.getElem?_cons_zero, Option.getD_some]
-      simp only [List.all_cons, Bool.and_eq_true] at h
-      cases x <;> simp_all
-    | succ i =>
-      simp only [List.getD, List.getElem?_cons_succ]
-      simp only [List.all_cons, Bool.and_eq_true] at h
-      exact ih h.2 i
+    | zero => simp [List.getD]; cases x <;> simp_all
+    | succ i => simp [List.getD]; exact ih h.2 i
 
-private lemma all_false_of_getD_false (R : List Sym)
-    (h : ∀ i : Nat, R.getD i false = false) : R.all (!·) = true := by
-  induction R with
-  | nil => rfl
-  | cons x xs ih =>
-    simp only [List.all_cons, Bool.and_eq_true]
-    constructor
-    · have := h 0; simp only [List.getD, List.getElem?_cons_zero, Option.getD_some] at this
-      cases x <;> simp_all
-    · exact ih (fun i => by have := h (i + 1); simp only [List.getD, List.getElem?_cons_succ] at this; exact this)
-
-lemma rightPadEquiv_all_false {R1 R2 : List Sym}
-    (h : RightPadEquiv R1 R2) (h2 : R2.all (!·) = true) :
-    R1.all (!·) = true :=
-  all_false_of_getD_false R1 (fun i => by rw [h i]; exact getD_false_of_all_false R2 h2 i)
-
--- Transfer lemmas for padding independence
-
-lemma isValidLoopStart_of_rightPadEquiv {c1 c2 : Config 6}
-    (hs : c1.state = c2.state) (hl : c1.left = c2.left)
-    (hh : c1.head = c2.head) (hr : RightPadEquiv c1.right c2.right)
-    (hv : isValidLoopStart c2) : isValidLoopStart c1 := by
+/-- Transfer isValidLoopStart across different right-tape padding. -/
+lemma isValidLoopStart_of_pad_transfer {c₁ c₂ : Config 6}
+    (hl : c₁.left = c₂.left) (hsc : c₁.toSConfig = c₂.toSConfig)
+    (hv : isValidLoopStart c₂) : isValidLoopStart c₁ := by
+  have hs : c₁.state = c₂.state := by
+    have := congrArg SConfig.state hsc; simp [Config.toSConfig] at this; exact this
+  have hh : c₁.head = c₂.head := by
+    have := congrArg SConfig.head hsc; simp [Config.toSConfig] at this; exact this
+  have hr_stream : listToSide c₁.right = listToSide c₂.right := by
+    have := congrArg SConfig.right hsc; simp [Config.toSConfig] at this; exact this
   unfold isValidLoopStart at hv ⊢
-  exact ⟨hs ▸ hv.1, hh ▸ hv.2.1, rightPadEquiv_all_false hr hv.2.2.1,
+  exact ⟨hs ▸ hv.1, hh ▸ hv.2.1,
+    all_false_of_listToSide_blank (by rw [hr_stream]; exact listToSide_blank_of_all_false hv.2.2.1),
     hl ▸ hv.2.2.2.1, hl ▸ hv.2.2.2.2⟩
 
 lemma decodeTape_of_left_eq {c1 c2 : Config 6} (hl : c1.left = c2.left) :
@@ -705,17 +647,14 @@ theorem tm_even_full (b n p : Nat) :
       = P_Config_Pad (b+2) (3*n+5) 0 p := by
     show run antihydra (P_Config_Pad b (2*n+2) 0 p') (n*(3*n+9) + (9*n+2*b+26)) = _
     rw [run_add, h_multi, h_end]
-  have h_equiv : RightPadEquiv (P_Config_Pad b (2*n+2) 0 p).right
-      (P_Config_Pad b (2*n+2) 0 p').right := by
-    simp only [P_Config_Pad]; exact rightPadEquiv_append_zeros (ones 0) p p'
-  have h_run := run_rightPadEquiv
-    (P_Config_Pad b (2*n+2) 0 p) (P_Config_Pad b (2*n+2) 0 p') k rfl rfl rfl h_equiv
+  have hsc := P_Config_Pad_toSConfig_eq b (2*n+2) 0 p p'
+  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
   rw [h_padded] at h_run
   use k
   refine ⟨by omega, ?_, ?_⟩
-  · exact isValidLoopStart_of_rightPadEquiv h_run.1 h_run.2.1 h_run.2.2.1 h_run.2.2.2
+  · exact isValidLoopStart_of_pad_transfer h_run.1 h_run.2
       (isValidLoopStart_P_Config_Pad (b+2) (3*n+5) p (by omega))
-  · rw [decodeTape_of_left_eq h_run.2.1]; simp
+  · rw [decodeTape_of_left_eq h_run.1]; simp
 
 -- Odd halt case: the TM halts
 theorem tm_odd_halt_ex (n p : Nat) :
@@ -733,12 +672,12 @@ theorem tm_odd_halt_ex (n p : Nat) :
   have h_padded : (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') k).state = none := by
     show (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') (n*(3*n+9) + (6*n+12))).state = none
     rw [run_add, h_multi]; exact h_end
-  have h_equiv : RightPadEquiv (P_Config_Pad 0 (2*n+3) 0 p).right
-      (P_Config_Pad 0 (2*n+3) 0 p').right := by
-    simp only [P_Config_Pad]; exact rightPadEquiv_append_zeros (ones 0) p p'
-  have h_run := run_rightPadEquiv
-    (P_Config_Pad 0 (2*n+3) 0 p) (P_Config_Pad 0 (2*n+3) 0 p') k rfl rfl rfl h_equiv
-  exact ⟨k, by omega, h_run.1.symm ▸ h_padded⟩
+  have hsc := P_Config_Pad_toSConfig_eq 0 (2*n+3) 0 p p'
+  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
+  have hs : (run antihydra (P_Config_Pad 0 (2*n+3) 0 p) k).state =
+      (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') k).state := by
+    have := congrArg SConfig.state h_run.2; simp [Config.toSConfig] at this; exact this
+  exact ⟨k, by omega, hs.symm ▸ h_padded⟩
 
 -- Odd continue case: the TM reaches a valid loop start with the correct decoded state
 theorem tm_odd_continue (b' n p : Nat) :
@@ -759,17 +698,14 @@ theorem tm_odd_continue (b' n p : Nat) :
       = P_Config_Pad b' (3*n+6) 0 p := by
     show run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p') (n*(3*n+9) + (9*n+20)) = _
     rw [run_add, h_multi, h_end]
-  have h_equiv : RightPadEquiv (P_Config_Pad (b'+1) (2*n+3) 0 p).right
-      (P_Config_Pad (b'+1) (2*n+3) 0 p').right := by
-    simp only [P_Config_Pad]; exact rightPadEquiv_append_zeros (ones 0) p p'
-  have h_run := run_rightPadEquiv
-    (P_Config_Pad (b'+1) (2*n+3) 0 p) (P_Config_Pad (b'+1) (2*n+3) 0 p') k rfl rfl rfl h_equiv
+  have hsc := P_Config_Pad_toSConfig_eq (b'+1) (2*n+3) 0 p p'
+  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
   rw [h_padded] at h_run
   use k
   refine ⟨by omega, ?_, ?_⟩
-  · exact isValidLoopStart_of_rightPadEquiv h_run.1 h_run.2.1 h_run.2.2.1 h_run.2.2.2
+  · exact isValidLoopStart_of_pad_transfer h_run.1 h_run.2
       (isValidLoopStart_P_Config_Pad b' (3*n+6) p (by omega))
-  · rw [decodeTape_of_left_eq h_run.2.1]; simp
+  · rw [decodeTape_of_left_eq h_run.1]; simp
 
 -- C. The Block-Step Lemma (The Core Theorem)
 theorem tm_simulates_math (c : Config 6) (hm : isValidLoopStart c) :
