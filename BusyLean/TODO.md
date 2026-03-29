@@ -3,9 +3,9 @@
 ## Current state
 
 BusyCoq AntiHydra.v: ~100 lines (Coq)
-Antihydra.lean: ~1001 lines (Lean, after applying all available BusyLean optimizations)
+Antihydra.lean: ~937 lines (Lean, after applying all available BusyLean optimizations)
 
-The 10x gap is explained by both missing BusyLean features and fundamental
+The ~9x gap is explained by both missing BusyLean features and fundamental
 architectural differences. This document catalogs what needs to change.
 
 ---
@@ -25,6 +25,7 @@ architectural differences. This document catalogs what needs to change.
 | `tm_finish` | No | Not needed |
 | `⟪! q \| l \| h \| r ⟫` | No | Left-tape convention mismatch (visual vs zipper) |
 | `xs ×× n` | No | Marginal benefit for current proofs |
+| `StreamDefs` | **Yes** | Replaces `RightPadEquiv` (~123→59 lines, -64 net) |
 
 ---
 
@@ -72,26 +73,24 @@ or change the abbreviations to use `OfNat` so they're definitionally equal to wh
 
 ## Missing features (architectural)
 
-### 4. Infinite/coinductive tapes (HIGH IMPACT — eliminates ~200 lines)
+### 4. Infinite/coinductive tapes — DONE
 
-**BusyCoq:** Uses `Stream` (coinductive `nat → bool`) for tapes with `const 0` as
-the blank tape. Configurations have infinite tapes on both sides.
+**Implemented** in `BusyLean/StreamDefs.lean` (~340 lines). Key types/lemmas:
+- `Side := Nat → Sym` (infinite half-tape), `SConfig n` (stream-based config)
+- `Config.toSConfig`: embedding from finite-list configs to stream configs
+- `toSConfig_step`/`toSConfig_run`: commutativity with the embedding
+- `toSConfig_padding_indep`: configs differing only in trailing zeros map to same SConfig
+- `listToSide`, `Side.blank`, `Side.prepend`, notation `blank∞` and `xs *> s`
 
-**BusyLean:** Uses `List Sym` (finite) for tapes. This forces:
-- `zeros p` padding on the right tape everywhere
-- The entire `RightPadEquiv` infrastructure (~100 lines in Antihydra)
-- `tm_even_full`, `tm_odd_halt_ex`, `tm_odd_continue` each need ~20 lines of
-  padding plumbing to transfer results from padded to unpadded configs
-- `rightPadEquiv_append_zeros`, `rightPadEquiv_zeros`, `getD_false_of_all_false`,
-  `all_false_of_getD_false`, `rightPadEquiv_all_false`, etc.
+**Applied** to Antihydra.lean: replaced the ~123-line `RightPadEquiv` block with ~59
+lines of stream-based equivalents (`P_Config_Pad_toSConfig_eq`, `step_left_eq`,
+`run_pad_transfer`, `listToSide_blank_of_all_false`, `isValidLoopStart_of_pad_transfer`).
+Net savings: ~64 lines.
 
-**Fix:** Add a `Stream`-based tape type (or `Nat → Sym`) alongside the current list
-tapes, with `const false` as blank. Provide `step`/`run` that work on stream configs.
-The list-based API can remain for `decide`-based concrete proofs; stream-based for
-symbolic proofs.
-
-This is the single highest-impact change — it would eliminate all padding
-infrastructure and make the proof structure match BusyCoq.
+**Remaining opportunity:** The stream infrastructure could eliminate more boilerplate
+if the main proof used `SConfig` directly (instead of bridging back to list configs).
+This would require rewriting the shift lemmas and loop proofs to work on `SConfig`,
+which is a larger refactor.
 
 ### 5. Factored loop lemmas / `ind` tactic
 
@@ -157,7 +156,7 @@ entirely.
 
 1. **Fix `tm_follow`** — unblocks the biggest line savings (~2 lines saved per step
    lemma application, ~40+ lines per theorem)
-2. **Infinite tapes** — eliminates ~200 lines of padding infrastructure per proof file
+2. ~~**Infinite tapes**~~ — **DONE** (saved ~64 lines in Antihydra via StreamDefs.lean)
 3. **`tm_simp` extensibility** — eliminates need for per-file `ah_simp` wrappers
 4. **`listHead`/`listTail` auto-cleanup** — saves 3 lines per shift lemma use
 5. **Factored loop support / `ind`** — enables BusyCoq-style concise rule proofs
@@ -167,7 +166,7 @@ entirely.
 
 ## What a fully optimized Antihydra.lean would look like
 
-With items 1-4 fixed, the core theorems would shrink from:
+With items 1, 3-4 fixed (item 2/infinite tapes already done), the core theorems would shrink from:
 
 ```lean
 -- Current: ~30 lines per theorem
@@ -192,5 +191,5 @@ theorem tm_P_step ... := by
   simp [P_Config_Pad]
 ```
 
-With items 1-5 all fixed (infinite tapes + factored loops), the entire file
-could potentially reach ~200-300 lines, comparable to BusyCoq's structure.
+With items 1, 3-5 all fixed (infinite tapes already done + factored loops), the
+entire file could potentially reach ~200-300 lines, comparable to BusyCoq's structure.
