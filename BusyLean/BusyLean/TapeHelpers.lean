@@ -41,6 +41,13 @@ def countZeros : List Sym → Nat
 @[simp] theorem zeros_zero : zeros 0 = [] := rfl
 @[simp] theorem zeros_succ (k : Nat) : zeros (k + 1) = false :: zeros k := rfl
 
+-- Fold lemmas: collapse true/false :: (ones/zeros k ++ R) back into ones/zeros (k+1) ++ R.
+-- Used by tm_exec to normalize tape representation after step computation.
+theorem ones_cons_append (k : Nat) (R : List Sym) :
+    true :: (ones k ++ R) = ones (k + 1) ++ R := by rw [ones_succ, List.cons_append]
+theorem zeros_cons_append (k : Nat) (R : List Sym) :
+    false :: (zeros k ++ R) = zeros (k + 1) ++ R := by rw [zeros_succ, List.cons_append]
+
 @[simp] theorem countOnes_nil : countOnes [] = 0 := rfl
 @[simp] theorem countOnes_true (xs : List Sym) :
     countOnes (true :: xs) = countOnes xs + 1 := rfl

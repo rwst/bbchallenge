@@ -111,48 +111,13 @@ lemma E_shift (k : Nat) (L R : List Sym) :
 
 theorem tm_P_step (b m n p : Nat) :
     run antihydra (P_Config_Pad b (m+2+2) n (p+2)) (2*n + 12) = P_Config_Pad b (m+2) (n+3) (p+1) := by
-  have step1 : run antihydra (P_Config_Pad b (m+2+2) n (p+2)) 1 =
-    { state := some stF, head := true, left := ones (m+2+1) ++ false :: ones b, right := ones (n+1) ++ zeros (p+2) } := by
-    ah_simp
-  have step2 : run antihydra { state := some stF, head := true, left := ones (m+2+1) ++ false :: ones b, right := ones (n+1) ++ zeros (p+2) } 1 =
-    { state := some stA, head := true, left := false :: ones (m+2+1) ++ false :: ones b, right := ones n ++ zeros (p+2) } := by
-    ah_simp
-  have step3 : run antihydra { state := some stA, head := true, left := false :: ones (m+2+1) ++ false :: ones b, right := ones n ++ zeros (p+2) } (n+1) =
-    { state := some stA, head := false, left := ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := zeros (p+1) } := by
-    have hA := A_shift n (false :: ones (m+2+1) ++ false :: ones b) (zeros (p+2))
-    simp at hA; exact hA
-  have step4 : run antihydra { state := some stA, head := false, left := ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := zeros (p+1) } 1 =
-    { state := some stB, head := false, left := true :: ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := zeros p } := by
-    ah_simp
-  have step5 : run antihydra { state := some stB, head := false, left := true :: ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := zeros p } 1 =
-    { state := some stC, head := true, left := ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := false :: zeros p } := by
-    ah_simp
-  have step6 : run antihydra { state := some stC, head := true, left := ones (n+1) ++ (false :: ones (m+2+1) ++ false :: ones b), right := false :: zeros p } (n+2) =
-    { state := some stC, head := false, left := ones (m+2+1) ++ false :: ones b, right := ones (n+2) ++ false :: zeros p } := by
-    have hC := C_shift (n+1) (false :: ones (m+2+1) ++ false :: ones b) (false :: zeros p)
-    simp at hC; exact hC
-  have step7 : run antihydra { state := some stC, head := false, left := ones (m+2+1) ++ false :: ones b, right := ones (n+2) ++ false :: zeros p } 1 =
-    { state := some stD, head := true, left := ones (m+2) ++ false :: ones b, right := true :: ones (n+2) ++ false :: zeros p } := by
-    ah_simp
-  have step8 : run antihydra { state := some stD, head := true, left := ones (m+2) ++ false :: ones b, right := true :: ones (n+2) ++ false :: zeros p } 1 =
-    { state := some stB, head := listHead (ones (m+2) ++ false :: ones b) false, left := listTail (ones (m+2) ++ false :: ones b), right := false :: true :: ones (n+2) ++ false :: zeros p } := by
-    ah_simp
-  have step9 : run antihydra { state := some stB, head := listHead (ones (m+2) ++ false :: ones b) false, left := listTail (ones (m+2) ++ false :: ones b), right := false :: true :: ones (n+2) ++ false :: zeros p } 1 =
-    { state := some stE, head := true, left := listTail (listTail (ones (m+2) ++ false :: ones b)), right := true :: false :: true :: ones (n+2) ++ false :: zeros p } := by
-    have h_head : listHead (ones (m+2) ++ false :: ones b) false = true := rfl
-    rw [h_head]; ah_simp
-  have step10 : run antihydra { state := some stE, head := true, left := listTail (listTail (ones (m+2) ++ false :: ones b)), right := true :: false :: true :: ones (n+2) ++ false :: zeros p } 1 =
-    { state := some stE, head := true, left := true :: listTail (listTail (ones (m+2) ++ false :: ones b)), right := false :: true :: ones (n+2) ++ false :: zeros p } := by
-    ah_simp
-  have step11 : run antihydra { state := some stE, head := true, left := true :: listTail (listTail (ones (m+2) ++ false :: ones b)), right := false :: true :: ones (n+2) ++ false :: zeros p } 1 =
-    { state := some stE, head := false, left := true :: true :: listTail (listTail (ones (m+2) ++ false :: ones b)), right := true :: ones (n+2) ++ false :: zeros p } := by
-    ah_simp
-  tm_follow step1; tm_follow step2; tm_follow step3
-  tm_follow step4; tm_follow step5; tm_follow step6
-  tm_follow step7; tm_follow step8; tm_follow step9
-  tm_follow step10; tm_follow step11
-  simp only [show 2 * n + 12 - 1 - 1 - (n + 1) - 1 - 1 - (n + 2) - 1 - 1 - 1 - 1 - 1 = 0 from by omega]
-  simp [run, P_Config_Pad]
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show 2 * n + 10 = (n + 1) + (n + 9) from by omega, run_add]
+  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show n + 6 = (n + 1) + 5 from by omega, run_add]
+  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
+  tm_exec [antihydra, P_Config_Pad]
 
 
 theorem tm_P_multistep (b m n p k : Nat) :
@@ -206,76 +171,20 @@ theorem tm_even_endgame (b N p : Nat) :
 -- Odd Endgame (m=3, b>0)
 theorem tm_odd_endgame (b' N p : Nat) :
     run antihydra (P_Config_Pad (b' + 1) 3 N (p+2)) (3*N + 20) = P_Config_Pad b' (N+6) 0 p := by
-  have step1 : run antihydra (P_Config_Pad (b' + 1) 3 N (p+2)) 1 =
-    { state := some stF, head := true, left := ones 2 ++ false :: ones (b'+1), right := ones (N+1) ++ zeros (p+2) } := by
-    ah_simp
-
-  have step2 : run antihydra { state := some stF, head := true, left := ones 2 ++ false :: ones (b'+1), right := ones (N+1) ++ zeros (p+2) } 1 =
-    { state := some stA, head := true, left := false :: ones 2 ++ false :: ones (b'+1), right := ones N ++ zeros (p+2) } := by
-    cases N with
-    | zero => ah_simp
-    | succ N' => ah_simp
-
-  have step3 : run antihydra { state := some stA, head := true, left := false :: ones 2 ++ false :: ones (b'+1), right := ones N ++ zeros (p+2) } (N+1) =
-    { state := some stA, head := false, left := ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := zeros (p+1) } := by
-    have hA := A_shift N (false :: ones 2 ++ false :: ones (b'+1)) (zeros (p+2))
-    simp at hA; exact hA
-  have step4 : run antihydra { state := some stA, head := false, left := ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := zeros (p+1) } 1 =
-    { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := zeros p } := by
-    ah_simp
-  have step5 : run antihydra { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := zeros p } 1 =
-    { state := some stC, head := true, left := ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := false :: zeros p } := by
-    ah_simp
-  have step6 : run antihydra { state := some stC, head := true, left := ones (N+1) ++ (false :: ones 2 ++ false :: ones (b'+1)), right := false :: zeros p } (N+2) =
-    { state := some stC, head := false, left := ones 2 ++ false :: ones (b'+1), right := ones (N+2) ++ false :: zeros p } := by
-    have hC := C_shift (N+1) (false :: ones 2 ++ false :: ones (b'+1)) (false :: zeros p)
-    simp at hC; exact hC
-  have step7 : run antihydra { state := some stC, head := false, left := ones 2 ++ false :: ones (b'+1), right := ones (N+2) ++ false :: zeros p } 1 =
-    { state := some stD, head := true, left := ones 1 ++ false :: ones (b'+1), right := ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step8 : run antihydra { state := some stD, head := true, left := ones 1 ++ false :: ones (b'+1), right := ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stB, head := true, left := false :: ones (b'+1), right := false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step9 : run antihydra { state := some stB, head := true, left := false :: ones (b'+1), right := false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stE, head := false, left := ones (b'+1), right := true :: false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step10 : run antihydra { state := some stE, head := false, left := ones (b'+1), right := true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stF, head := true, left := ones b', right := true :: true :: false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step11 : run antihydra { state := some stF, head := true, left := ones b', right := true :: true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stA, head := true, left := false :: ones b', right := true :: false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step12 : run antihydra { state := some stA, head := true, left := false :: ones b', right := true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stA, head := true, left := true :: false :: ones b', right := false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step13 : run antihydra { state := some stA, head := true, left := true :: false :: ones b', right := false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stA, head := false, left := true :: true :: false :: ones b', right := ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step14 : run antihydra { state := some stA, head := false, left := true :: true :: false :: ones b', right := ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stB, head := true, left := true :: true :: true :: false :: ones b', right := ones (N+2) ++ false :: zeros p } := by
-    rw [show ones (N+3) = true :: ones (N+2) from rfl]
-    ah_simp
-  have step15 : run antihydra { state := some stB, head := true, left := true :: true :: true :: false :: ones b', right := ones (N+2) ++ false :: zeros p } 1 =
-    { state := some stE, head := true, left := true :: true :: false :: ones b', right := ones (N+3) ++ false :: zeros p } := by
-    rw [show ones (N+3) = true :: ones (N+2) from rfl]
-    ah_simp
-  have step16 : run antihydra { state := some stE, head := true, left := ones 2 ++ false :: ones b', right := ones (N+3) ++ false :: zeros p } (N+4) =
-    { state := some stE, head := false, left := ones (N+4) ++ (ones 2 ++ false :: ones b'), right := zeros p } := by
-    have hE := E_shift (N+3) (ones 2 ++ false :: ones b') (false :: zeros p)
-    simp (config := { decide := true }) at hE
-    convert hE using 2 <;> simp [List.append_assoc]
-  rw [show 3*N + 20 = 1 + (1 + ((N+1) + (1 + (1 + ((N+2) + (1 + (1 + (1 + (1 + (1 + (1 + (1 + (1 + (1 + (N+4))))))))))))))) from by omega]
-  rw [run_add, step1, run_add, step2, run_add, step3]
-  rw [run_add, step4, run_add, step5, run_add, step6]
-  rw [run_add, step7, run_add, step8, run_add, step9]
-  rw [run_add, step10, run_add, step11, run_add, step12]
-  rw [run_add, step13, run_add, step14, run_add, step15]
-  simp only [ones_zero] at *
-  have h_eq : (ones 2 : List Sym) ++ false :: ones b' = true :: true :: false :: ones b' := by norm_num [ones]
-  rw [h_eq] at step16
-  have h_pad : { state := some stE, head := false, left := ones (N+4) ++ (true :: true :: false :: ones b'), right := zeros p } = P_Config_Pad b' (N+6) 0 p := by
-    simp [P_Config_Pad, ones_append, List.append_assoc]
-  rw [← h_pad, ← step16]
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show 3 * N + 18 = (N + 1) + (2 * N + 17) from by omega, run_add]
+  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show 2 * N + 14 = (N + 1) + (N + 13) from by omega, run_add]
+  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
+  tm_exec [antihydra, P_Config_Pad]
+  simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
+  rw [show 1 + (1 + (1 + (1 + (1 + (N + 1))))) = N + 6 from by omega]
+  simp only [P_Config_Pad, ones_zero, List.nil_append]
+  congr 1
+  rw [show (true :: true :: true :: true :: true :: false :: ones b' : List Sym) = ones 5 ++ false :: ones b' from rfl,
+    ← List.append_assoc, ones_append]
+  simp only [List.append_assoc, List.singleton_append]
 
 -- Additional tape lemmas needed for later proofs
 
@@ -445,188 +354,58 @@ lemma decodeTape_of_left_eq {c1 c2 : Config 6} (hl : c1.left = c2.left) :
 -- Even endgame: from a=2 to valid loop start with a=N+5, b=b+2
 theorem tm_even_endgame_to_loop (b N p : Nat) :
     run antihydra (P_Config_Pad b 2 N (p+2)) (3*N + 2*b + 26) = P_Config_Pad (b+2) (N+5) 0 p := by
-  -- Common prefix steps 1-8: 2N+9 steps total
-  have step1 : run antihydra (P_Config_Pad b 2 N (p+2)) 1 =
-    { state := some stF, head := true, left := ones 1 ++ false :: ones b, right := true :: ones N ++ zeros (p+2) } := by
-    ah_simp
-  have step2 : run antihydra { state := some stF, head := true, left := ones 1 ++ false :: ones b, right := true :: ones N ++ zeros (p+2) } 1 =
-    { state := some stA, head := true, left := false :: ones 1 ++ false :: ones b, right := ones N ++ zeros (p+2) } := by
-    ah_simp
-  have step3 : run antihydra { state := some stA, head := true, left := false :: ones 1 ++ false :: ones b, right := ones N ++ zeros (p+2) } (N+1) =
-    { state := some stA, head := false, left := ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := zeros (p+1) } := by
-    have hA := A_shift N (false :: ones 1 ++ false :: ones b) (zeros (p+2))
-    simp at hA; exact hA
-  have step4 : run antihydra { state := some stA, head := false, left := ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := zeros (p+1) } 1 =
-    { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := zeros p } := by
-    ah_simp
-  have step5 : run antihydra { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := zeros p } 1 =
-    { state := some stC, head := true, left := ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := false :: zeros p } := by
-    ah_simp
-  have step6 : run antihydra { state := some stC, head := true, left := ones (N+1) ++ (false :: ones 1 ++ false :: ones b), right := false :: zeros p } (N+2) =
-    { state := some stC, head := false, left := ones 1 ++ false :: ones b, right := ones (N+2) ++ false :: zeros p } := by
-    have hC := C_shift (N+1) (false :: ones 1 ++ false :: ones b) (false :: zeros p)
-    simp at hC; exact hC
-  have step7 : run antihydra { state := some stC, head := false, left := ones 1 ++ false :: ones b, right := ones (N+2) ++ false :: zeros p } 1 =
-    { state := some stD, head := true, left := false :: ones b, right := ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step8 : run antihydra { state := some stD, head := true, left := false :: ones b, right := ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stB, head := false, left := ones b, right := false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  -- Now split on b
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show 3 * N + 2 * b + 24 = (N + 1) + (2 * N + 2 * b + 23) from by omega, run_add]
+  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
+  tm_exec [antihydra, P_Config_Pad]
+  rw [show 2 * N + 2 * b + 20 = (N + 1) + (N + 2 * b + 19) from by omega, run_add]
+  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
+  tm_exec [antihydra, P_Config_Pad]
   cases b with
   | zero =>
-    have step9 : run antihydra { state := some stB, head := false, left := ([] : List Sym), right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stC, head := false, left := [], right := false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step10 : run antihydra { state := some stC, head := false, left := ([] : List Sym), right := false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stD, head := false, left := [], right := true :: false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step11 : run antihydra { state := some stD, head := false, left := ([] : List Sym), right := true :: false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := false, left := [], right := true :: true :: false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step12 : run antihydra { state := some stA, head := false, left := ([] : List Sym), right := true :: true :: false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stB, head := true, left := [true], right := true :: false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step13 : run antihydra { state := some stB, head := true, left := [true], right := true :: false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stE, head := true, left := [], right := true :: true :: false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step14 : run antihydra { state := some stE, head := true, left := ([] : List Sym), right := true :: true :: false :: false :: ones (N+3) ++ false :: zeros p } 3 =
-      { state := some stE, head := false, left := ones 3, right := false :: ones (N+3) ++ false :: zeros p } := by
-      have hE := E_shift 2 ([] : List Sym) (false :: false :: ones (N+3) ++ false :: zeros p)
-      simp at hE; exact hE
-    have step15 : run antihydra { state := some stE, head := false, left := ones 3, right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stF, head := true, left := ones 2, right := true :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step16 : run antihydra { state := some stF, head := true, left := ones 2, right := true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := true, left := false :: ones 2, right := false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step17 : run antihydra { state := some stA, head := true, left := false :: ones 2, right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := false, left := true :: false :: ones 2, right := ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step18 : run antihydra { state := some stA, head := false, left := true :: false :: ones 2, right := ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stB, head := true, left := true :: true :: false :: ones 2, right := ones (N+2) ++ false :: zeros p } := by
-      ah_simp
-    have step19 : run antihydra { state := some stB, head := true, left := true :: true :: false :: ones 2, right := ones (N+2) ++ false :: zeros p } 1 =
-      { state := some stE, head := true, left := true :: false :: ones 2, right := ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step20 : run antihydra { state := some stE, head := true, left := true :: false :: ones 2, right := ones (N+3) ++ false :: zeros p } (N+4) =
-      { state := some stE, head := false, left := ones (N+4) ++ (true :: false :: ones 2), right := zeros p } := by
-      have hE := E_shift (N+3) (true :: false :: ones 2) (false :: zeros p)
-      have hp_head : listHead (false :: zeros p) false = false := rfl
-      have hp_tail : listTail (false :: zeros p) = zeros p := rfl
-      rw [hp_head, hp_tail] at hE; exact hE
-    simp only [ones_zero] at *
-    rw [show 3*N + 2*0 + 26 = 1 + (1 + (N+1 + (1 + (1 + (N+2 + (1 + (1 + (1 + (1 + (1 + (1 + (1 + (3 + (1 + (1 + (1 + (1 + (1 + (N+4))))))))))))))))))) from by omega]
-    rw [run_add, step1, run_add, step2, run_add, step3]
-    rw [run_add, step4, run_add, step5, run_add, step6]
-    rw [run_add, step7, run_add, step8]
-    rw [run_add, step9, run_add, step10, run_add, step11]
-    rw [run_add, step12, run_add, step13, run_add, step14]
-    rw [run_add, step15, run_add, step16, run_add, step17]
-    rw [run_add, step18, run_add, step19, step20]
-    simp [P_Config_Pad, ones_append, ones_zero]
+    simp only [ones_zero, Nat.mul_zero, Nat.add_zero]
+    tm_exec [antihydra, P_Config_Pad]
+    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
+    rw [show 1 + (1 + (1 + (1 + (N + 1)))) = N + 5 from by omega, show (0 : Nat) + 2 = 2 from by omega]
+    simp only [P_Config_Pad, ones_zero, List.nil_append]
+    congr 1
+    rw [show ([true, true, true, true, false, true, true] : List Sym) = ones 4 ++ false :: ones 2 from rfl,
+      ← List.append_assoc, ones_append]
+    simp only [List.append_assoc, List.singleton_append]
   | succ b' =>
-    have step9 : run antihydra { state := some stB, head := false, left := ones (b'+1), right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stC, head := true, left := ones b', right := false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step10 : run antihydra { state := some stC, head := true, left := ones b', right := false :: false :: ones (N+3) ++ false :: zeros p } (b'+1) =
-      { state := some stC, head := false, left := [], right := ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } := by
-      have hC := C_shift b' ([] : List Sym) (false :: false :: ones (N+3) ++ false :: zeros p)
-      simp only [List.append_nil, listHead_nil, listTail_nil] at hC
-      convert hC using 2
-      simp [List.append_assoc]
-    have step11 : run antihydra { state := some stC, head := false, left := ([] : List Sym), right := ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stD, head := false, left := [], right := true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step12 : run antihydra { state := some stD, head := false, left := ([] : List Sym), right := true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := false, left := [], right := true :: true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step13 : run antihydra { state := some stA, head := false, left := ([] : List Sym), right := true :: true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stB, head := true, left := [true], right := true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step14 : run antihydra { state := some stB, head := true, left := [true], right := true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stE, head := true, left := [], right := true :: true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step15 : run antihydra { state := some stE, head := true, left := ([] : List Sym), right := true :: true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p } (b'+4) =
-      { state := some stE, head := false, left := ones (b'+4), right := false :: ones (N+3) ++ false :: zeros p } := by
-      have h_right_eq : (true :: true :: ones (b'+1) ++ false :: false :: ones (N+3) ++ false :: zeros p) =
-        ones (b'+3) ++ (false :: false :: ones (N+3) ++ false :: zeros p) := by simp [List.append_assoc]
-      rw [h_right_eq]
-      have hE := E_shift (b'+3) ([] : List Sym) (false :: false :: ones (N+3) ++ false :: zeros p)
-      simp at hE; exact hE
-    have step16 : run antihydra { state := some stE, head := false, left := ones (b'+4), right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stF, head := true, left := ones (b'+3), right := true :: false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step17 : run antihydra { state := some stF, head := true, left := ones (b'+3), right := true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := true, left := false :: ones (b'+3), right := false :: ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step18 : run antihydra { state := some stA, head := true, left := false :: ones (b'+3), right := false :: ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stA, head := false, left := true :: false :: ones (b'+3), right := ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step19 : run antihydra { state := some stA, head := false, left := true :: false :: ones (b'+3), right := ones (N+3) ++ false :: zeros p } 1 =
-      { state := some stB, head := true, left := true :: true :: false :: ones (b'+3), right := ones (N+2) ++ false :: zeros p } := by
-      ah_simp
-    have step20 : run antihydra { state := some stB, head := true, left := true :: true :: false :: ones (b'+3), right := ones (N+2) ++ false :: zeros p } 1 =
-      { state := some stE, head := true, left := true :: false :: ones (b'+3), right := ones (N+3) ++ false :: zeros p } := by
-      ah_simp
-    have step21 : run antihydra { state := some stE, head := true, left := true :: false :: ones (b'+3), right := ones (N+3) ++ false :: zeros p } (N+4) =
-      { state := some stE, head := false, left := ones (N+4) ++ (true :: false :: ones (b'+3)), right := zeros p } := by
-      have hE := E_shift (N+3) (true :: false :: ones (b'+3)) (false :: zeros p)
-      have hp_head : listHead (false :: zeros p) false = false := rfl
-      have hp_tail : listTail (false :: zeros p) = zeros p := rfl
-      rw [hp_head, hp_tail] at hE; exact hE
-    rw [show 3*N + 2*(b'+1) + 26 = 1 + (1 + (N+1 + (1 + (1 + (N+2 + (1 + (1 + (1 + (b'+1 + (1 + (1 + (1 + (1 + (b'+4 + (1 + (1 + (1 + (1 + (1 + (N+4)))))))))))))))))))) from by omega]
-    rw [run_add, step1, run_add, step2, run_add, step3]
-    rw [run_add, step4, run_add, step5, run_add, step6]
-    rw [run_add, step7, run_add, step8]
-    rw [run_add, step9, run_add, step10, run_add, step11]
-    rw [run_add, step12, run_add, step13, run_add, step14]
-    rw [run_add, step15, run_add, step16, run_add, step17]
-    rw [run_add, step18, run_add, step19, run_add, step20]
-    rw [step21]
-    have h_b : b'+3 = b'+1+2 := by omega
-    rw [h_b]; simp [P_Config_Pad, ones_append, ones_zero]
+    rw [show N + 2 * (b' + 1) + 17 = N + 2 * b' + 19 from by omega]
+    tm_exec [antihydra, P_Config_Pad]
+    rw [show N + 2 * b' + 18 = (b' + 1) + (N + b' + 17) from by omega, run_add]
+    conv => lhs; enter [2]; rw [show (2 : Fin 6) = stC from rfl,
+      show ones b' = ones b' ++ ([] : List Sym) from (List.append_nil _).symm, C_shift]
+    simp only [listHead_nil, listTail_nil]
+    tm_exec [antihydra, P_Config_Pad]
+    rw [show N + b' + 10 = (b' + 1) + (N + 9) from by omega, run_add]
+    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail]
+    tm_exec [antihydra, P_Config_Pad]
+    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
+    rw [show 1 + (1 + (1 + (1 + (N + 1)))) = N + 5 from by omega, show b' + 1 + 2 = b' + 3 from by omega]
+    simp only [P_Config_Pad, ones_zero, List.nil_append]
+    congr 1
+    rw [show (true :: true :: true :: true :: false :: ones (b' + 1 + 1 + 1) : List Sym) = ones 4 ++ false :: ones (b' + 3) from rfl,
+      ← List.append_assoc, ones_append]
+    simp only [List.append_assoc, List.singleton_append]
 
 -- Odd halt endgame: from a=3, b=0, the machine halts
 theorem tm_odd_halt_endgame (N p : Nat) :
     (run antihydra (P_Config_Pad 0 3 N (p+2)) (2*N + 12)).state = none := by
-  have step1 : run antihydra (P_Config_Pad 0 3 N (p+2)) 1 =
-    { state := some stF, head := true, left := ones 2 ++ [false], right := true :: ones N ++ zeros (p+2) } := by
-    ah_simp
-  have step2 : run antihydra { state := some stF, head := true, left := ones 2 ++ [false], right := true :: ones N ++ zeros (p+2) } 1 =
-    { state := some stA, head := true, left := false :: (ones 2 ++ [false]), right := ones N ++ zeros (p+2) } := by
-    ah_simp
-  have step3 : run antihydra { state := some stA, head := true, left := false :: (ones 2 ++ [false]), right := ones N ++ zeros (p+2) } (N+1) =
-    { state := some stA, head := false, left := ones (N+1) ++ (false :: (ones 2 ++ [false])), right := zeros (p+1) } := by
-    have hA := A_shift N (false :: (ones 2 ++ [false])) (zeros (p+2))
-    simp at hA; exact hA
-  have step4 : run antihydra { state := some stA, head := false, left := ones (N+1) ++ (false :: (ones 2 ++ [false])), right := zeros (p+1) } 1 =
-    { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: (ones 2 ++ [false])), right := zeros p } := by
-    ah_simp
-  have step5 : run antihydra { state := some stB, head := false, left := true :: ones (N+1) ++ (false :: (ones 2 ++ [false])), right := zeros p } 1 =
-    { state := some stC, head := true, left := ones (N+1) ++ (false :: (ones 2 ++ [false])), right := false :: zeros p } := by
-    ah_simp
-  have step6 : run antihydra { state := some stC, head := true, left := ones (N+1) ++ (false :: (ones 2 ++ [false])), right := false :: zeros p } (N+2) =
-    { state := some stC, head := false, left := ones 2 ++ [false], right := ones (N+2) ++ false :: zeros p } := by
-    have hC := C_shift (N+1) (false :: (ones 2 ++ [false])) (false :: zeros p)
-    simp at hC; exact hC
-  have step7 : run antihydra { state := some stC, head := false, left := ones 2 ++ [false], right := ones (N+2) ++ false :: zeros p } 1 =
-    { state := some stD, head := true, left := [true, false], right := ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step8 : run antihydra { state := some stD, head := true, left := [true, false], right := ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stB, head := true, left := [false], right := false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step9 : run antihydra { state := some stB, head := true, left := [false], right := false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stE, head := false, left := [], right := true :: false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  have step10 : run antihydra { state := some stE, head := false, left := [], right := true :: false :: ones (N+3) ++ false :: zeros p } 1 =
-    { state := some stF, head := false, left := [], right := true :: true :: false :: ones (N+3) ++ false :: zeros p } := by
-    ah_simp
-  rw [show 2*N + 12 = 1 + (1 + ((N+1) + (1 + (1 + ((N+2) + (1 + (1 + (1 + (1 + 1))))))))) from by omega]
-  rw [run_add, step1, run_add, step2, run_add, step3]
-  rw [run_add, step4, run_add, step5, run_add, step6]
-  rw [run_add, step7, run_add, step8, run_add, step9]
-  rw [run_add, step10]; ah_simp
+  rw [show 2 * N + 12 = (2 * N + 11) + 1 from by omega, run_add]
+  have h : run antihydra (P_Config_Pad 0 3 N (p+2)) (2*N + 11) =
+    { state := some stF, head := false, left := ([] : List Sym),
+      right := true :: true :: false :: ones (N+1+1+1) ++ false :: zeros p } := by
+    tm_exec [antihydra, P_Config_Pad]
+    rw [show 2 * N + 9 = (N + 1) + (N + 8) from by omega, run_add]
+    simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
+    tm_exec [antihydra, P_Config_Pad]
+    rw [show N + 5 = (N + 1) + 4 from by omega, run_add]
+    simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
+    tm_exec [antihydra, P_Config_Pad]
+  rw [h]; ah_simp
 
 -- Helper lemmas for tm_simulates_math
 

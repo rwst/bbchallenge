@@ -195,4 +195,145 @@ elab_rules : tactic
     -- Final chunk
     evalTactic (← `(tactic| decide))
 
+section TmExec
+open Lean Lean.Elab Lean.Elab.Tactic Lean.Meta
+
+/-- `tm_exec [lemmas]` repeatedly executes concrete TM steps.
+
+    Works on goals containing `run tm c k`:
+    - Equality goals: `run tm c k = c'`
+    - Halt goals: `(run tm c k).state = none`
+
+    Stops when a step can't be fully simplified (shift lemma or case split needed).
+    Tries to close the goal after all concrete steps are done.
+
+    Usage: `tm_exec [antihydra, P_Config_Pad, ones]` -/
+syntax "tm_exec" "[" Lean.Parser.Tactic.simpLemma,* "]" : tactic
+
+-- Extract (tm, config, stepCount) from a `run tm c k` expression.
+private def findRunParts (e : Lean.Expr) : Option (Lean.Expr × Lean.Expr × Lean.Expr) :=
+  let tryExtract (x : Lean.Expr) : Option (Lean.Expr × Lean.Expr × Lean.Expr) :=
+    if x.getAppFn.constName? == some ``run then
+      let args := x.getAppArgs
+      if args.size ≥ 4 then some (args[1]!, args[2]!, args[3]!) else none
+    else none
+  tryExtract e <|> e.getAppArgs.findSome? tryExtract
+
+private def findRunInExpr (e : Lean.Expr) : Option (Lean.Expr × Lean.Expr) :=
+  (findRunParts e).map fun (_, c, k) => (c, k)
+
+-- Decrement a Nat expression by 1, avoiding Nat.sub (which is opaque to omega).
+-- E.g., `2*n + 12` → `2*n + 11`, `n + 1` → `n`, `5` → `4`.
+private def getNatLit? (e : Lean.Expr) : Option Nat :=
+  match e with
+  | .lit (.natVal n) => some n
+  | _ =>
+    -- Handle @OfNat.ofNat Nat n inst
+    if e.isAppOfArity ``OfNat.ofNat 3 then
+      match e.getArg! 1 with
+      | .lit (.natVal n) => some n
+      | _ => none
+    else none
+
+private partial def decNatExpr (e : Lean.Expr) : Option Lean.Expr :=
+  if let some n := getNatLit? e then
+    if n > 0 then some (mkNatLit (n - 1)) else none
+  else if e.isAppOfArity ``HAdd.hAdd 6 then
+    let a := e.getArg! 4
+    let b := e.getArg! 5
+    if let some b' := decNatExpr b then
+      if getNatLit? b' == some 0 then some a
+      else some (mkApp6 e.getAppFn (e.getArg! 0) (e.getArg! 1) (e.getArg! 2) (e.getArg! 3) a b')
+    else none
+  else if e.isAppOfArity ``Nat.add 2 then
+    let a := e.getArg! 0
+    let b := e.getArg! 1
+    if let some b' := decNatExpr b then
+      if getNatLit? b' == some 0 then some a
+      else some (mkApp2 (.const ``Nat.add []) a b')
+    else none
+  else none
+
+elab_rules : tactic
+  | `(tactic| tm_exec [$lemmas,*]) => do
+    for _ in List.range 200 do
+      -- Quick close attempts
+      try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
+      try evalTactic (← `(tactic| (simp only [run_zero]; rfl))); return catch _ => pure ()
+      -- Peel one step: split off 1 step via run_add, simplify in a conv
+      let saved ← saveState
+      try
+        let goalType ← (← getMainGoal).getType
+        let some (_, lhs, _) := goalType.eq? | throwError ""
+        let some (_, kExpr) := findRunInExpr lhs | throwError ""
+        let some kMinus1Expr := decNatExpr kExpr | throwError ""
+        let kSyn ← Term.exprToSyntax kExpr
+        let kMinus1Syn ← Term.exprToSyntax kMinus1Expr
+        -- Split: k = 1 + (k-1), then run_add gives run tm (run tm c 1) (k-1)
+        evalTactic (← `(tactic|
+          rw [show $kSyn = 1 + $kMinus1Syn from by omega, run_add]))
+        -- Simplify just the inner (run tm c 1) via conv, keeping tm folded in outer run
+        -- Use positional navigation (arg 1; arg 2) to target the config of the outer run,
+        -- avoiding ambiguity when k-1 = 1 (both inner and outer would match `run _ _ 1`)
+        evalTactic (← `(tactic|
+          conv =>
+            lhs
+            enter [2]
+            simp (config := { decide := true }) [run, step,
+              ones_succ, zeros_succ,
+              $lemmas,*]))
+        -- Check if conv closed the goal (unlikely but possible)
+        if (← getGoals).isEmpty then return
+        -- Fold leading true/false conses back into ones/zeros form
+        try evalTactic (← `(tactic|
+          simp only [ones_cons_append, zeros_cons_append, ← ones_succ, ← zeros_succ]))
+        catch _ => pure ()
+        -- Check if this closed the goal
+        if (← getGoals).isEmpty then return
+        -- Verify progress: config must be a fully reduced struct with concrete head
+        let goalType ← (← getMainGoal).getType
+        let some (_, lhs, _) := goalType.eq? | throwError ""
+        let some (config, _) := findRunInExpr lhs | throwError ""
+        let fn := config.getAppFn
+        unless fn.isConst && fn.constName!.isStr && fn.constName!.getString! == "mk" do
+          throwError ""
+        let configArgs := config.getAppArgs
+        unless configArgs.size > 3 && configArgs[3]!.isConst do throwError ""
+      catch _ => do saved.restore; break
+    -- Post-loop: try to close the goal if remaining steps = 0
+    try
+      let goalType ← (← getMainGoal).getType
+      let some (_, lhs, _) := goalType.eq? | throwError ""
+      let some (_, kExpr) := findRunInExpr lhs | throwError ""
+      let kSyn ← Term.exprToSyntax kExpr
+      evalTactic (← `(tactic| simp only [show $kSyn = 0 from by omega, run_zero]))
+      try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
+      evalTactic (← `(tactic|
+        simp (config := { decide := true }) [
+          ones, zeros, ones_succ, zeros_succ, ones_zero, zeros_zero,
+          ones_append, zeros_append,
+          List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
+          $lemmas,*]))
+    catch _ => pure ()
+    -- If goal still open, check if it's a halt goal (not a run equality)
+    -- Only try aggressive simp for halt goals like (run tm c k).state = none
+    if !(← getGoals).isEmpty then
+      let goalType ← (← getMainGoal).getType
+      -- Guard: only try halt-close if goal is NOT `run tm c k = c'`
+      let isRunEq := match goalType.eq? with
+        | some (_, lhs, _) => (findRunInExpr lhs).isSome
+        | none => false
+      unless isRunEq do
+        try evalTactic (← `(tactic|
+          simp (config := { decide := true }) [
+            run, step, run_halted, Config.halted,
+            listHead, listTail,
+            ones, zeros, ones_succ, zeros_succ, ones_zero, zeros_zero,
+            ones_append, zeros_append,
+            List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
+            $lemmas,*]))
+        catch _ => pure ()
+
+end TmExec
+
 end BusyLean

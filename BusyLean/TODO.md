@@ -3,9 +3,9 @@
 ## Current state
 
 BusyCoq AntiHydra.v: ~100 lines (Coq)
-Antihydra.lean: ~937 lines (Lean, after applying all available BusyLean optimizations)
+Antihydra.lean: ~716 lines (Lean, after `tm_exec` + StreamDefs optimizations)
 
-The ~9x gap is explained by both missing BusyLean features and fundamental
+The ~7x gap is explained by both missing BusyLean features and fundamental
 architectural differences. This document catalogs what needs to change.
 
 ---
@@ -19,9 +19,10 @@ architectural differences. This document catalogs what needs to change.
 | `ones`/`zeros` | Yes | Throughout |
 | `run_add` | Yes | Backbone of every chained proof |
 | `tm_follow` | **Yes — FIXED** | Applied to `tm_P_step`; see remaining limitations below |
-| `tm_step`/`tm_steps` | No | `ah_simp` used instead; untested interaction with variable-length runs |
+| `tm_exec` | **Yes** | New tactic: auto-peels & simplifies TM steps; replaced all `ah_simp` chains |
+| `tm_step`/`tm_steps` | No | Superseded by `tm_exec` for Antihydra |
 | `tm_chain` | No | `antihydra_init_loop_start` is already `rfl` |
-| `tm_simp` | No | Custom `ah_simp` used (needs `antihydra`, `P_Config_Pad`) |
+| `tm_simp` | No | `tm_exec [antihydra, P_Config_Pad]` subsumes this |
 | `tm_finish` | No | Not needed |
 | `⟪! q \| l \| h \| r ⟫` | No | Left-tape convention mismatch (visual vs zipper) |
 | `xs ×× n` | No | Marginal benefit for current proofs |
@@ -31,33 +32,33 @@ architectural differences. This document catalogs what needs to change.
 
 ## Bugs to fix
 
-### 1. `tm_follow` — FIXED, remaining limitations
+### 1. `tm_follow` — FIXED, largely superseded by `tm_exec`
 
 **Fixed:** Two bugs corrected:
 - `elabTerm h none` → `lctx.findFromUserName?` (resolves local hypotheses)
 - `evalNat` → symbolic `omega` (handles variable step counts like `N+4`)
 
-**Remaining limitations:**
+**Superseded:** `tm_exec` now handles the main use case (auto-stepping through
+concrete runs). `tm_follow` is still available for chaining named hypotheses but
+is no longer needed for the Antihydra proofs.
+
+**Remaining limitations (if using `tm_follow` directly):**
 - After a chain of `tm_follow` calls, the remaining step count is a nested
-  `Nat.sub` expression (e.g., `2*n+12 - 1 - 1 - (n+1) - ...`) that doesn't
-  reduce to 0 by `rfl`. Closing the proof requires:
-  `simp only [show <remaining> = 0 from by omega]; simp [run, ...]`
+  `Nat.sub` expression that doesn't reduce to 0 by `rfl`.
 - Only works on goals of the form `run tm c k = c'`, not `.state = none` goals.
-  Theorems proving halting (like `tm_odd_halt_endgame`) can't use `tm_follow`.
 - Config mismatch: if the hypothesis uses `ones 2 ++ ...` but the goal has
-  `true :: true :: ...`, `rw` inside `tm_follow` fails. Need manual `rw [h_eq]`
-  normalization on the hypothesis first.
+  `true :: true :: ...`, `rw` inside `tm_follow` fails.
 
-**Applied to:** `tm_P_step` in Antihydra.lean (saves 2 lines + omega decomposition).
-
-### 2. `tm_simp` lacks extensibility
+### 2. `tm_simp` lacks extensibility — partially addressed
 
 **File:** `Tactics.lean:36-44`
-**Bug:** `tm_simp` hardcodes its simp set. Every proof file needs a custom wrapper
+**Issue:** `tm_simp` hardcodes its simp set. Every proof file needs a custom wrapper
 (`ah_simp` in Antihydra) to include the TM definition and config constructors.
-**Fix:** Either:
-- (a) Provide a `tm_simp` variant that accepts extra simp lemmas: `tm_simp [antihydra, P_Config_Pad]`
-- (b) Use a scoped simp extension / attribute that proof files can add to
+**Partial fix:** `tm_exec [antihydra, P_Config_Pad]` accepts extra simp lemmas,
+solving this for multi-step execution. `tm_simp` itself still hardcoded for
+single-step use.
+**Remaining:** Either make `tm_simp` accept extra lemmas too, or deprecate it
+in favor of `tm_exec`.
 
 ### 3. Fin literal vs abbreviation mismatch
 
@@ -107,17 +108,20 @@ and still require manual `listHead`/`listTail` cleanup after application.
 - Provide an `ind`-like tactic that chains a base case + inductive step lemma
   automatically
 
-### 6. `es` equivalent (multi-step concrete solver)
+### 6. `es` equivalent (multi-step concrete solver) — DONE
 
 **BusyCoq:** `es` (execute-simplify) runs concrete steps and simplifies automatically.
 `do 9 step` runs exactly 9 concrete steps. These are the workhorses.
 
-**BusyLean:** `tm_steps n` exists but was never tested on Antihydra. `tm_step` uses
-`rw [run_peel ...]` + `simp only [step, run]; tm_simp` which may be slow for large n.
+**BusyLean:** `tm_exec [lemmas]` implemented in Tactics.lean. Repeatedly peels one
+TM step via `conv => lhs; enter [2]; simp [run, step, ...]`, folds cons chains
+back into `ones`/`zeros` form, and closes with `rfl` when done. Stops when stuck
+(shift lemma needed). User provides shift lemma applications manually between
+`tm_exec` calls.
 
-**Fix:** Test `tm_steps` on real proofs. Consider a faster implementation that
-batches steps (like `tm_chain` but for producing intermediate have-lemmas rather
-than closing the goal).
+**Applied to:** All 4 macro theorems in Antihydra.lean. Savings: ~229 lines
+(~298 → ~69 lines across `tm_P_step`, `tm_odd_endgame`,
+`tm_even_endgame_to_loop`, `tm_odd_halt_endgame`).
 
 ### 7. `listHead`/`listTail` auto-simplification after shift lemmas
 
@@ -138,58 +142,43 @@ sometimes over-normalizes (expands `ones n` into cons chains or `List.replicate`
 - (c) Add focused simp lemmas: `listHead (x :: _) _ = x` and `listTail (x :: xs) = xs`
   to a controlled simp set that won't over-normalize
 
-### 8. Step count arithmetic (`show ... from by omega`)
+### 8. Step count arithmetic (`show ... from by omega`) — partially addressed
 
-**Issue:** Every theorem needs a manual omega decomposition of the total step count:
-```lean
-rw [show 3*N + 20 = 1 + (1 + ((N+1) + ...)) from by omega]
-```
-This is error-prone and verbose.
+**Issue:** Every theorem needs a manual omega decomposition of the total step count.
 
-**Fix:** If `tm_follow` worked, this would be automatic (each `tm_follow` call
-does its own omega internally). Fixing `tm_follow` (item 1) eliminates this
-entirely.
+**Partial fix:** `tm_exec` handles step-count decrement automatically for concrete
+steps. Manual `rw [show ... from by omega]` is still needed before shift lemma
+applications (to split `run` at the right point via `run_add`), but the per-step
+arithmetic is eliminated.
 
 ---
 
 ## Priority order
 
-1. **Fix `tm_follow`** — unblocks the biggest line savings (~2 lines saved per step
-   lemma application, ~40+ lines per theorem)
-2. ~~**Infinite tapes**~~ — **DONE** (saved ~64 lines in Antihydra via StreamDefs.lean)
-3. **`tm_simp` extensibility** — eliminates need for per-file `ah_simp` wrappers
+1. ~~**Fix `tm_follow`**~~ — **Superseded by `tm_exec`** (saved ~229 lines)
+2. ~~**Infinite tapes**~~ — **DONE** (saved ~64 lines via StreamDefs.lean)
+3. ~~**`tm_simp` extensibility**~~ — **Partially addressed** by `tm_exec [lemmas]`
 4. **`listHead`/`listTail` auto-cleanup** — saves 3 lines per shift lemma use
-5. **Factored loop support / `ind`** — enables BusyCoq-style concise rule proofs
-6. **Test `tm_steps`** — verify it works on real proofs, optimize if slow
+5. **Factored loop support / `ind`** — enables BusyCoq-style concise rule proofs;
+   largest remaining gap vs BusyCoq
+6. ~~**`es` equivalent**~~ — **DONE** (`tm_exec`)
 
 ---
 
 ## What a fully optimized Antihydra.lean would look like
 
-With items 1, 3-4 fixed (item 2/infinite tapes already done), the core theorems would shrink from:
-
+**Current state with `tm_exec`** (~716 lines, down from ~937):
 ```lean
--- Current: ~30 lines per theorem
+-- tm_P_step: 7 lines (was 44)
 theorem tm_P_step ... := by
-  have step1 : run ... 1 = ... := by ah_simp
-  have step2 : run ... 1 = ... := by ah_simp
-  ...
-  have step11 : run ... 1 = ... := by ah_simp
-  rw [show 2*n+12 = 1+(1+(...)) from by omega]
-  rw [run_add, step1, run_add, step2, ...]
-  simp [P_Config_Pad]
+  tm_exec [antihydra, P_Config_Pad]       -- concrete steps
+  rw [..., run_add]; simp only [A_shift]  -- shift lemma
+  tm_exec [antihydra, P_Config_Pad]       -- more concrete steps
+  rw [..., run_add]; simp only [C_shift]  -- shift lemma
+  tm_exec [antihydra, P_Config_Pad]       -- close
 ```
 
-To:
-
-```lean
--- With tm_follow fixed: ~15 lines
-theorem tm_P_step ... := by
-  have step1 : ... := by tm_step
-  ...
-  tm_follow step1; tm_follow step2; ...
-  simp [P_Config_Pad]
-```
-
-With items 1, 3-5 all fixed (infinite tapes already done + factored loops), the
-entire file could potentially reach ~200-300 lines, comparable to BusyCoq's structure.
+**Remaining gap vs BusyCoq (~100 lines):**
+The ~600 non-macro lines are mostly shift lemma definitions, `P_Config_Pad`,
+helper lemmas, and the stream-based padding equivalence. With factored loop
+support (item 5), the file could potentially reach ~300-400 lines.
