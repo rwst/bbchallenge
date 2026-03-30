@@ -136,10 +136,11 @@ it tries each shift lemma:
 - fvar leak in certain scopes — auto-shift can't be used directly after `conv`-based
   manual shifts in some `cases` branches (workaround: do one manual shift first)
 
-**Part B (not done): Padding transfer helpers**
-The 3 bridge lemmas (`tm_even_full`, `tm_odd_halt_ex`, `tm_odd_continue`) share
-~25 lines each of repetitive padding transfer boilerplate. Could be factored into
-`pad_transfer_loop` and `pad_transfer_halt` helpers.
+**Part B: Padding transfer helpers — DONE**
+Two helpers (`pad_transfer_loop`, `pad_transfer_halt`) factor out the repeated
+`P_Config_Pad_toSConfig_eq` → `run_pad_transfer` → extract pattern from the 3
+bridge lemmas (`tm_even_full`, `tm_odd_halt_ex`, `tm_odd_continue`). Each bridge
+lemma now ends with a 1-2 line call to the helper instead of ~10 lines of boilerplate.
 
 **Part C (not done): `ind`-like tactic**
 For full BusyCoq parity, would need a tactic that chains a base case + inductive
@@ -190,14 +191,14 @@ Manual `rw [show ... from by omega]` is still needed for edge cases (e.g., after
 4. ~~**`listHead`/`listTail` auto-cleanup**~~ — **DONE** (handled by auto-shift)
 5. ~~**Factored loop support / auto-shift**~~ — **DONE** (Part A: -38 lines in Antihydra)
 6. ~~**`es` equivalent**~~ — **DONE** (`tm_exec`)
-7. **Padding transfer helpers** — saves ~30 lines in bridge lemmas (not done)
+7. ~~**Padding transfer helpers**~~ — **DONE** (saved ~16 lines in bridge lemmas)
 8. **`ind`-like tactic** — largest remaining gap vs BusyCoq (not done)
 
 ---
 
 ## What a fully optimized Antihydra.lean would look like
 
-**Current state with auto-shift** (~678 lines, down from ~937 originally):
+**Current state with auto-shift + padding transfer** (~685 lines, down from ~937 originally):
 ```lean
 -- tm_P_step: 1 line (was 44 originally, 8 before auto-shift)
 theorem tm_P_step ... := by
@@ -211,8 +212,7 @@ theorem tm_odd_endgame ... := by
 ```
 
 **Remaining gap vs BusyCoq (~100 lines):**
-The ~580 non-macro lines are mostly shift lemma definitions, `P_Config_Pad`,
+The ~600 non-macro lines are mostly shift lemma definitions, `P_Config_Pad`,
 helper lemmas, the stream-based padding equivalence, bridge lemmas, and the
-main induction (`tm_P_multistep`, `tm_simulates_math`). With padding transfer
-helpers (item 7), the file could reach ~650 lines. With an `ind` tactic (item 8),
-potentially ~500-550 lines.
+main induction (`tm_P_multistep`, `tm_simulates_math`). With an `ind` tactic
+(item 8), potentially ~550-600 lines.

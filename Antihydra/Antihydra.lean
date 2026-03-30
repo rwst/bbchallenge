@@ -364,7 +364,36 @@ theorem tm_odd_halt_endgame (N p : Nat) :
     tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
   rw [h]; ah_simp
 
--- Helper lemmas for tm_simulates_math
+-- Padding transfer helpers: factor out the shared boilerplate from bridge lemmas.
+
+/-- Transfer a loop-start result across padding.
+    If running with auxiliary padding p' reaches a valid P_Config_Pad,
+    then running with any padding p also reaches a valid loop start with the same decoded tape. -/
+lemma pad_transfer_loop (b m p p' k b' a' : Nat)
+    (h : run antihydra (P_Config_Pad b m 0 p') k = P_Config_Pad b' a' 0 p)
+    (ha : a' ≥ 2) :
+    isValidLoopStart (run antihydra (P_Config_Pad b m 0 p) k) ∧
+    decodeTape (run antihydra (P_Config_Pad b m 0 p) k) = decodeTape (P_Config_Pad b' a' 0 p) := by
+  have hsc := P_Config_Pad_toSConfig_eq b m 0 p p'
+  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
+  rw [h] at h_run
+  exact ⟨isValidLoopStart_of_pad_transfer h_run.1 h_run.2
+    (isValidLoopStart_P_Config_Pad b' a' p ha),
+    decodeTape_of_left_eq h_run.1⟩
+
+/-- Transfer a halt result across padding.
+    If running with auxiliary padding p' halts,
+    then running with any padding p also halts. -/
+lemma pad_transfer_halt (b m p p' k : Nat)
+    (h : (run antihydra (P_Config_Pad b m 0 p') k).state = none) :
+    (run antihydra (P_Config_Pad b m 0 p) k).state = none := by
+  have hsc := P_Config_Pad_toSConfig_eq b m 0 p p'
+  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
+  have := congrArg SConfig.state h_run.2
+  simp [Config.toSConfig] at this
+  rw [this]; exact h
+
+-- Bridge lemmas for tm_simulates_math
 
 theorem tm_even_full (b n p : Nat) :
     ∃ k, k > 0 ∧ isValidLoopStart (run antihydra (P_Config_Pad b (2*n+2) 0 p) k) ∧
@@ -383,14 +412,8 @@ theorem tm_even_full (b n p : Nat) :
       = P_Config_Pad (b+2) (3*n+5) 0 p := by
     show run antihydra (P_Config_Pad b (2*n+2) 0 p') (n*(3*n+9) + (9*n+2*b+26)) = _
     rw [run_add, h_multi, h_end]
-  have hsc := P_Config_Pad_toSConfig_eq b (2*n+2) 0 p p'
-  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
-  rw [h_padded] at h_run
-  use k
-  refine ⟨by omega, ?_, ?_⟩
-  · exact isValidLoopStart_of_pad_transfer h_run.1 h_run.2
-      (isValidLoopStart_P_Config_Pad (b+2) (3*n+5) p (by omega))
-  · rw [decodeTape_of_left_eq h_run.1]; simp
+  have ⟨hv, hd⟩ := pad_transfer_loop b (2*n+2) p p' k (b+2) (3*n+5) h_padded (by omega)
+  exact ⟨k, by omega, hv, by rw [hd]; simp⟩
 
 -- Odd halt case: the TM halts
 theorem tm_odd_halt_ex (n p : Nat) :
@@ -408,12 +431,7 @@ theorem tm_odd_halt_ex (n p : Nat) :
   have h_padded : (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') k).state = none := by
     show (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') (n*(3*n+9) + (6*n+12))).state = none
     rw [run_add, h_multi]; exact h_end
-  have hsc := P_Config_Pad_toSConfig_eq 0 (2*n+3) 0 p p'
-  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
-  have hs : (run antihydra (P_Config_Pad 0 (2*n+3) 0 p) k).state =
-      (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') k).state := by
-    have := congrArg SConfig.state h_run.2; simp [Config.toSConfig] at this; exact this
-  exact ⟨k, by omega, hs.symm ▸ h_padded⟩
+  exact ⟨k, by omega, pad_transfer_halt 0 (2*n+3) p p' k h_padded⟩
 
 -- Odd continue case: the TM reaches a valid loop start with the correct decoded state
 theorem tm_odd_continue (b' n p : Nat) :
@@ -434,14 +452,8 @@ theorem tm_odd_continue (b' n p : Nat) :
       = P_Config_Pad b' (3*n+6) 0 p := by
     show run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p') (n*(3*n+9) + (9*n+20)) = _
     rw [run_add, h_multi, h_end]
-  have hsc := P_Config_Pad_toSConfig_eq (b'+1) (2*n+3) 0 p p'
-  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
-  rw [h_padded] at h_run
-  use k
-  refine ⟨by omega, ?_, ?_⟩
-  · exact isValidLoopStart_of_pad_transfer h_run.1 h_run.2
-      (isValidLoopStart_P_Config_Pad b' (3*n+6) p (by omega))
-  · rw [decodeTape_of_left_eq h_run.1]; simp
+  have ⟨hv, hd⟩ := pad_transfer_loop (b'+1) (2*n+3) p p' k b' (3*n+6) h_padded (by omega)
+  exact ⟨k, by omega, hv, by rw [hd]; simp⟩
 
 -- C. The Block-Step Lemma (The Core Theorem)
 theorem tm_simulates_math (c : Config 6) (hm : isValidLoopStart c) :
