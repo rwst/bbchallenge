@@ -37,9 +37,6 @@ def A (ab : ℕ × ℕ) : ℕ × ℕ :=
   if a % 2 == 0 then (3 * n + 2, b + 2)
   else              (3 * n + 3, b - 1)
 
-def mathHaltingCondition (m : MathState) : Prop :=
-  m.a % 2 == 1 ∧ m.a / 2 ≥ 1 ∧ m.b == 0
-
 -- Bridge lemma: ones k ++ true :: L = ones (k+1) ++ L
 @[simp] theorem ones_append_true (k : Nat) (L : List Sym) :
     ones k ++ true :: L = ones (k + 1) ++ L := by
@@ -67,6 +64,17 @@ def P_Config_Pad (b : Nat) (m : Nat) (n : Nat) (p : Nat) : Config 6 :=
     left := ones m ++ [false] ++ ones b,
     right := ones n ++ zeros p
   }
+
+-- Stream-based macro config. No padding parameter — eliminates padding infrastructure.
+def SP_Config (b m n : Nat) : SConfig 6 :=
+  { state := some stE,
+    head := false,
+    left := ones m *> [false] *> ones b *> blank∞,
+    right := ones n *> blank∞ }
+
+lemma P_Config_Pad_toSP (b m n p : Nat) :
+    (P_Config_Pad b m n p).toSConfig = SP_Config b m n := by
+  simp [P_Config_Pad, SP_Config, Config.toSConfig]
 
 -- Simp tactic for single TM steps (handles Fin literal vs stX abbreviation mismatch)
 scoped macro "ah_simp" : tactic =>
@@ -120,14 +128,7 @@ theorem tm_P_multistep (b m n p k : Nat) :
 -- Even Endgame (m=0)
 theorem tm_even_endgame (b N p : Nat) :
     (run antihydra (P_Config_Pad b 0 N (p+2)) 2).state = none := by
-  have step1 : run antihydra (P_Config_Pad b 0 N (p+2)) 1 =
-    { state := some stF, head := false, left := ones b, right := true :: ones N ++ zeros (p+2) } := by
-    ah_simp
-  rw [show 2 = 1 + 1 from rfl, run_add, step1]
-  have step2 : run antihydra { state := some stF, head := false, left := ones b, right := true :: ones N ++ zeros (p+2) } 1 =
-    { state := none, head := false, left := ones b, right := true :: ones N ++ zeros (p+2) } := by
-    cases b <;> simp (config := { decide := true }) only [run, step, antihydra]
-  rw [step2]
+  rw [show (2:Nat) = 1 + 1 from rfl, run_add]; cases b <;> ah_simp
 
 -- Odd Endgame (m=3, b>0)
 theorem tm_odd_endgame (b' N p : Nat) :
@@ -136,168 +137,6 @@ theorem tm_odd_endgame (b' N p : Nat) :
   -- Remaining: tape folding for final config
   simp only [ones_cons_append]
   congr 1; unfold ones repeatSym; congr 1; omega
-
--- Additional tape lemmas needed for later proofs
-
-@[simp] lemma drop_ones (a : Nat) (L : List Sym) :
-    (ones a ++ L).drop a = L := by
-  induction a with
-  | zero => rfl
-  | succ a ih => simp [ones, *]
-
-@[simp] lemma countOnes_ones_false (a : Nat) (L : List Sym) :
-    countOnes (ones a ++ false :: L) = a := by
-  induction a with
-  | zero => rfl
-  | succ a ih => rw [ones_succ, List.cons_append, countOnes, ih]
-
--- A. The Abstraction Function (Decoding the Tape)
-def decodeTape (c : Config 6) : MathState :=
-  let a := countOnes c.left
-  let after_a := c.left.drop a
-  let b := match after_a with
-           | false :: xs => countOnes xs
-           | _ => 0
-  { a := a, b := b }
-
-@[simp] lemma decodeTape_P_Config_Pad (b a n p : Nat) :
-    decodeTape (P_Config_Pad b a n p) = { a := a, b := b } := by
-  unfold decodeTape P_Config_Pad
-  simp
-
-@[simp] lemma all_zeros' (p : Nat) : (zeros p).all (!·) = true := by
-  induction p with
-  | zero => rfl
-  | succ p ih => simp [zeros]
-
-@[simp] lemma drop_ones_exact (a : Nat) : (ones a).drop a = [] := by
-  induction a with
-  | zero => rfl
-  | succ a ih => simp [ones]
-
--- B. Defining the "Clean" Invariant
-def isValidLoopStart (c : Config 6) : Prop :=
-  c.state = some stE ∧
-  c.head = false ∧
-  (c.right.all (!·) = true) ∧
-  (countOnes c.left ≥ 2) ∧
-  ∃ b : Nat, c.left.drop (countOnes c.left) = false :: ones b
-
-lemma isValidLoopStart_P_Config_Pad (b a p : Nat) (ha : a ≥ 2) :
-    isValidLoopStart (P_Config_Pad b a 0 p) := by
-  unfold isValidLoopStart P_Config_Pad
-  refine ⟨rfl, rfl, by simp, by simp [ha], b, by simp⟩
-
-lemma take_countOnes_eq_ones (L : List Sym) :
-    L.take (countOnes L) = ones (countOnes L) := by
-  induction L with
-  | nil => rfl
-  | cons x xs ih =>
-    cases x
-    · rfl
-    · simp [countOnes, ones]
-      rw [ih]
-
-lemma list_eq_ones_drop (L : List Sym) :
-    L = ones (countOnes L) ++ L.drop (countOnes L) := by
-  rw [← take_countOnes_eq_ones L]
-  exact (List.take_append_drop _ _).symm
-
-lemma all_false_eq_zeros (L : List Sym) (h : L.all (!·) = true) :
-    L = zeros L.length := by
-  induction L with
-  | nil => rfl
-  | cons x xs ih =>
-    cases x
-    · change (xs.all (!·) = true) at h
-      exact congrArg (List.cons false) (ih h)
-    · change (false = true) at h
-      contradiction
-
-lemma isValidLoopStart_eq_P_Config_Pad (c : Config 6) (hm : isValidLoopStart c) :
-    ∃ a b p, c = P_Config_Pad b a 0 p ∧ a ≥ 2 := by
-  rcases c with ⟨state, left, head, right⟩
-  unfold isValidLoopStart at hm
-  rcases hm with ⟨hstate, hhead, hright, ha, ⟨b, hb⟩⟩
-  have hleft_full : left = ones (countOnes left) ++ [false] ++ ones b := by
-    rw [list_eq_ones_drop left, hb]; simp [List.append_assoc]
-
-  have hright_full : right = zeros right.length := all_false_eq_zeros _ hright
-
-  use (countOnes left), b, right.length
-  constructor
-  · unfold P_Config_Pad; congr
-  · exact ha
-
--- Right-tape padding independence via stream embedding.
--- Two P_Config_Pad configs with different padding p have the same toSConfig,
--- so their runs agree on state, head, and left tape. This replaces the
--- 120-line RightPadEquiv infrastructure with ~40 lines.
-
-/-- P_Config_Pad maps to the same SConfig regardless of padding p. -/
-lemma P_Config_Pad_toSConfig_eq (b m n p p' : Nat) :
-    (P_Config_Pad b m n p).toSConfig = (P_Config_Pad b m n p').toSConfig := by
-  apply toSConfig_padding_indep <;> simp [P_Config_Pad]
-
-/-- The left tape after one step depends only on state, head, and left tape (not right). -/
-private lemma step_left_eq {c₁ c₂ : Config 6}
-    (hs : c₁.state = c₂.state) (hl : c₁.left = c₂.left) (hh : c₁.head = c₂.head) :
-    (step antihydra c₁).left = (step antihydra c₂).left := by
-  rcases c₁ with ⟨s, l, h, r₁⟩; rcases c₂ with ⟨_, _, _, r₂⟩
-  simp only at hs hl hh; subst hs; subst hl; subst hh
-  cases s with
-  | none => rfl
-  | some q =>
-    cases h_tr : antihydra.tr q h with
-    | none => simp [step, h_tr]
-    | some val => obtain ⟨q', w, d⟩ := val; cases d <;> simp [step, h_tr]
-
-/-- Running two padding-equivalent configs preserves left-list equality and SConfig equality. -/
-private lemma run_pad_transfer {c₁ c₂ : Config 6} (k : Nat)
-    (hl : c₁.left = c₂.left) (hsc : c₁.toSConfig = c₂.toSConfig) :
-    (run antihydra c₁ k).left = (run antihydra c₂ k).left ∧
-    (run antihydra c₁ k).toSConfig = (run antihydra c₂ k).toSConfig := by
-  induction k generalizing c₁ c₂ with
-  | zero => exact ⟨hl, hsc⟩
-  | succ k ih =>
-    have hsc' : (step antihydra c₁).toSConfig = (step antihydra c₂).toSConfig := by
-      rw [toSConfig_step, toSConfig_step, hsc]
-    have hs : c₁.state = c₂.state := by
-      have := congrArg SConfig.state hsc; simp [Config.toSConfig] at this; exact this
-    have hh : c₁.head = c₂.head := by
-      have := congrArg SConfig.head hsc; simp [Config.toSConfig] at this; exact this
-    exact ih (step_left_eq hs hl hh) hsc'
-
-/-- If R.all (!·) = true, then listToSide R = Side.blank. -/
-private lemma listToSide_blank_of_all_false {R : List Sym} (h : R.all (!·) = true) :
-    listToSide R = Side.blank := by
-  ext i; simp [listToSide, Side.blank]
-  induction R generalizing i with
-  | nil => simp
-  | cons x xs ih =>
-    simp only [List.all_cons, Bool.and_eq_true] at h
-    cases i with
-    | zero => simp; cases x <;> simp_all
-    | succ i => simp; exact ih h.2 i
-
-/-- Transfer isValidLoopStart across different right-tape padding. -/
-lemma isValidLoopStart_of_pad_transfer {c₁ c₂ : Config 6}
-    (hl : c₁.left = c₂.left) (hsc : c₁.toSConfig = c₂.toSConfig)
-    (hv : isValidLoopStart c₂) : isValidLoopStart c₁ := by
-  have hs : c₁.state = c₂.state := by
-    have := congrArg SConfig.state hsc; simp [Config.toSConfig] at this; exact this
-  have hh : c₁.head = c₂.head := by
-    have := congrArg SConfig.head hsc; simp [Config.toSConfig] at this; exact this
-  have hr_stream : listToSide c₁.right = listToSide c₂.right := by
-    have := congrArg SConfig.right hsc; simp [Config.toSConfig] at this; exact this
-  unfold isValidLoopStart at hv ⊢
-  exact ⟨hs ▸ hv.1, hh ▸ hv.2.1,
-    all_false_of_listToSide_blank (by rw [hr_stream]; exact listToSide_blank_of_all_false hv.2.2.1),
-    hl ▸ hv.2.2.2.1, hl ▸ hv.2.2.2.2⟩
-
-lemma decodeTape_of_left_eq {c1 c2 : Config 6} (hl : c1.left = c2.left) :
-    decodeTape c1 = decodeTape c2 := by
-  unfold decodeTape; rw [hl]
 
 -- Even endgame: from a=2 to valid loop start with a=N+5, b=b+2
 theorem tm_even_endgame_to_loop (b N p : Nat) :
@@ -333,204 +172,109 @@ theorem tm_odd_halt_endgame (N p : Nat) :
     tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
   rw [h]; ah_simp
 
--- Padding transfer helpers: factor out the shared boilerplate from bridge lemmas.
+-- SConfig-lifted macro theorems
+-- Lifting pattern: rewrite goal to Config form via ← P_Config_Pad_toSP, ← toSConfig_run
 
-/-- Transfer a loop-start result across padding.
-    If running with auxiliary padding p' reaches a valid P_Config_Pad,
-    then running with any padding p also reaches a valid loop start with the same decoded tape. -/
-lemma pad_transfer_loop (b m p p' k b' a' : Nat)
-    (h : run antihydra (P_Config_Pad b m 0 p') k = P_Config_Pad b' a' 0 p)
-    (ha : a' ≥ 2) :
-    isValidLoopStart (run antihydra (P_Config_Pad b m 0 p) k) ∧
-    decodeTape (run antihydra (P_Config_Pad b m 0 p) k) = decodeTape (P_Config_Pad b' a' 0 p) := by
-  have hsc := P_Config_Pad_toSConfig_eq b m 0 p p'
-  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
-  rw [h] at h_run
-  exact ⟨isValidLoopStart_of_pad_transfer h_run.1 h_run.2
-    (isValidLoopStart_P_Config_Pad b' a' p ha),
-    decodeTape_of_left_eq h_run.1⟩
+theorem stm_P_step (b m n : Nat) :
+    srun antihydra (SP_Config b (m+2+2) n) (2*n + 12) = SP_Config b (m+2) (n+3) := by
+  rw [← P_Config_Pad_toSP b (m+2+2) n 2, ← P_Config_Pad_toSP b (m+2) (n+3) 1, ← toSConfig_run]
+  exact congrArg Config.toSConfig (tm_P_step b m n 0)
 
-/-- Transfer a halt result across padding.
-    If running with auxiliary padding p' halts,
-    then running with any padding p also halts. -/
-lemma pad_transfer_halt (b m p p' k : Nat)
-    (h : (run antihydra (P_Config_Pad b m 0 p') k).state = none) :
-    (run antihydra (P_Config_Pad b m 0 p) k).state = none := by
-  have hsc := P_Config_Pad_toSConfig_eq b m 0 p p'
-  have h_run := run_pad_transfer k (by simp [P_Config_Pad]) hsc
-  have := congrArg SConfig.state h_run.2
-  simp [Config.toSConfig] at this
-  rw [this]; exact h
+theorem stm_P_multistep (b m n k : Nat) :
+    srun antihydra (SP_Config b (m+2 + 2*k) n) (k*(2*n + 3*k + 9)) = SP_Config b (m+2) (n+3*k) := by
+  rw [← P_Config_Pad_toSP b (m+2+2*k) n (1+k), ← P_Config_Pad_toSP b (m+2) (n+3*k) 1, ← toSConfig_run]
+  exact congrArg Config.toSConfig (tm_P_multistep b m n 0 k)
 
--- Bridge lemmas for tm_simulates_math
+theorem stm_even_endgame (b N : Nat) :
+    (srun antihydra (SP_Config b 0 N) 2).state = none := by
+  rw [← P_Config_Pad_toSP b 0 N 2, ← toSConfig_run]
+  exact tm_even_endgame b N 0
 
-theorem tm_even_full (b n p : Nat) :
-    ∃ k, k > 0 ∧ isValidLoopStart (run antihydra (P_Config_Pad b (2*n+2) 0 p) k) ∧
-      decodeTape (run antihydra (P_Config_Pad b (2*n+2) 0 p) k) = { a := 3 * n + 5, b := b + 2 } := by
-  set p' := p + n + 2
-  set k := n * (3 * n + 9) + (9 * n + 2 * b + 26)
-  have h_multi : run antihydra (P_Config_Pad b (2*n+2) 0 p') (n * (3*n+9))
-      = P_Config_Pad b 2 (3*n) (p+2) := by
-    have h := tm_P_multistep b 0 0 (p+1) n
-    simp only [show 0 + 2 + 2 * n = 2 * n + 2 from by omega, show p + 1 + 1 + n = p' from by omega,
-      show (0:ℕ) + 3 * n = 3 * n from by omega, show p + 1 + 1 = p + 2 from by omega] at h; exact h
-  have h_end : run antihydra (P_Config_Pad b 2 (3*n) (p+2)) (9*n + 2*b + 26)
-      = P_Config_Pad (b+2) (3*n+5) 0 p := by
-    have h := tm_even_endgame_to_loop b (3*n) p; ring_nf at h ⊢; exact h
-  have h_padded : run antihydra (P_Config_Pad b (2*n+2) 0 p') k
-      = P_Config_Pad (b+2) (3*n+5) 0 p := by
-    show run antihydra (P_Config_Pad b (2*n+2) 0 p') (n*(3*n+9) + (9*n+2*b+26)) = _
-    rw [run_add, h_multi, h_end]
-  have ⟨hv, hd⟩ := pad_transfer_loop b (2*n+2) p p' k (b+2) (3*n+5) h_padded (by omega)
-  exact ⟨k, by omega, hv, by rw [hd]; simp⟩
+theorem stm_odd_endgame (b' N : Nat) :
+    srun antihydra (SP_Config (b'+1) 3 N) (3*N + 20) = SP_Config b' (N+6) 0 := by
+  rw [← P_Config_Pad_toSP (b'+1) 3 N 2, ← P_Config_Pad_toSP b' (N+6) 0 0, ← toSConfig_run]
+  exact congrArg Config.toSConfig (tm_odd_endgame b' N 0)
 
--- Odd halt case: the TM halts
-theorem tm_odd_halt_ex (n p : Nat) :
-    ∃ k, k > 0 ∧ (run antihydra (P_Config_Pad 0 (2*n+3) 0 p) k).state = none := by
-  set p' := p + n + 2
-  set k := n * (3 * n + 9) + (6 * n + 12)
-  have h_multi : run antihydra (P_Config_Pad 0 (2*n+3) 0 p') (n * (3*n+9))
-      = P_Config_Pad 0 3 (3*n) (p+2) := by
-    have h := tm_P_multistep 0 1 0 (p+1) n
-    simp only [show 1 + 2 + 2 * n = 2 * n + 3 from by omega, show p + 1 + 1 + n = p' from by omega,
-      show 1 + 2 = 3 from by omega, show (0:ℕ) + 3 * n = 3 * n from by omega,
-      show p + 1 + 1 = p + 2 from by omega] at h; exact h
-  have h_end : (run antihydra (P_Config_Pad 0 3 (3*n) (p+2)) (6*n+12)).state = none := by
-    have h := tm_odd_halt_endgame (3*n) p; ring_nf at h ⊢; exact h
-  have h_padded : (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') k).state = none := by
-    show (run antihydra (P_Config_Pad 0 (2*n+3) 0 p') (n*(3*n+9) + (6*n+12))).state = none
-    rw [run_add, h_multi]; exact h_end
-  exact ⟨k, by omega, pad_transfer_halt 0 (2*n+3) p p' k h_padded⟩
+theorem stm_even_endgame_to_loop (b N : Nat) :
+    srun antihydra (SP_Config b 2 N) (3*N + 2*b + 26) = SP_Config (b+2) (N+5) 0 := by
+  rw [← P_Config_Pad_toSP b 2 N 2, ← P_Config_Pad_toSP (b+2) (N+5) 0 0, ← toSConfig_run]
+  exact congrArg Config.toSConfig (tm_even_endgame_to_loop b N 0)
 
--- Odd continue case: the TM reaches a valid loop start with the correct decoded state
-theorem tm_odd_continue (b' n p : Nat) :
-    ∃ k, k > 0 ∧ isValidLoopStart (run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p) k) ∧
-      decodeTape (run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p) k) = { a := 3 * n + 6, b := b' } := by
-  set p' := p + n + 2
-  set k := n * (3 * n + 9) + (9 * n + 20)
-  have h_multi : run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p') (n * (3*n+9))
-      = P_Config_Pad (b'+1) 3 (3*n) (p+2) := by
-    have h := tm_P_multistep (b'+1) 1 0 (p+1) n
-    simp only [show 1 + 2 + 2 * n = 2 * n + 3 from by omega, show p + 1 + 1 + n = p' from by omega,
-      show 1 + 2 = 3 from by omega, show (0:ℕ) + 3 * n = 3 * n from by omega,
-      show p + 1 + 1 = p + 2 from by omega] at h; exact h
-  have h_end : run antihydra (P_Config_Pad (b'+1) 3 (3*n) (p+2)) (9*n+20)
-      = P_Config_Pad b' (3*n+6) 0 p := by
-    have h := tm_odd_endgame b' (3*n) p; ring_nf at h ⊢; exact h
-  have h_padded : run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p') k
-      = P_Config_Pad b' (3*n+6) 0 p := by
-    show run antihydra (P_Config_Pad (b'+1) (2*n+3) 0 p') (n*(3*n+9) + (9*n+20)) = _
-    rw [run_add, h_multi, h_end]
-  have ⟨hv, hd⟩ := pad_transfer_loop (b'+1) (2*n+3) p p' k b' (3*n+6) h_padded (by omega)
-  exact ⟨k, by omega, hv, by rw [hd]; simp⟩
+theorem stm_odd_halt_endgame (N : Nat) :
+    (srun antihydra (SP_Config 0 3 N) (2*N + 12)).state = none := by
+  rw [← P_Config_Pad_toSP 0 3 N 2, ← toSConfig_run]
+  exact tm_odd_halt_endgame N 0
 
--- C. The Block-Step Lemma (The Core Theorem)
-theorem tm_simulates_math (c : Config 6) (hm : isValidLoopStart c) :
-    ∃ (k : Nat), k > 0 ∧ (
-      let c' := run antihydra c k
-      match nextMathState (decodeTape c) with
-      | some m' => isValidLoopStart c' ∧ decodeTape c' = m'
-      | none    => c'.state = none) := by
-  have ⟨a, b, p, hc, ha⟩ := isValidLoopStart_eq_P_Config_Pad c hm
-  subst hc
-  simp only [decodeTape_P_Config_Pad]
+-- SConfig bridge lemmas
+
+theorem stm_even_full (b n : Nat) :
+    ∃ k, k > 0 ∧ srun antihydra (SP_Config b (2*n+2) 0) k = SP_Config (b+2) (3*n+5) 0 := by
+  refine ⟨n*(3*n+9) + (9*n+2*b+26), by omega, ?_⟩
+  have h1 : srun antihydra (SP_Config b (2*n+2) 0) (n*(3*n+9)) = SP_Config b 2 (3*n) := by
+    have h := stm_P_multistep b 0 0 n
+    simp only [show 0+2+2*n = 2*n+2 from by omega,
+               show (0:Nat)+2 = 2 from by omega,
+               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
+  show srun antihydra (SP_Config b (2*n+2) 0) (n*(3*n+9) + (9*n+2*b+26)) = _
+  rw [srun_add, h1]
+  have h2 := stm_even_endgame_to_loop b (3*n); ring_nf at h2 ⊢; exact h2
+
+theorem stm_odd_halt_ex (n : Nat) :
+    ∃ k, k > 0 ∧ (srun antihydra (SP_Config 0 (2*n+3) 0) k).state = none := by
+  refine ⟨n*(3*n+9) + (6*n+12), by omega, ?_⟩
+  have h1 : srun antihydra (SP_Config 0 (2*n+3) 0) (n*(3*n+9)) = SP_Config 0 3 (3*n) := by
+    have h := stm_P_multistep 0 1 0 n
+    simp only [show 1+2+2*n = 2*n+3 from by omega,
+               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
+  show (srun antihydra (SP_Config 0 (2*n+3) 0) (n*(3*n+9) + (6*n+12))).state = none
+  rw [srun_add, h1, show 6*n+12 = 2*(3*n)+12 from by ring]
+  exact stm_odd_halt_endgame (3*n)
+
+theorem stm_odd_continue (b' n : Nat) :
+    ∃ k, k > 0 ∧ srun antihydra (SP_Config (b'+1) (2*n+3) 0) k = SP_Config b' (3*n+6) 0 := by
+  refine ⟨n*(3*n+9) + (9*n+20), by omega, ?_⟩
+  have h1 : srun antihydra (SP_Config (b'+1) (2*n+3) 0) (n*(3*n+9)) = SP_Config (b'+1) 3 (3*n) := by
+    have h := stm_P_multistep (b'+1) 1 0 n
+    simp only [show 1+2+2*n = 2*n+3 from by omega,
+               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
+  show srun antihydra (SP_Config (b'+1) (2*n+3) 0) (n*(3*n+9) + (9*n+20)) = _
+  rw [srun_add, h1]
+  have h2 := stm_odd_endgame b' (3*n); ring_nf at h2 ⊢; exact h2
+
+-- SConfig simulation theorem
+
+theorem stm_simulates_math (b a : Nat) (ha : a ≥ 2) :
+    ∃ k, k > 0 ∧ (
+      match nextMathState { a := a, b := b } with
+      | some m' => srun antihydra (SP_Config b a 0) k = SP_Config m'.b m'.a 0
+      | none    => (srun antihydra (SP_Config b a 0) k).state = none) := by
   cases h_mod : a % 2
-  · -- Even case: a = 2*n+2
-    have h_even : ∃ n, a = 2 * n + 2 := ⟨a / 2 - 1, by omega⟩
-    rcases h_even with ⟨n, hn⟩
-    subst hn
-    have h_next : nextMathState { a := 2 * n + 2, b := b } = some { a := 3 * n + 5, b := b + 2 } := by
-      unfold nextMathState
-      have h1 : (2 * n + 2) % 2 = 0 := by omega
-      simp [h1]
-      omega
-    rw [h_next]
-    exact tm_even_full b n p
-  · -- Odd case: a = 2*n+3
-    have h_odd : ∃ n, a = 2 * n + 3 := ⟨a / 2 - 1, by omega⟩
-    rcases h_odd with ⟨n, hn⟩
-    subst hn
+  · obtain ⟨n, rfl⟩ : ∃ n, a = 2 * n + 2 := ⟨a / 2 - 1, by omega⟩
+    rw [show nextMathState { a := 2*n+2, b := b } = some { a := 3*n+5, b := b+2 } from by
+      unfold nextMathState; simp [show (2*n+2) % 2 = 0 from by omega]; omega]
+    exact stm_even_full b n
+  · obtain ⟨n, rfl⟩ : ∃ n, a = 2 * n + 3 := ⟨a / 2 - 1, by omega⟩
     cases b with
     | zero =>
-      have h_next : nextMathState { a := 2 * n + 3, b := 0 } = none := by
-        unfold nextMathState
-        have h1 : (2 * n + 3) % 2 = 1 := by omega
-        simp [h1]
-      rw [h_next]
-      exact tm_odd_halt_ex n p
+      rw [show nextMathState { a := 2*n+3, b := 0 } = none from by
+        unfold nextMathState; simp [show (2*n+3) % 2 = 1 from by omega]]
+      exact stm_odd_halt_ex n
     | succ b' =>
-      have h_next : nextMathState { a := 2 * n + 3, b := b' + 1 } = some { a := 3 * n + 6, b := b' } := by
-        unfold nextMathState
-        have h1 : (2 * n + 3) % 2 = 1 := by omega
-        simp [h1]
-        omega
-      rw [h_next]
-      exact tm_odd_continue b' n p
-
-lemma run_none_state (c : Config 6) (h : c.state = none) (k : Nat) :
-    (run antihydra c k).state = none :=
-  run_state_none antihydra c k h
+      rw [show nextMathState { a := 2*n+3, b := b'+1 } = some { a := 3*n+6, b := b' } from by
+        unfold nextMathState; simp [show (2*n+3) % 2 = 1 from by omega]; omega]
+      exact stm_odd_continue b' n
 
 -- D. The Halting Equivalence Theorem
 inductive mathHalts : MathState → Prop where
 | haltStep (m : MathState) (h : nextMathState m = none) : mathHalts m
 | nextStep (m m' : MathState) (h : nextMathState m = some m') (h' : mathHalts m') : mathHalts m
 
-theorem tm_halt_iff_math_condition (c : Config 6) (hm : isValidLoopStart c) :
-    (∃ k, (run antihydra c k).state = none) ↔ mathHalts (decodeTape c) := by
-  constructor
-  · intro ⟨k, hk⟩
-    induction k using Nat.strong_induction_on generalizing c with
-    | h n ih =>
-      have ⟨k_sim, hk_sim_pos, h_sim⟩ := tm_simulates_math c hm
-      cases h_next : nextMathState (decodeTape c) with
-      | none =>
-        exact mathHalts.haltStep _ h_next
-      | some m' =>
-        have h_rewrite : match nextMathState (decodeTape c) with | some m' => isValidLoopStart (run antihydra c k_sim) ∧ decodeTape (run antihydra c k_sim) = m' | none => (run antihydra c k_sim).state = none = (isValidLoopStart (run antihydra c k_sim) ∧ decodeTape (run antihydra c k_sim) = m') := by rw [h_next]
-        rw [h_rewrite] at h_sim
-        have ⟨hm_c', hd_c'⟩ := h_sim
-        by_cases h_lt : n < k_sim
-        · have := hm_c'.1; rw [show k_sim = n + (k_sim - n) from by omega, run_add,
-            show (run antihydra (run antihydra c n) (k_sim - n)).state = none from
-              run_none_state _ hk _] at this; contradiction
-        · have hk_n' : (run antihydra (run antihydra c k_sim) (n - k_sim)).state = none := by
-            rw [← run_add, Nat.add_sub_cancel' (by omega : k_sim ≤ n)]; exact hk
-          have h_math' := ih (n - k_sim) (by omega) (run antihydra c k_sim) hm_c' hk_n'
-          rw [hd_c'] at h_math'
-          exact mathHalts.nextStep _ _ h_next h_math'
-  · intro h_math
-    generalize hd : decodeTape c = m at h_math
-    induction h_math generalizing c with
-    | haltStep m h_none =>
-      have ⟨k, hk_pos, hk⟩ := tm_simulates_math c hm
-      have h_rewrite : match nextMathState (decodeTape c) with | some m' => isValidLoopStart (run antihydra c k) ∧ decodeTape (run antihydra c k) = m' | none => (run antihydra c k).state = none = ((run antihydra c k).state = none) := by
-        rw [hd, h_none]
-      rw [h_rewrite] at hk
-      exact ⟨k, hk⟩
-    | nextStep m m' h_some h_halt ih =>
-      have ⟨k, hk_pos, hk⟩ := tm_simulates_math c hm
-      have h_rewrite : match nextMathState (decodeTape c) with | some m' => isValidLoopStart (run antihydra c k) ∧ decodeTape (run antihydra c k) = m' | none => (run antihydra c k).state = none = (isValidLoopStart (run antihydra c k) ∧ decodeTape (run antihydra c k) = m') := by
-        rw [hd, h_some]
-      rw [h_rewrite] at hk
-      rcases hk with ⟨hm_c', hd_c'⟩
-      have ⟨k', hk'⟩ := ih (run antihydra c k) hm_c' hd_c'
-      use k + k'
-      rw [run_add]
-      exact hk'
-
 -- Initial configuration
 lemma antihydra_init_loop_start : run antihydra (initConfig 6) 58 = P_Config_Pad 2 8 0 0 := by
   rfl
 
-lemma antihydra_init_math_state : decodeTape (run antihydra (initConfig 6) 58) = { a := 8, b := 2 } := by
-  decide
-
 -- i-th iterate of A
 def Aiter (i : ℕ) (ab : ℕ × ℕ) : ℕ × ℕ := A^[i] ab
-
-private lemma isValidLoopStart_P248 : isValidLoopStart (P_Config_Pad 2 8 0 0) :=
-  isValidLoopStart_P_Config_Pad 2 8 0 (by omega)
 
 private lemma no_halt_before_58 : ∀ k < 58, (run antihydra (initConfig 6) k).state ≠ none := by
   decide
@@ -538,58 +282,34 @@ private lemma no_halt_before_58 : ∀ k < 58, (run antihydra (initConfig 6) k).s
 -- Helper lemmas for mathHalts_iff_Aiter_8_2
 private lemma nextMathState_none_iff {a b : ℕ} (ha : a ≥ 2) :
     nextMathState { a := a, b := b } = none ↔ a % 2 = 1 ∧ b = 0 := by
-  simp only [nextMathState]
-  have hd : a / 2 ≥ 1 := by omega
-  simp only [ge_iff_le, hd, ite_true, beq_iff_eq]
-  split_ifs with h1 h2
-  · simp; omega
-  · simp [h2]; omega
-  · simp; omega
+  simp only [nextMathState, ge_iff_le, show a / 2 ≥ 1 from by omega, ite_true, beq_iff_eq]
+  split_ifs <;> simp_all
 
 private lemma nextMathState_some_eq_A {a b : ℕ} (ha : a ≥ 2) (hne : ¬(a % 2 = 1 ∧ b = 0)) :
     nextMathState { a := a, b := b } = some { a := (A (a, b)).1, b := (A (a, b)).2 } := by
-  simp only [nextMathState, A]
-  have hd : a / 2 ≥ 1 := by omega
-  simp only [ge_iff_le, hd, ite_true, beq_iff_eq]
-  split_ifs with h1 h2
-  · rfl
-  · exfalso; exact hne ⟨by omega, h2⟩
-  · congr 1
+  simp only [nextMathState, A, ge_iff_le, show a / 2 ≥ 1 from by omega, ite_true, beq_iff_eq]
+  split_ifs <;> simp_all
 
 private lemma A_fst_ge_2' (ab : ℕ × ℕ) (ha : ab.1 ≥ 2) : (A ab).1 ≥ 2 := by
-  obtain ⟨a, b⟩ := ab
-  simp only [A, beq_iff_eq]
-  split_ifs with h <;> simp
+  obtain ⟨a, b⟩ := ab; simp only [A, beq_iff_eq]; split_ifs <;> simp
 
 private lemma Aiter_succ' (i : ℕ) (ab : ℕ × ℕ) : Aiter (i + 1) ab = Aiter i (A ab) := by
-  change A^[i.succ] ab = A^[i] (A ab)
-  rw [Function.iterate_succ, Function.comp_apply]
+  simp [Aiter, Function.iterate_succ, Function.comp_apply]
 
 private lemma mathHalts_implies_Aiter (m : MathState) (hm : m.a ≥ 2) (hmh : mathHalts m) :
     ∃ i, (Aiter i (m.a, m.b)).1 % 2 = 1 ∧ (Aiter i (m.a, m.b)).1 / 2 ≥ 1 ∧
          (Aiter i (m.a, m.b)).2 = 0 := by
   induction hmh with
   | haltStep m' hm' =>
-    refine ⟨0, ?_⟩
-    simp only [Aiter, Function.iterate_zero, id]
-    have h := (nextMathState_none_iff hm).mp hm'
-    exact ⟨h.1, by omega, h.2⟩
+    refine ⟨0, ?_⟩; simp only [Aiter, Function.iterate_zero, id]
+    have h := (nextMathState_none_iff hm).mp hm'; exact ⟨h.1, by omega, h.2⟩
   | nextStep m' m'' hstep _hmh'' ih =>
     have hne : ¬(m'.a % 2 = 1 ∧ m'.b = 0) := by
-      intro ⟨h1, h2⟩
-      have hnone := (nextMathState_none_iff hm).mpr ⟨h1, h2⟩
-      simp [hnone] at hstep
+      intro h; simp [(nextMathState_none_iff hm).mpr h] at hstep
     have heq := nextMathState_some_eq_A hm hne
-    have hm''_eq : m'' = { a := (A (m'.a, m'.b)).1, b := (A (m'.a, m'.b)).2 } := by
-      rw [heq] at hstep; exact (Option.some.inj hstep).symm
-    have hm''_a : m''.a = (A (m'.a, m'.b)).1 := by rw [hm''_eq]
-    have hm''_b : m''.b = (A (m'.a, m'.b)).2 := by rw [hm''_eq]
-    have hm''_ge2 : m''.a ≥ 2 := by
-      rw [hm''_a]; exact A_fst_ge_2' (m'.a, m'.b) hm
-    obtain ⟨i, hi⟩ := ih hm''_ge2
-    refine ⟨i + 1, ?_⟩
-    rw [Aiter_succ']
-    rwa [hm''_a, hm''_b] at hi
+    rw [heq] at hstep; cases Option.some.inj hstep
+    obtain ⟨i, hi⟩ := ih (A_fst_ge_2' _ hm)
+    exact ⟨i + 1, by rwa [Aiter_succ']⟩
 
 private lemma Aiter_implies_mathHalts (a b : ℕ) (ha : a ≥ 2)
     (i : ℕ) (hi : (Aiter i (a, b)).1 % 2 = 1 ∧ (Aiter i (a, b)).1 / 2 ≥ 1 ∧ (Aiter i (a, b)).2 = 0) :
@@ -602,10 +322,8 @@ private lemma Aiter_implies_mathHalts (a b : ℕ) (ha : a ≥ 2)
     by_cases hstop : a % 2 = 1 ∧ b = 0
     · exact mathHalts.haltStep _ ((nextMathState_none_iff ha).mpr hstop)
     · rw [Aiter_succ'] at hi
-      have hA2 : (A (a, b)).1 ≥ 2 := A_fst_ge_2' (a, b) ha
-      apply mathHalts.nextStep { a := a, b := b } { a := (A (a, b)).1, b := (A (a, b)).2 }
-      · exact nextMathState_some_eq_A ha hstop
-      · exact ih (A (a, b)).1 (A (a, b)).2 hA2 hi
+      exact mathHalts.nextStep _ ⟨_, _⟩ (nextMathState_some_eq_A ha hstop)
+        (ih _ _ (A_fst_ge_2' _ ha) hi)
 
 -- Key bridge: mathHalts {a=8,b=2} ↔ ∃ i, Aiter i (8,2) satisfies halt condition
 lemma mathHalts_iff_Aiter_8_2 :
@@ -615,26 +333,82 @@ lemma mathHalts_iff_Aiter_8_2 :
   · intro h; exact mathHalts_implies_Aiter _ (by omega : (8 : ℕ) ≥ 2) h
   · rintro ⟨i, hi⟩; exact Aiter_implies_mathHalts 8 2 (by omega) i hi
 
--- Main result: the Antihydra TM halts iff some iterate of A starting at (8,2)
--- produces a pair (a, 0) with a odd and a ≥ 3 (i.e. hits the halting condition).
+-- Helper: nextMathState preserves a ≥ 2
+private lemma nextMathState_a_ge_2 {a b : ℕ} {m' : MathState} (ha : a ≥ 2)
+    (h : nextMathState { a := a, b := b } = some m') : m'.a ≥ 2 := by
+  have hne : ¬(a % 2 = 1 ∧ b = 0) := by
+    intro ⟨h1, h2⟩; simp [(nextMathState_none_iff ha).mpr ⟨h1, h2⟩] at h
+  rw [nextMathState_some_eq_A ha hne] at h; cases Option.some.inj h; exact A_fst_ge_2' _ ha
+
+-- SConfig halt equivalence
+theorem stm_halt_iff_math_condition (b a : Nat) (ha : a ≥ 2) :
+    (∃ k, (srun antihydra (SP_Config b a 0) k).state = none) ↔ mathHalts { a := a, b := b } := by
+  constructor
+  · -- Forward: if TM halts, then math halts (strong induction on step count)
+    intro ⟨k, hk⟩
+    suffices ∀ (n : Nat) (b a : Nat), a ≥ 2 →
+        (srun antihydra (SP_Config b a 0) n).state = none → mathHalts { a := a, b := b } from
+      this k b a ha hk
+    intro n; induction n using Nat.strong_induction_on with
+    | h n ih =>
+      intro b a ha hk
+      have ⟨k_sim, hk_pos, h_sim⟩ := stm_simulates_math b a ha
+      cases h_next : nextMathState { a := a, b := b } with
+      | none => exact mathHalts.haltStep _ h_next
+      | some m' =>
+        rw [h_next] at h_sim
+        -- h_sim : srun ... k_sim = SP_Config m'.b m'.a 0
+        by_cases h_lt : n < k_sim
+        · exact absurd (h_sim ▸ rfl : (srun antihydra (SP_Config b a 0) k_sim).state = some stE)
+            (by rw [show k_sim = n + (k_sim - n) from by omega, srun_add,
+                srun_halted _ _ hk]; exact hk ▸ by simp)
+        · -- n ≥ k_sim: split and recurse
+          rw [show n = k_sim + (n - k_sim) from by omega, srun_add, h_sim] at hk
+          exact mathHalts.nextStep _ _ h_next
+            (ih (n - k_sim) (by omega) m'.b m'.a (nextMathState_a_ge_2 ha h_next) hk)
+  · -- Backward: if math halts, then TM halts (induction on mathHalts)
+    intro h_math
+    suffices ∀ m : MathState, m.a ≥ 2 → mathHalts m →
+        ∃ k, (srun antihydra (SP_Config m.b m.a 0) k).state = none from
+      this _ ha h_math
+    intro m hm hmh; induction hmh with
+    | haltStep m h_none =>
+      have ⟨k, _, h_sim⟩ := stm_simulates_math m.b m.a hm
+      rw [h_none] at h_sim; exact ⟨k, h_sim⟩
+    | nextStep m m' h_some _ ih =>
+      have ⟨k, _, h_sim⟩ := stm_simulates_math m.b m.a hm
+      rw [h_some] at h_sim
+      have ⟨k', hk'⟩ := ih (nextMathState_a_ge_2 hm h_some)
+      exact ⟨k + k', by rw [srun_add, h_sim]; exact hk'⟩
+
+-- SConfig initial configuration
+lemma antihydra_init_SP :
+    srun antihydra (sinitConfig 6) 58 = SP_Config 2 8 0 := by
+  have h := congrArg Config.toSConfig antihydra_init_loop_start
+  rw [toSConfig_run, toSConfig_initConfig, P_Config_Pad_toSP] at h; exact h
+
+-- Main result (SConfig version)
 lemma antihydra_halts_iff :
     (∃ k, (run antihydra (initConfig 6) k).state = none) ↔
     ∃ i, (Aiter i (8, 2)).1 % 2 = 1 ∧ (Aiter i (8, 2)).1 / 2 ≥ 1 ∧ (Aiter i (8, 2)).2 = 0 := by
-  have hv : isValidLoopStart (run antihydra (initConfig 6) 58) :=
-    antihydra_init_loop_start ▸ isValidLoopStart_P248
-  have step1 : (∃ k, (run antihydra (initConfig 6) k).state = none) ↔
-               (∃ k, (run antihydra (run antihydra (initConfig 6) 58) k).state = none) := by
+  -- Step 1: Lift Config halt ↔ SConfig halt
+  have h_eq : ∀ k, (run antihydra (initConfig 6) k).state =
+                    (srun antihydra (sinitConfig 6) k).state := fun k => by
+    change _ = (srun antihydra (initConfig 6).toSConfig k).state
+    rw [← toSConfig_run]; rfl
+  -- Step 2: Split at 58 steps and connect to SP_Config 2 8 0
+  have h_iff : (∃ k, (run antihydra (initConfig 6) k).state = none) ↔
+               (∃ k, (srun antihydra (SP_Config 2 8 0) k).state = none) := by
     constructor
     · rintro ⟨k, hk⟩
       by_cases h : 58 ≤ k
       · refine ⟨k - 58, ?_⟩
-        have heq : run antihydra (initConfig 6) (58 + (k - 58)) = run antihydra (run antihydra (initConfig 6) 58) (k - 58) := run_add _ _ _ _
-        rw [Nat.add_sub_cancel' h] at heq
-        rw [← heq]; exact hk
+        rw [h_eq, show k = 58 + (k - 58) from by omega, srun_add, antihydra_init_SP] at hk
+        exact hk
       · exact absurd hk (no_halt_before_58 k (by omega))
     · rintro ⟨k, hk⟩
-      exact ⟨58 + k, show (run antihydra (initConfig 6) (58 + k)).state = none by rw [run_add]; exact hk⟩
-  rw [step1, tm_halt_iff_math_condition _ hv, antihydra_init_math_state]
+      exact ⟨58 + k, by rw [h_eq]; rw [srun_add, antihydra_init_SP]; exact hk⟩
+  rw [h_iff, stm_halt_iff_math_condition 2 8 (by omega)]
   exact mathHalts_iff_Aiter_8_2
 
 end Antihydra
