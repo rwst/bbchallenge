@@ -207,8 +207,12 @@ open Lean Lean.Elab Lean.Elab.Tactic Lean.Meta
     Stops when a step can't be fully simplified (shift lemma or case split needed).
     Tries to close the goal after all concrete steps are done.
 
-    Usage: `tm_exec [antihydra, P_Config_Pad, ones]` -/
+    Usage: `tm_exec [antihydra, P_Config_Pad]`
+
+    With auto-shift: `tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]`
+    When stuck, automatically splits the run and applies matching shift lemmas. -/
 syntax "tm_exec" "[" Lean.Parser.Tactic.simpLemma,* "]" : tactic
+syntax "tm_exec" "[" Lean.Parser.Tactic.simpLemma,* "]" "shifts" "[" ident,* "]" : tactic
 
 -- Extract (tm, config, stepCount) from a `run tm c k` expression.
 private def findRunParts (e : Lean.Expr) : Option (Lean.Expr × Lean.Expr × Lean.Expr) :=
@@ -254,14 +258,177 @@ private partial def decNatExpr (e : Lean.Expr) : Option Lean.Expr :=
     else none
   else none
 
-elab_rules : tactic
-  | `(tactic| tm_exec [$lemmas,*]) => do
-    for _ in List.range 200 do
-      -- Quick close attempts
-      try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
-      try evalTactic (← `(tactic| (simp only [run_zero]; rfl))); return catch _ => pure ()
-      -- Peel one step: split off 1 step via run_add, simplify in a conv
-      let saved ← saveState
+-- Collect additive terms from a Nat expression.
+-- Returns (non-constant terms, total constant).
+-- E.g., `3*N + 2*b + 24` → ([3*N, 2*b], 24)
+private partial def collectAddTerms (e : Lean.Expr) : List Lean.Expr × Nat :=
+  if let some n := getNatLit? e then ([], n)
+  else if e.isAppOfArity ``HAdd.hAdd 6 then
+    let (t1, c1) := collectAddTerms (e.getArg! 4)
+    let (t2, c2) := collectAddTerms (e.getArg! 5)
+    (t1 ++ t2, c1 + c2)
+  else ([e], 0)
+
+-- Extract coefficient of `target` from a term.
+-- E.g., extractCoeff `3*N` N → some 3; extractCoeff `N` N → some 1.
+-- Uses structural equality to avoid isDefEq side effects.
+private def extractCoeff (e target : Lean.Expr) : Option Nat :=
+  if e == target then some 1
+  else if e.isAppOfArity ``HMul.hMul 6 then
+    if let some c := getNatLit? (e.getArg! 4) then
+      if e.getArg! 5 == target then some c else none
+    else none
+  else none
+
+-- Build a sum of terms + constant. E.g., ([2*N, 2*b], 23) → 2*N + 2*b + 23.
+private def buildSum (terms : List Lean.Expr) (const : Nat) : MetaM Lean.Expr := do
+  let allParts := terms ++ if const > 0 then [mkNatLit const] else []
+  match allParts with
+  | [] => return mkNatLit 0
+  | [x] => return x
+  | x :: xs =>
+    let mut result := x
+    for t in xs do
+      result ← mkAppM ``HAdd.hAdd #[result, t]
+    return result
+
+-- Compute `kExpr - (kShift + 1)` cleanly (no Nat.sub).
+-- Decomposes kExpr as `c*kShift + residual + const`, returns `(c-1)*kShift + residual + (const-1)`.
+-- E.g., (3*N + 2*b + 24) with kShift=N → 2*N + 2*b + 23.
+private def computeShiftRest (kExpr kShift : Lean.Expr) : MetaM (Option Lean.Expr) := do
+  let (terms, const) := collectAddTerms kExpr
+  let mut coeff : Nat := 0
+  let mut otherTerms : List Lean.Expr := []
+  for t in terms do
+    if let some c := extractCoeff t kShift then coeff := coeff + c
+    else otherTerms := otherTerms ++ [t]
+  if coeff == 0 then return none
+  if const == 0 then return none
+  let mut resultTerms := otherTerms
+  let newCoeff := coeff - 1
+  if newCoeff == 1 then resultTerms := [kShift] ++ resultTerms
+  else if newCoeff > 1 then
+    resultTerms := [← mkAppM ``HMul.hMul #[mkNatLit newCoeff, kShift]] ++ resultTerms
+  return some (← buildSum resultTerms (const - 1))
+
+/-- Extract `k` from `ones k ++ R`, i.e., `HAppend ... (ones k) R` or
+    `HAppend ... (List.replicate k true) R`.
+    Returns `k` as an Expr, or `none` if the tape isn't in this form. -/
+private def extractOnesPrefix (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
+  unless e.isAppOfArity ``HAppend.hAppend 6 do return none
+  let lhs := e.getArg! 4
+  -- Pattern 1: List.replicate k true (fully unfolded ones)
+  if lhs.isAppOfArity ``List.replicate 3 then
+    let sym := lhs.getArg! 2
+    if ← isDefEq sym (mkConst ``Bool.true) then
+      return some (lhs.getArg! 1)
+  -- Pattern 2: ones k (BusyLean.ones k = repeatSym true k)
+  if lhs.isAppOfArity ``ones 1 then
+    return some (lhs.getArg! 0)
+  -- Pattern 3: repeatSym true k (BusyLean.repeatSym s k)
+  if lhs.isAppOfArity ``repeatSym 2 then
+    let sym := lhs.getArg! 0
+    if ← isDefEq sym (mkConst ``Bool.true) then
+      return some (lhs.getArg! 1)
+  -- Pattern 4: whnf to unfold abbreviations, then try List.replicate again
+  let lhs' ← whnf lhs
+  if lhs' != lhs && lhs'.isAppOfArity ``List.replicate 3 then
+    let sym := lhs'.getArg! 2
+    if ← isDefEq sym (mkConst ``Bool.true) then
+      return some (lhs'.getArg! 1)
+  return none
+
+/-- Extract the state abbreviation (e.g., `stA`) from a shift lemma's type.
+    Walks through forall binders manually (no forallTelescope, avoiding fvar leaks).
+    Looks for `run tm { state := some stX, ... } cost` in the innermost equality. -/
+private def getShiftStateAbbrev (shiftName : Lean.Name) : MetaM (Option Lean.Expr) := do
+  let some info := (← getEnv).find? shiftName | return none
+  -- Strip forall binders to get the body
+  let mut ty := info.type
+  while ty.isForall do ty := ty.bindingBody!
+  -- Now ty has loose bvars, but we only need the state field which is a closed term (stA etc.)
+  let some (_, lhs, _) := ty.eq? | return none
+  let some (_, config, _) := findRunParts lhs | return none
+  let configArgs := config.getAppArgs
+  if configArgs.size < 2 then return none
+  let stateOpt := configArgs[1]!  -- state = some stX
+  if stateOpt.isAppOfArity ``Option.some 2 then
+    return some (stateOpt.getArg! 1)  -- returns stX expr (e.g., stA)
+  return none
+
+/-- Try each shift lemma on the current goal. When stuck on
+    `run tm { state := some stX, head := true, ..., tape := ones k ++ R } remaining = target`,
+    splits the run at `k+1` steps, applies the shift lemma, and cleans up.
+    Returns `true` if a shift was successfully applied. -/
+private def tryApplyShift (shiftArr : Array (TSyntax `ident))
+    (lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma)) : TacticM Bool := do
+  if shiftArr.isEmpty then return false
+  let goalType ← (← getMainGoal).getType
+  let some (_, lhs, _) := goalType.eq? | return false
+  let some (config, kExpr) := findRunInExpr lhs | return false
+  let configArgs := config.getAppArgs
+  if configArgs.size < 5 then return false
+  -- Config.mk args: [n, state, left, head, right]
+  let stateExpr := configArgs[1]!
+  let leftExpr := configArgs[2]!
+  let rightExpr := configArgs[4]!
+  -- Find ones prefix in either tape side
+  let mut kShiftOpt ← extractOnesPrefix rightExpr
+  if kShiftOpt.isNone then
+    kShiftOpt ← extractOnesPrefix leftExpr
+  let some kShift := kShiftOpt | return false
+  let kSyn ← Term.exprToSyntax kExpr
+  let kShiftSyn ← Term.exprToSyntax kShift
+  -- Extract the Fin literal from goal config's state (some finLit)
+  let finLitExpr := if stateExpr.isAppOfArity ``Option.some 2
+                     then stateExpr.getArg! 1 else stateExpr
+  let finLitSyn ← Term.exprToSyntax finLitExpr
+  -- Try each shift lemma
+  for shift in shiftArr do
+    let saved ← saveState
+    try
+      -- Resolve shift name in current namespace (e.g., A_shift → Antihydra.A_shift)
+      let resolvedName ← resolveGlobalConstNoOverload shift
+      let some stateAbbrev ← getShiftStateAbbrev resolvedName | throwError ""
+      let stateAbbrevSyn ← Term.exprToSyntax stateAbbrev
+      -- Split: remaining = (kShift + 1) + rest, computing rest cleanly (no Nat.sub)
+      let restExpr ← do
+        if let some r ← computeShiftRest kExpr kShift then pure r
+        else throwError ""  -- can't compute clean rest; skip this shift
+      let restSyn ← Term.exprToSyntax restExpr
+      evalTactic (← `(tactic|
+        rw [show $kSyn = ($kShiftSyn + 1) + $restSyn from by omega, run_add]))
+      -- Apply shift via conv on the inner run: convert Fin→abbrev, then apply shift + cleanup
+      -- Using conv prevents the Fin rewrite from unfolding the TM definition
+      evalTactic (← `(tactic|
+        conv =>
+          lhs
+          enter [2]
+          rw [show $finLitSyn = $stateAbbrevSyn from rfl]
+          simp only [$shift:ident, listHead, listTail,
+            zeros_succ, ones_succ, zeros_zero, ones_zero,
+            List.nil_append, List.append_nil]))
+      if (← getGoals).isEmpty then return true
+      -- Fold tape back into ones/zeros form (no user lemmas — they'd unfold the TM)
+      try evalTactic (← `(tactic|
+        simp only [ones_cons_append, zeros_cons_append, ← ones_succ, ← zeros_succ,
+                    listHead, listTail, zeros_succ, ones_succ,
+                    ones_zero, zeros_zero, List.nil_append, List.append_nil]))
+      catch _ => pure ()
+      return true
+    catch _ => saved.restore; continue
+  return false
+
+/-- Core implementation of `tm_exec`, shared between the two syntax forms. -/
+private def tmExecCore (lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma))
+    (shiftArr : Array (TSyntax `ident)) : TacticM Unit := do
+  for _ in List.range 200 do
+    -- Quick close attempts
+    try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
+    try evalTactic (← `(tactic| (simp only [run_zero]; rfl))); return catch _ => pure ()
+    -- Peel one step: split off 1 step via run_add, simplify in a conv
+    let saved ← saveState
+    let stepped ← do
       try
         let goalType ← (← getMainGoal).getType
         let some (_, lhs, _) := goalType.eq? | throwError ""
@@ -273,7 +440,7 @@ elab_rules : tactic
         evalTactic (← `(tactic|
           rw [show $kSyn = 1 + $kMinus1Syn from by omega, run_add]))
         -- Simplify just the inner (run tm c 1) via conv, keeping tm folded in outer run
-        -- Use positional navigation (arg 1; arg 2) to target the config of the outer run,
+        -- Use positional navigation: enter [2] targets the config of the outer run,
         -- avoiding ambiguity when k-1 = 1 (both inner and outer would match `run _ _ 1`)
         evalTactic (← `(tactic|
           conv =>
@@ -299,40 +466,51 @@ elab_rules : tactic
           throwError ""
         let configArgs := config.getAppArgs
         unless configArgs.size > 3 && configArgs[3]!.isConst do throwError ""
-      catch _ => do saved.restore; break
-    -- Post-loop: try to close the goal if remaining steps = 0
-    try
-      let goalType ← (← getMainGoal).getType
-      let some (_, lhs, _) := goalType.eq? | throwError ""
-      let some (_, kExpr) := findRunInExpr lhs | throwError ""
-      let kSyn ← Term.exprToSyntax kExpr
-      evalTactic (← `(tactic| simp only [show $kSyn = 0 from by omega, run_zero]))
-      try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
-      evalTactic (← `(tactic|
+        pure true
+      catch _ => do saved.restore; pure false
+    if stepped then continue
+    -- Step failed — try applying a shift lemma before giving up
+    if ← tryApplyShift shiftArr lemmas then continue
+    break
+  -- Post-loop: try to close the goal if remaining steps = 0
+  try
+    let goalType ← (← getMainGoal).getType
+    let some (_, lhs, _) := goalType.eq? | throwError ""
+    let some (_, kExpr) := findRunInExpr lhs | throwError ""
+    let kSyn ← Term.exprToSyntax kExpr
+    evalTactic (← `(tactic| simp only [show $kSyn = 0 from by omega, run_zero]))
+    try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
+    evalTactic (← `(tactic|
+      simp (config := { decide := true }) [
+        ones, zeros, ones_succ, zeros_succ, ones_zero, zeros_zero,
+        ones_append, zeros_append,
+        List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
+        $lemmas,*]))
+  catch _ => pure ()
+  -- If goal still open, check if it's a halt goal (not a run equality)
+  -- Only try aggressive simp for halt goals like (run tm c k).state = none
+  if !(← getGoals).isEmpty then
+    let goalType ← (← getMainGoal).getType
+    -- Guard: only try halt-close if goal is NOT `run tm c k = c'`
+    let isRunEq := match goalType.eq? with
+      | some (_, lhs, _) => (findRunInExpr lhs).isSome
+      | none => false
+    unless isRunEq do
+      try evalTactic (← `(tactic|
         simp (config := { decide := true }) [
+          run, step, run_halted, Config.halted,
+          listHead, listTail,
           ones, zeros, ones_succ, zeros_succ, ones_zero, zeros_zero,
           ones_append, zeros_append,
           List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
           $lemmas,*]))
-    catch _ => pure ()
-    -- If goal still open, check if it's a halt goal (not a run equality)
-    -- Only try aggressive simp for halt goals like (run tm c k).state = none
-    if !(← getGoals).isEmpty then
-      let goalType ← (← getMainGoal).getType
-      -- Guard: only try halt-close if goal is NOT `run tm c k = c'`
-      let isRunEq := match goalType.eq? with
-        | some (_, lhs, _) => (findRunInExpr lhs).isSome
-        | none => false
-      unless isRunEq do
-        try evalTactic (← `(tactic|
-          simp (config := { decide := true }) [
-            run, step, run_halted, Config.halted,
-            listHead, listTail,
-            ones, zeros, ones_succ, zeros_succ, ones_zero, zeros_zero,
-            ones_append, zeros_append,
-            List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
-            $lemmas,*]))
-        catch _ => pure ()
+      catch _ => pure ()
+
+elab_rules : tactic
+  | `(tactic| tm_exec [$lemmas,*]) => tmExecCore lemmas.getElems #[]
+
+elab_rules : tactic
+  | `(tactic| tm_exec [$lemmas,*] shifts [$shs,*]) => tmExecCore lemmas.getElems shs.getElems
 
 end TmExec
 

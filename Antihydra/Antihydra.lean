@@ -43,7 +43,7 @@ def mathHaltingCondition (m : MathState) : Prop :=
 -- Bridge lemma: ones k ++ true :: L = ones (k+1) ++ L
 @[simp] theorem ones_append_true (k : Nat) (L : List Sym) :
     ones k ++ true :: L = ones (k + 1) ++ L := by
-  simp [ones_succ, ones_true_cons, List.cons_append]
+  simp [ones_succ, List.cons_append]
 
 -- Additional simp lemmas for listHead/listTail with ones/zeros patterns
 @[simp] lemma listHead_ones_succ (k : Nat) (R : List Sym) :
@@ -111,13 +111,7 @@ lemma E_shift (k : Nat) (L R : List Sym) :
 
 theorem tm_P_step (b m n p : Nat) :
     run antihydra (P_Config_Pad b (m+2+2) n (p+2)) (2*n + 12) = P_Config_Pad b (m+2) (n+3) (p+1) := by
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show 2 * n + 10 = (n + 1) + (n + 9) from by omega, run_add]
-  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show n + 6 = (n + 1) + 5 from by omega, run_add]
-  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
-  tm_exec [antihydra, P_Config_Pad]
+  tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
 
 
 theorem tm_P_multistep (b m n p k : Nat) :
@@ -137,21 +131,16 @@ theorem tm_P_multistep (b m n p k : Nat) :
     have h_steps : (k' + 1) * (2 * n + 3 * (k' + 1) + 9) = (2 * n + 12) + k' * (2 * (n + 3) + 3 * k' + 9) := by ring
     rw [h_steps]
     rw [run_add]
-
     -- The first chunk of steps is tm_P_step for M = m + 2*k' and P = p + k'
     have h_m : m + 2 + 2 * (k' + 1) = (m + 2 * k') + 2 + 2 := by omega
     have h_p : p + 1 + (k' + 1) = (p + k') + 2 := by omega
-
     have step1 : run antihydra (P_Config_Pad b (m + 2 + 2 * (k' + 1)) n (p + 1 + (k' + 1))) (2 * n + 12) = P_Config_Pad b ((m + 2 * k') + 2) (n + 3) ((p + k') + 1) := by
       rw [h_m, h_p]
       exact tm_P_step b (m + 2 * k') n (p + k')
-
     rw [step1]
-
     have h_m2 : (m + 2 * k') + 2 = m + 2 + 2 * k' := by omega
     have h_p2 : (p + k') + 1 = p + 1 + k' := by omega
     have h_n2 : n + 3 * (k' + 1) = (n + 3) + 3 * k' := by omega
-
     rw [h_m2, h_p2]
     rw [ih (n + 3)]
     rw [h_n2]
@@ -171,20 +160,10 @@ theorem tm_even_endgame (b N p : Nat) :
 -- Odd Endgame (m=3, b>0)
 theorem tm_odd_endgame (b' N p : Nat) :
     run antihydra (P_Config_Pad (b' + 1) 3 N (p+2)) (3*N + 20) = P_Config_Pad b' (N+6) 0 p := by
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show 3 * N + 18 = (N + 1) + (2 * N + 17) from by omega, run_add]
-  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show 2 * N + 14 = (N + 1) + (N + 13) from by omega, run_add]
-  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
-  tm_exec [antihydra, P_Config_Pad]
-  simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
-  rw [show 1 + (1 + (1 + (1 + (1 + (N + 1))))) = N + 6 from by omega]
-  simp only [P_Config_Pad, ones_zero, List.nil_append]
-  congr 1
-  rw [show (true :: true :: true :: true :: true :: false :: ones b' : List Sym) = ones 5 ++ false :: ones b' from rfl,
-    ← List.append_assoc, ones_append]
-  simp only [List.append_assoc, List.singleton_append]
+  tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
+  -- Remaining: tape folding for final config
+  simp only [ones_cons_append]
+  congr 1; unfold ones repeatSym; congr 1; omega
 
 -- Additional tape lemmas needed for later proofs
 
@@ -325,12 +304,12 @@ private lemma listToSide_blank_of_all_false {R : List Sym} (h : R.all (!·) = tr
     listToSide R = Side.blank := by
   ext i; simp [listToSide, Side.blank]
   induction R generalizing i with
-  | nil => simp [List.getD]
+  | nil => simp
   | cons x xs ih =>
     simp only [List.all_cons, Bool.and_eq_true] at h
     cases i with
-    | zero => simp [List.getD]; cases x <;> simp_all
-    | succ i => simp [List.getD]; exact ih h.2 i
+    | zero => simp; cases x <;> simp_all
+    | succ i => simp; exact ih h.2 i
 
 /-- Transfer isValidLoopStart across different right-tape padding. -/
 lemma isValidLoopStart_of_pad_transfer {c₁ c₂ : Config 6}
@@ -354,24 +333,13 @@ lemma decodeTape_of_left_eq {c1 c2 : Config 6} (hl : c1.left = c2.left) :
 -- Even endgame: from a=2 to valid loop start with a=N+5, b=b+2
 theorem tm_even_endgame_to_loop (b N p : Nat) :
     run antihydra (P_Config_Pad b 2 N (p+2)) (3*N + 2*b + 26) = P_Config_Pad (b+2) (N+5) 0 p := by
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show 3 * N + 2 * b + 24 = (N + 1) + (2 * N + 2 * b + 23) from by omega, run_add]
-  simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
-  tm_exec [antihydra, P_Config_Pad]
-  rw [show 2 * N + 2 * b + 20 = (N + 1) + (N + 2 * b + 19) from by omega, run_add]
-  simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
-  tm_exec [antihydra, P_Config_Pad]
+  tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
   cases b with
   | zero =>
     simp only [ones_zero, Nat.mul_zero, Nat.add_zero]
-    tm_exec [antihydra, P_Config_Pad]
-    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
-    rw [show 1 + (1 + (1 + (1 + (N + 1)))) = N + 5 from by omega, show (0 : Nat) + 2 = 2 from by omega]
-    simp only [P_Config_Pad, ones_zero, List.nil_append]
-    congr 1
-    rw [show ([true, true, true, true, false, true, true] : List Sym) = ones 4 ++ false :: ones 2 from rfl,
-      ← List.append_assoc, ones_append]
-    simp only [List.append_assoc, List.singleton_append]
+    tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
+    simp only [ones_cons_append]
+    congr 1; unfold ones repeatSym; congr 1; omega
   | succ b' =>
     rw [show N + 2 * (b' + 1) + 17 = N + 2 * b' + 19 from by omega]
     tm_exec [antihydra, P_Config_Pad]
@@ -382,14 +350,9 @@ theorem tm_even_endgame_to_loop (b N p : Nat) :
     tm_exec [antihydra, P_Config_Pad]
     rw [show N + b' + 10 = (b' + 1) + (N + 9) from by omega, run_add]
     simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail]
-    tm_exec [antihydra, P_Config_Pad]
-    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail, zeros_succ]
-    rw [show 1 + (1 + (1 + (1 + (N + 1)))) = N + 5 from by omega, show b' + 1 + 2 = b' + 3 from by omega]
-    simp only [P_Config_Pad, ones_zero, List.nil_append]
-    congr 1
-    rw [show (true :: true :: true :: true :: false :: ones (b' + 1 + 1 + 1) : List Sym) = ones 4 ++ false :: ones (b' + 3) from rfl,
-      ← List.append_assoc, ones_append]
-    simp only [List.append_assoc, List.singleton_append]
+    tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
+    simp only [ones_cons_append]
+    congr 1; unfold ones repeatSym; congr 1; omega
 
 -- Odd halt endgame: from a=3, b=0, the machine halts
 theorem tm_odd_halt_endgame (N p : Nat) :
@@ -398,13 +361,7 @@ theorem tm_odd_halt_endgame (N p : Nat) :
   have h : run antihydra (P_Config_Pad 0 3 N (p+2)) (2*N + 11) =
     { state := some stF, head := false, left := ([] : List Sym),
       right := true :: true :: false :: ones (N+1+1+1) ++ false :: zeros p } := by
-    tm_exec [antihydra, P_Config_Pad]
-    rw [show 2 * N + 9 = (N + 1) + (N + 8) from by omega, run_add]
-    simp only [show (0 : Fin 6) = stA from rfl, A_shift, listHead, listTail, zeros_succ]
-    tm_exec [antihydra, P_Config_Pad]
-    rw [show N + 5 = (N + 1) + 4 from by omega, run_add]
-    simp only [show (2 : Fin 6) = stC from rfl, C_shift, listHead, listTail]
-    tm_exec [antihydra, P_Config_Pad]
+    tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
   rw [h]; ah_simp
 
 -- Helper lemmas for tm_simulates_math
