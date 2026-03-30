@@ -3,10 +3,11 @@
 ## Current state
 
 BusyCoq AntiHydra.v: ~100 lines (Coq)
-Antihydra.lean: ~678 lines (Lean, after `tm_exec` + auto-shift + StreamDefs)
+Antihydra.lean: ~657 lines (Lean, after all optimizations)
 
-The ~7x gap is explained by both missing BusyLean features and fundamental
-architectural differences. This document catalogs what needs to change.
+The ~6.5x gap is explained by fundamental architectural differences (zipper tape
+vs coinductive tape, stream bridging). All planned BusyLean features have been
+implemented.
 
 ---
 
@@ -95,7 +96,7 @@ if the main proof used `SConfig` directly (instead of bridging back to list conf
 This would require rewriting the shift lemmas and loop proofs to work on `SConfig`,
 which is a larger refactor.
 
-### 5. Factored loop lemmas / auto-shift — DONE (Part A)
+### 5. Factored loop lemmas / auto-shift — DONE (Parts A, B, C)
 
 **BusyCoq:** Factors out repeating loops as separate lemmas (`B_rep`) and uses `ind`
 to prove them by induction. The main rules (`R0`, `R1`, `Rhalt`) are ~10 lines each.
@@ -142,10 +143,35 @@ Two helpers (`pad_transfer_loop`, `pad_transfer_halt`) factor out the repeated
 bridge lemmas (`tm_even_full`, `tm_odd_halt_ex`, `tm_odd_continue`). Each bridge
 lemma now ends with a 1-2 line call to the helper instead of ~10 lines of boilerplate.
 
-**Part C (not done): `ind`-like tactic**
-For full BusyCoq parity, would need a tactic that chains a base case + inductive
-step lemma automatically. This would enable the BusyCoq-style concise rule proofs
-(`R0`, `R1`, `Rhalt` as ~10 lines each).
+**Part C: `tm_ind_succ` macro — DONE**
+`tm_ind_succ ih stX [tm_def]` handles the succ case of shift lemma inductions.
+Each shift lemma is now a 2-line proof:
+```lean
+lemma A_shift (k : Nat) (L R : List Sym) : ... := by
+  induction k generalizing L with
+  | zero => rfl
+  | succ k ih => tm_ind_succ ih stA [antihydra]
+```
+
+**Implementation:** Macro (not `elab_rules`) in Tactics.lean (~15 lines). Uses:
+1. `conv => lhs; rw [show ∀ n, n+1+1 = 1+(n+1) from by omega, run_add]` — targeted
+   step count split (only LHS, preserves RHS `ones` arguments)
+2. `conv => lhs; enter [2]; dsimp [run, step, ...]` — reduces one TM step
+3. `conv => lhs; enter [2, 1]; change some $st` — fixes Fin literal ↔ state abbreviation
+   mismatch via definitional equality (required because `dsimp` reduces `stA` to raw
+   `Fin.mk` representations that don't syntactically match the IH)
+4. `rw [$ih]` — applies the induction hypothesis (macro hygiene requires passing `ih`
+   as a parameter; bare `ih` in macro body gets a fresh scope)
+5. `simp only [ones_true_cons, ones_cons_append, ...]` — closes list arithmetic
+
+**Key design decisions:**
+- Macro, not `elab_rules`: `evalTactic` inside `induction ... with` produces recursive
+  proof terms (calls to the outer definition) instead of proper `Nat.rec` eliminators.
+  Macros expand to syntax before elaboration, avoiding this issue.
+- `ih` and `st` passed as parameters: Lean 4 macro hygiene gives fresh scopes to
+  identifiers in the expansion, so `ih` wouldn't resolve to the user's local hypothesis.
+- `conv => lhs` for step count rewrite: prevents `rw` from also rewriting the RHS
+  `ones (k+1+1)` argument, which would cause a mismatch after `rw [ih]`.
 
 ### 6. `es` equivalent (multi-step concrete solver) — DONE
 
@@ -192,27 +218,33 @@ Manual `rw [show ... from by omega]` is still needed for edge cases (e.g., after
 5. ~~**Factored loop support / auto-shift**~~ — **DONE** (Part A: -38 lines in Antihydra)
 6. ~~**`es` equivalent**~~ — **DONE** (`tm_exec`)
 7. ~~**Padding transfer helpers**~~ — **DONE** (saved ~16 lines in bridge lemmas)
-8. **`ind`-like tactic** — largest remaining gap vs BusyCoq (not done)
+8. ~~**`ind`-like tactic**~~ — **DONE** (`tm_ind_succ` macro, shift lemmas now 2 lines each)
 
 ---
 
 ## What a fully optimized Antihydra.lean would look like
 
-**Current state with auto-shift + padding transfer** (~685 lines, down from ~937 originally):
+**Current state with all features applied** (~657 lines, down from ~937 originally):
 ```lean
--- tm_P_step: 1 line (was 44 originally, 8 before auto-shift)
+-- Shift lemmas: 2-line proofs via tm_ind_succ (was ~10 lines manual each)
+lemma A_shift (k : Nat) (L R : List Sym) : ... := by
+  induction k generalizing L with
+  | zero => rfl
+  | succ k ih => tm_ind_succ ih stA [antihydra]
+
+-- tm_P_step: 1 line (was 44 originally)
 theorem tm_P_step ... := by
   tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
 
--- tm_odd_endgame: 4 lines (was 15 before auto-shift)
+-- tm_odd_endgame: 4 lines (was 15 originally)
 theorem tm_odd_endgame ... := by
   tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
   simp only [ones_cons_append]
   congr 1; unfold ones repeatSym; congr 1; omega
 ```
 
-**Remaining gap vs BusyCoq (~100 lines):**
-The ~600 non-macro lines are mostly shift lemma definitions, `P_Config_Pad`,
-helper lemmas, the stream-based padding equivalence, bridge lemmas, and the
-main induction (`tm_P_multistep`, `tm_simulates_math`). With an `ind` tactic
-(item 8), potentially ~550-600 lines.
+**All priority items complete.** Remaining gap vs BusyCoq (~100 lines) is mostly
+structural: `P_Config_Pad` definition, stream-based padding equivalence, bridge
+lemmas, and the main induction (`tm_P_multistep`, `tm_simulates_math`). These are
+inherent to BusyLean's zipper-tape + stream-bridging architecture vs BusyCoq's
+coinductive tapes.

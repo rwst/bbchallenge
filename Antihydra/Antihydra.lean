@@ -127,7 +127,7 @@ theorem tm_even_endgame (b N p : Nat) :
   have step2 : run antihydra { state := some stF, head := false, left := ones b, right := true :: ones N ++ zeros (p+2) } 1 =
     { state := none, head := false, left := ones b, right := true :: ones N ++ zeros (p+2) } := by
     cases b <;> simp (config := { decide := true }) only [run, step, antihydra]
-  rw [step2, show (none : Option _) = none from rfl]
+  rw [step2]
 
 -- Odd Endgame (m=3, b>0)
 theorem tm_odd_endgame (b' N p : Nat) :
@@ -144,9 +144,6 @@ theorem tm_odd_endgame (b' N p : Nat) :
   induction a with
   | zero => rfl
   | succ a ih => simp [ones, *]
-
-@[simp] lemma countOnes_ones' (a : Nat) :
-    countOnes (ones a) = a := countOnes_ones a
 
 @[simp] lemma countOnes_ones_false (a : Nat) (L : List Sym) :
     countOnes (ones a ++ false :: L) = a := by
@@ -448,8 +445,7 @@ theorem tm_simulates_math (c : Config 6) (hm : isValidLoopStart c) :
       simp [h1]
       omega
     rw [h_next]
-    obtain ⟨k, hk, hvalid, hdecode⟩ := tm_even_full b n p
-    exact ⟨k, hk, hvalid, hdecode⟩
+    exact tm_even_full b n p
   · -- Odd case: a = 2*n+3
     have h_odd : ∃ n, a = 2 * n + 3 := ⟨a / 2 - 1, by omega⟩
     rcases h_odd with ⟨n, hn⟩
@@ -469,12 +465,11 @@ theorem tm_simulates_math (c : Config 6) (hm : isValidLoopStart c) :
         simp [h1]
         omega
       rw [h_next]
-      obtain ⟨k, hk, hvalid, hdecode⟩ := tm_odd_continue b' n p
-      exact ⟨k, hk, hvalid, hdecode⟩
+      exact tm_odd_continue b' n p
 
 lemma run_none_state (c : Config 6) (h : c.state = none) (k : Nat) :
-    (run antihydra c k).state = none := by
-  exact run_state_none antihydra c k h
+    (run antihydra c k).state = none :=
+  run_state_none antihydra c k h
 
 -- D. The Halting Equivalence Theorem
 inductive mathHalts : MathState → Prop where
@@ -496,24 +491,12 @@ theorem tm_halt_iff_math_condition (c : Config 6) (hm : isValidLoopStart c) :
         rw [h_rewrite] at h_sim
         have ⟨hm_c', hd_c'⟩ := h_sim
         by_cases h_lt : n < k_sim
-        · exfalso
-          have hc'_state : (run antihydra c k_sim).state = some stE := hm_c'.1
-          have hc'_none : (run antihydra c k_sim).state = none := by
-            have h_add : k_sim = n + (k_sim - n) := by omega
-            change (run antihydra c k_sim).state = none
-            rw [h_add, run_add]
-            exact run_none_state _ hk _
-          rw [hc'_none] at hc'_state
-          contradiction
-        · have h_ge : n ≥ k_sim := by omega
-          let n' := n - k_sim
-          have hk_n' : (run antihydra (run antihydra c k_sim) n').state = none := by
-             have h_run_add : run antihydra (run antihydra c k_sim) n' = run antihydra c (k_sim + n') := by rw [run_add]
-             rw [h_run_add]
-             have h_ns : k_sim + n' = n := Nat.add_sub_of_le h_ge
-             rw [h_ns]
-             exact hk
-          have h_math' := ih n' (by omega) (run antihydra c k_sim) hm_c' hk_n'
+        · have := hm_c'.1; rw [show k_sim = n + (k_sim - n) from by omega, run_add,
+            show (run antihydra (run antihydra c n) (k_sim - n)).state = none from
+              run_none_state _ hk _] at this; contradiction
+        · have hk_n' : (run antihydra (run antihydra c k_sim) (n - k_sim)).state = none := by
+            rw [← run_add, Nat.add_sub_cancel' (by omega : k_sim ≤ n)]; exact hk
+          have h_math' := ih (n - k_sim) (by omega) (run antihydra c k_sim) hm_c' hk_n'
           rw [hd_c'] at h_math'
           exact mathHalts.nextStep _ _ h_next h_math'
   · intro h_math
@@ -629,8 +612,8 @@ lemma mathHalts_iff_Aiter_8_2 :
     mathHalts { a := 8, b := 2 } ↔
     ∃ i, (Aiter i (8, 2)).1 % 2 = 1 ∧ (Aiter i (8, 2)).1 / 2 ≥ 1 ∧ (Aiter i (8, 2)).2 = 0 := by
   constructor
-  · intro h; exact mathHalts_implies_Aiter _ (by norm_num : (8 : ℕ) ≥ 2) h
-  · rintro ⟨i, hi⟩; exact Aiter_implies_mathHalts 8 2 (by norm_num) i hi
+  · intro h; exact mathHalts_implies_Aiter _ (by omega : (8 : ℕ) ≥ 2) h
+  · rintro ⟨i, hi⟩; exact Aiter_implies_mathHalts 8 2 (by omega) i hi
 
 -- Main result: the Antihydra TM halts iff some iterate of A starting at (8,2)
 -- produces a pair (a, 0) with a odd and a ≥ 3 (i.e. hits the halting condition).
