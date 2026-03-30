@@ -79,33 +79,21 @@ lemma A_shift (k : Nat) (L R : List Sym) :
     { state := some stA, head := listHead R false, left := ones (k + 1) ++ L, right := listTail R } := by
   induction k generalizing L with
   | zero => rfl
-  | succ k ih =>
-    calc
-      run antihydra { state := some stA, head := true, left := L, right := ones (k + 1) ++ R } (k + 2)
-      _ = run antihydra { state := some stA, head := true, left := true :: L, right := ones k ++ R } (k + 1) := rfl
-      _ = _ := by rw [ih (true :: L)]; simp
+  | succ k ih => tm_ind_succ ih stA [antihydra]
 
 lemma C_shift (k : Nat) (L R : List Sym) :
     run antihydra { state := some stC, head := true, left := ones k ++ L, right := R } (k + 1) =
     { state := some stC, head := listHead L false, left := listTail L, right := ones (k + 1) ++ R } := by
   induction k generalizing R with
   | zero => rfl
-  | succ k ih =>
-    calc
-      run antihydra { state := some stC, head := true, left := ones (k + 1) ++ L, right := R } (k + 2)
-      _ = run antihydra { state := some stC, head := true, left := ones k ++ L, right := true :: R } (k + 1) := rfl
-      _ = _ := by rw [ih (true :: R)]; simp
+  | succ k ih => tm_ind_succ ih stC [antihydra]
 
 lemma E_shift (k : Nat) (L R : List Sym) :
     run antihydra { state := some stE, head := true, left := L, right := ones k ++ R } (k + 1) =
     { state := some stE, head := listHead R false, left := ones (k + 1) ++ L, right := listTail R } := by
   induction k generalizing L with
   | zero => rfl
-  | succ k ih =>
-    calc
-      run antihydra { state := some stE, head := true, left := L, right := ones (k + 1) ++ R } (k + 2)
-      _ = run antihydra { state := some stE, head := true, left := true :: L, right := ones k ++ R } (k + 1) := rfl
-      _ = _ := by rw [ih (true :: L)]; simp
+  | succ k ih => tm_ind_succ ih stE [antihydra]
 
 -- Macro Loop Steps
 
@@ -117,33 +105,17 @@ theorem tm_P_step (b m n p : Nat) :
 theorem tm_P_multistep (b m n p k : Nat) :
     run antihydra (P_Config_Pad b (m+2 + 2*k) n (p+1 + k)) (k*(2*n + 3*k + 9)) = P_Config_Pad b (m+2) (n+3*k) (p+1) := by
   induction k generalizing n with
-  | zero =>
-    have h0 : 0 * (2 * n + 3 * 0 + 9) = 0 := by ring
-    rw [h0]
-    have hm : m + 2 + 2 * 0 = m + 2 := by ring
-    have hp : p + 1 + 0 = p + 1 := by ring
-    have hn : n + 3 * 0 = n := by ring
-    rw [hm, hp, hn]
-    rfl
+  | zero => ring_nf; rfl
   | succ k' ih =>
-    -- We want to do 1 step, then k' steps.
-    -- Total steps = (2n + 12) + k' * (2(n+3) + 3k' + 9)
-    have h_steps : (k' + 1) * (2 * n + 3 * (k' + 1) + 9) = (2 * n + 12) + k' * (2 * (n + 3) + 3 * k' + 9) := by ring
-    rw [h_steps]
-    rw [run_add]
-    -- The first chunk of steps is tm_P_step for M = m + 2*k' and P = p + k'
-    have h_m : m + 2 + 2 * (k' + 1) = (m + 2 * k') + 2 + 2 := by omega
-    have h_p : p + 1 + (k' + 1) = (p + k') + 2 := by omega
-    have step1 : run antihydra (P_Config_Pad b (m + 2 + 2 * (k' + 1)) n (p + 1 + (k' + 1))) (2 * n + 12) = P_Config_Pad b ((m + 2 * k') + 2) (n + 3) ((p + k') + 1) := by
-      rw [h_m, h_p]
-      exact tm_P_step b (m + 2 * k') n (p + k')
-    rw [step1]
-    have h_m2 : (m + 2 * k') + 2 = m + 2 + 2 * k' := by omega
-    have h_p2 : (p + k') + 1 = p + 1 + k' := by omega
-    have h_n2 : n + 3 * (k' + 1) = (n + 3) + 3 * k' := by omega
-    rw [h_m2, h_p2]
-    rw [ih (n + 3)]
-    rw [h_n2]
+    rw [show (k'+1)*(2*n+3*(k'+1)+9) = (2*n+12) + k'*(2*(n+3)+3*k'+9) from by ring,
+        run_add,
+        show m+2+2*(k'+1) = (m+2*k')+2+2 from by omega,
+        show p+1+(k'+1) = (p+k')+2 from by omega,
+        tm_P_step,
+        show (m+2*k')+2 = m+2+2*k' from by omega,
+        show (p+k')+1 = p+1+k' from by omega,
+        ih,
+        show (n+3)+3*k' = n+3*(k'+1) from by omega]
 
 -- Even Endgame (m=0)
 theorem tm_even_endgame (b N p : Nat) :

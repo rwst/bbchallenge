@@ -361,7 +361,7 @@ private def getShiftStateAbbrev (shiftName : Lean.Name) : MetaM (Option Lean.Exp
     splits the run at `k+1` steps, applies the shift lemma, and cleans up.
     Returns `true` if a shift was successfully applied. -/
 private def tryApplyShift (shiftArr : Array (TSyntax `ident))
-    (lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma)) : TacticM Bool := do
+    (_lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma)) : TacticM Bool := do
   if shiftArr.isEmpty then return false
   let goalType ← (← getMainGoal).getType
   let some (_, lhs, _) := goalType.eq? | return false
@@ -513,5 +513,22 @@ elab_rules : tactic
   | `(tactic| tm_exec [$lemmas,*] shifts [$shs,*]) => tmExecCore lemmas.getElems shs.getElems
 
 end TmExec
+
+/-- `tm_ind_succ ih st [lemmas]` — handle the succ case of an induction on a shift-style lemma.
+    Expects to be used as `| succ k ih => tm_ind_succ ih stX [tm_def]` where `stX` is the
+    state abbreviation (e.g., `stA`). Peels one TM step via `run_add`, simplifies with `dsimp`,
+    fixes the Fin literal ↔ state abbreviation mismatch via `conv change`, applies `ih`.
+    Implemented as a macro (not elab_rules) to avoid evalTactic producing recursive
+    proof terms instead of proper Nat.rec eliminators. -/
+scoped macro "tm_ind_succ" ih:ident st:ident "[" lemmas:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (
+    conv => lhs; rw [show ∀ n, n + 1 + 1 = 1 + (n + 1) from by omega, run_add]
+    conv => lhs; enter [2]; dsimp [run, step,
+      ones_succ, zeros_succ, ones_zero, zeros_zero,
+      listHead, listTail, List.cons_append, List.nil_append, List.append_nil,
+      $lemmas,*]
+    conv => lhs; enter [2, 1]; change some $st
+    rw [$ih:ident]
+    all_goals simp only [ones_true_cons, ones_cons_append, zeros_false_cons, zeros_cons_append]))
 
 end BusyLean
