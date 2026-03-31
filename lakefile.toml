@@ -15,3 +15,7 @@ srcDir = "BusyLean"
 [[lean_lib]]
 name = "Antihydra"
 srcDir = "Antihydra"
+
+[[lean_lib]]
+name = "Cryptid"
+srcDir = "Cryptid"

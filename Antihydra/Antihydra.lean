@@ -37,26 +37,6 @@ def A (ab : ℕ × ℕ) : ℕ × ℕ :=
   if a % 2 == 0 then (3 * n + 2, b + 2)
   else              (3 * n + 3, b - 1)
 
--- Bridge lemma: ones k ++ true :: L = ones (k+1) ++ L
-@[simp] theorem ones_append_true (k : Nat) (L : List Sym) :
-    ones k ++ true :: L = ones (k + 1) ++ L := by
-  simp [ones_succ, List.cons_append]
-
--- Additional simp lemmas for listHead/listTail with ones/zeros patterns
-@[simp] lemma listHead_ones_succ (k : Nat) (R : List Sym) :
-    listHead (ones (k + 1) ++ R) false = true := rfl
-
-@[simp] lemma listTail_ones_succ (k : Nat) (R : List Sym) :
-    listTail (ones (k + 1) ++ R) = ones k ++ R := rfl
-
-@[simp] lemma listHead_ones_false (m : Nat) (L : List Sym) :
-    listHead (ones m ++ false :: L) false = if m = 0 then false else true := by
-  cases m with | zero => rfl | succ m => rfl
-
-@[simp] lemma listTail_ones_false (m : Nat) (L : List Sym) :
-    listTail (ones m ++ false :: L) = if m = 0 then L else ones (m-1) ++ false :: L := by
-  cases m with | zero => rfl | succ m => rfl
-
 -- Macro-level configuration
 def P_Config_Pad (b : Nat) (m : Nat) (n : Nat) (p : Nat) : Config 6 :=
   { state := some stE,

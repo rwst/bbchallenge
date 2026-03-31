@@ -101,4 +101,37 @@ theorem replicate_append {α : Type} (a b : Nat) (x : α) :
 @[simp] theorem listTail_nil {α : Type} :
     listTail ([] : List α) = [] := rfl
 
+@[simp] theorem listHead_zeros (k : Nat) : listHead (zeros k) false = false := by
+  cases k <;> rfl
+
+@[simp] theorem listTail_zeros (k : Nat) : listTail (zeros k) = zeros (k - 1) := by
+  cases k with | zero => rfl | succ k => rfl
+
+@[simp] theorem listHead_ones (k : Nat) : listHead (ones k) true = true := by
+  cases k <;> rfl
+
+@[simp] theorem listTail_ones (k : Nat) : listTail (ones k) = ones (k - 1) := by
+  cases k with | zero => rfl | succ k => rfl
+
+-- Bridge lemma: ones k ++ true :: L = ones (k+1) ++ L
+@[simp] theorem ones_append_true (k : Nat) (L : List Sym) :
+    ones k ++ true :: L = ones (k + 1) ++ L := by
+  simp [ones_succ, List.cons_append]
+
+-- listHead/listTail with ones(k+1) prefix — always resolves regardless of tail
+@[simp] theorem listHead_ones_succ (k : Nat) (R : List Sym) :
+    listHead (ones (k + 1) ++ R) false = true := rfl
+
+@[simp] theorem listTail_ones_succ (k : Nat) (R : List Sym) :
+    listTail (ones (k + 1) ++ R) = ones k ++ R := rfl
+
+-- listHead/listTail when ones(m) is followed by false — conditional on m
+@[simp] theorem listHead_ones_false (m : Nat) (L : List Sym) :
+    listHead (ones m ++ false :: L) false = if m = 0 then false else true := by
+  cases m with | zero => rfl | succ m => rfl
+
+@[simp] theorem listTail_ones_false (m : Nat) (L : List Sym) :
+    listTail (ones m ++ false :: L) = if m = 0 then L else ones (m-1) ++ false :: L := by
+  cases m with | zero => rfl | succ m => rfl
+
 end BusyLean

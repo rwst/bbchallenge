@@ -531,4 +531,21 @@ scoped macro "tm_ind_succ" ih:ident st:ident "[" lemmas:Lean.Parser.Tactic.simpL
     rw [$ih:ident]
     all_goals simp only [ones_true_cons, ones_cons_append, zeros_false_cons, zeros_cons_append]))
 
+/-- `tm_ind_zero ih st [lemmas]` — like `tm_ind_succ` but for shift lemmas where
+    the step count equals the induction variable (not variable + 1).
+    Used as `| succ k ih => tm_ind_zero ih stX [tm_def]`.
+    In the succ case, step count is `k+1` (not `k+1+1`).
+    Unfolds `ones (k+1)` first, then peels one step, fixes Fin mismatch, applies `ih`. -/
+scoped macro "tm_ind_zero" ih:ident st:ident "[" lemmas:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (
+    simp only [ones_succ, zeros_succ, List.cons_append]
+    conv => lhs; rw [show ∀ n, n + 1 = 1 + n from by omega, run_add]
+    conv => lhs; enter [2]; dsimp [run, step,
+      ones_succ, zeros_succ, ones_zero, zeros_zero,
+      listHead, listTail, List.cons_append, List.nil_append, List.append_nil,
+      $lemmas,*]
+    conv => lhs; enter [2, 1]; change some $st
+    rw [$ih:ident]
+    all_goals simp only [ones_true_cons, ones_cons_append, zeros_false_cons, zeros_cons_append]))
+
 end BusyLean
