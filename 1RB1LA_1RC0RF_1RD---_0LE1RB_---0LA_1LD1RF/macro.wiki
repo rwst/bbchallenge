@@ -1,0 +1,192 @@
+= Macro Analysis: 1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF =
+
+== Transition table (6-state 2-symbol) ==
+
+{| class="wikitable"
+! !! 0 !! 1
+|-
+| A || 1RB || 1LA
+|-
+| B || 1RC || 0RF
+|-
+| C || 1RD || ---
+|-
+| D || 0LE || 1RB
+|-
+| E || --- || 0LA
+|-
+| F || 1LD || 1RF
+|}
+
+Undefined: C,1 and E,0.
+
+== Tape structure ==
+
+The tape is always a block of 1s with a small number of '''zero-markers''' scattered inside:
+
+<pre>
+0^inf  1^a₁  0  1^a₂  0  ...  1^aₖ  [HEAD]  1^b₁  0  1^b₂  0  ...  1^bₘ  0^inf
+</pre>
+
+The total tape length grows slowly (O(log steps)). The number of zero-markers varies by phase but is always small (≤ ~log(tape_length)).
+
+== Macro operations ==
+
+The machine alternates between micro-phases that compose into sweep cycles. A full sweep cycle is '''not''' a single atomic step — it decomposes into the following sequential phases:
+
+=== Phase 1: A-sweep-left ===
+* '''Rule''': A,1 → 1LA (identity sweep: writes 1 over 1, moves left)
+* '''Effect''': Head races left across all 1s until hitting a 0 (zero-marker or left tape edge)
+* '''Duration''': proportional to distance to the next zero-marker on the left
+* '''Proven''' in Lean as <code>A_shift</code>: after k+1 steps, k ones moved from left to right
+
+=== Phase 2: A-bounce + B-create-zero ===
+* '''Rule''': A,0 → 1RB (1 step), then B,1 → 0RF (1 step)
+* A consumes a zero-marker (writes 1 over it), moves right, becomes B
+* B writes a '''new''' zero-marker one position to the right of the old one, becomes F going right
+* Net effect: '''left zero-marker shifts right by 1'''
+* '''Important''': after this phase, the machine is in '''state F''' going right — not state A. Getting back to state A requires completing the entire right-side sweep.
+
+=== Phase 3: F-sweep-right ===
+* '''Rule''': F,1 → 1RF (identity sweep: writes 1 over 1, moves right)
+* '''Effect''': Head races right across 1s until hitting the next 0-marker or the right tape edge
+* '''Proven''' in Lean as <code>F_shift</code>: after k+1 steps, k ones moved from right to left
+
+=== Phase 4a: F-bounce at interior zero ===
+* '''Rule''': F,0 → 1LD (1 step), then D,1 → 1RB (1 step), then B,1 → 0RF (1 step) — total 3 steps
+* F consumes a zero-marker, bounces left as D, D bounces right as B, B creates a new zero-marker and becomes F again
+* Net effect: the consumed zero is replaced by a '''new zero one position to the left'''
+* '''Right zero-marker shifts left by 1'''
+* '''Proven''' in Lean as <code>f_bounce_interior</code> (requires at least one 1 to the left of the zero, so D sees 1 not 0)
+* After this, F continues sweeping right (back to Phase 3)
+
+=== Phase 4b: BCD-extension at right tape edge ===
+* '''Trigger''': B sees 0 at right tape edge (all ones to the right have been traversed)
+* '''Rules''': B,0 → 1RC; C,0 → 1RD; D,0 → 0LE; E,1 → 0LA; A,1 → 1LA — total 5 steps
+* The BCD chain writes two new 1-cells extending the tape rightward
+* D,0 at the new right edge bounces back via E → A
+* The last step (A,1 → 1LA) consumes one 1 from the left, so the head ends up one position further left
+* '''Proven''' in Lean as <code>bcd_extension</code> (requires at least one 1 to the left)
+* After this, A continues sweeping left (back to Phase 1)
+
+== Sweep cycle summary ==
+
+One complete '''sweep cycle''' consists of Phases 1–4 repeating until the head has traversed the entire tape:
+
+# '''A sweeps left''' (Phase 1) to leftmost zero-marker or left tape edge
+# '''A bounces + B creates zero''' (Phase 2): left zero shifts right by 1, machine enters state F
+# '''F sweeps right''' (Phase 3) to next zero-marker
+# '''F bounces''' (Phase 4a): right zero shifts left by 1, machine stays in state F — repeat steps 3–4 for each interior zero
+# '''BCD extends''' (Phase 4b) at right tape edge: tape grows by 2 cells, machine returns to state A
+# '''A sweeps left''' again (back to Phase 1 for the next cycle)
+
+'''Key invariant''': each full sweep cycle moves every zero-marker '''one position inward''' (left zeros move right, right zeros move left).
+
+'''Note''': the "zero moves inward" property is an '''emergent''' behavior of the full cycle, not a single step. Formalizing it requires tracking all zero-marker positions through the entire cycle.
+
+== Era structure ==
+
+An '''era''' begins when the tape is all-1s (no zero-markers) with state D reading the rightmost 1. This is the <code>E_Config n</code> configuration in the Lean formalization.
+
+'''Observed E_Config events''' (D reading rightmost 1 of all-1s tape):
+
+{| class="wikitable"
+! Era !! Step !! Tape length !! E_Config n
+|-
+| 0 || 19 || 5 || E_Config 4
+|-
+| 1 || 84 || 11 || E_Config 10
+|}
+
+'''Corrected observation''': After E_Config 10, the machine enters a complex multi-zero-marker phase and does '''not''' return to an all-1s E_Config within 1M+ steps. The machine's behavior becomes increasingly complex, with persistent zero-markers that are never fully absorbed.
+
+(Earlier claims of era boundaries at tape lengths 13, 27, 77 were incorrect — those were moments when the tape happened to be all-1s but the head was in a different state/position, not the D-at-rightmost-1 configuration.)
+
+=== Simple era example (len=9, within era 0→1 transition) ===
+
+Zero positions at each E→A transition:
+<pre>
+step  43: zpos=[1,7]   distance=6
+step  58: zpos=[2,6]   distance=4
+step  69: zpos=[3,5]   distance=2  → merge
+</pre>
+Three cycles to converge. Each cycle: both zeros move 1 inward.
+
+=== Complex phase (len=15+, after era 1) ===
+
+<pre>
+step 120: zpos=[1,13]  distance=12
+step 147: zpos=[2,12]  distance=10
+step 170: zpos=[3,11]  distance=8
+step 189: zpos=[4,10]  distance=6
+step 204: zpos=[5,9]   distance=4
+step 215: zpos=[6,8]   distance=2  → merge
+step 230: zpos=[10,15] (tape grew to 17, new pair spawned)
+step 243: zpos=[11,14] distance=3
+step 249: zpos=[12,14] distance=2  → merge (then complex multi-zero phase)
+</pre>
+
+After the main pair merges, a '''secondary pair''' spawns at the right side, requiring further sub-era processing. This cascading behavior prevents the tape from returning to a clean all-1s state.
+
+== Conjectures ==
+
+=== C1 (Non-halting — structural) ===
+'''The machine never halts.''' The two undefined transitions C,1 and E,0 are never reached because:
+* C is only entered via B,0 → 1RC, which only fires at the right tape edge (the only place B sees 0). The next cell is also 0 (blank), so C always sees 0.
+* E is only entered via D,0 → 0LE, which fires at the right tape edge. The cell one step left is always a 1 (interior of tape), so E always sees 1.
+
+'''Proof strategy''': Define a global tape invariant (<code>IsReachable</code>) characterizing all reachable configurations. Show B reads 0 only at positions beyond the rightmost written cell, and D reads 0 only at those same positions. Then C and E always see blank/interior cells respectively.
+
+'''Mathematical obstacle''': The invariant must cover all phases of the sweep cycle simultaneously — A sweeping left, F sweeping right, BCD extending, and the transitions between them. The number and positions of zero-markers change each cycle, making the invariant definition complex.
+
+=== C2 (Zero-marker dynamics) ===
+'''Each full sweep cycle shifts every zero-marker exactly one position inward (left zeros move right, right zeros move left).'''
+
+'''Caveat from proof attempt''': This property is '''emergent''' from the full cycle, not a single-step property. A naive formulation (e.g., "after some steps, state A with zero moved from left to right of head") is '''false''' — the intermediate states pass through F, D, B before returning to A. The correct formulation must track all zero-markers through the complete cycle.
+
+=== C3 (Era growth — revised) ===
+The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 84). After that, the tape continues growing but zero-markers persist permanently. Growth continues through BCD extensions during the ongoing sweep cycles, but the structure never simplifies back to all-1s.
+
+=== C4 (Zero-pair annihilation spawns new pairs) ===
+'''When two adjacent zeros meet and annihilate, the resulting BCD extension creates a new zero pair at the right edge of the extended segment.''' This cascading behavior explains why the machine never returns to all-1s after era 1.
+
+=== C5 (Identity sweeps — proven) ===
+'''F,1 → 1RF and A,1 → 1LA are both identity sweeps''': they read 1, write 1, and move. The tape content is only modified at the zero-marker positions (by the A→B and F→D transitions). This means tape analysis can focus entirely on zero-marker dynamics.
+
+'''Status''': Proven in Lean as <code>A_shift</code> and <code>F_shift</code>.
+
+=== C6 (Tape growth rate — proven) ===
+'''The tape grows by exactly 2 cells per BCD extension.''' Each BCD chain writes 1 at two new cells via B,0→1RC and C,0→1RD before D,0 bounces.
+
+'''Status''': Proven in Lean as <code>bcd_extension</code>.
+
+=== C7 (Step count is exponential in tape length) ===
+'''The step count grows exponentially in tape length.''' Each sweep cycle takes O(L) steps (two traversals of the tape). With L growing through BCD extensions, the total step count grows without bound.
+
+== Proven results (Lean) ==
+
+{| class="wikitable"
+! Theorem !! Statement !! Proof
+|-
+| <code>A_shift</code> || A sweeps left through k ones in k+1 steps || induction + <code>tm_ind_succ</code>
+|-
+| <code>F_shift</code> || F sweeps right through k ones in k+1 steps || induction + <code>tm_ind_succ</code>
+|-
+| <code>bcd_extension</code> || B at right edge extends tape by 2, returns A in 5 steps || <code>sw_steps</code>
+|-
+| <code>f_bounce_interior</code> || F at interior zero bounces back as F in 3 steps || <code>sw_steps</code>
+|-
+| <code>sweeper_init_to_era0</code> || Machine reaches E_Config 4 0 after 19 steps || <code>rfl</code>
+|-
+| <code>era_0_to_1</code> || E_Config 4 → E_Config 10 in 65 steps || <code>rfl</code>
+|}
+
+== Key transitions for proof ==
+
+The non-halting proof needs:
+# '''C,1 unreachable''': B sees 0 only at right edge (beyond tape). Requires global tape invariant.
+# '''E,0 unreachable''': D sees 0 only at right edge; cell at (right_edge − 1) is always 1. Same invariant.
+# '''Tape always extends''': BCD chain always fires (tape always reaches right edge). Follows from the sweep cycle always completing.
+# '''Zeros always converge''': Inductive argument that zero-markers move inward by 1 per cycle. Requires tracking all markers through a full cycle.
+
+Items 1–2 give non-halting assuming tape structure is maintained. Items 3–4 show the structure is maintained inductively. The main obstacle is defining the <code>IsReachable</code> invariant that captures all phases of the sweep cycle.
