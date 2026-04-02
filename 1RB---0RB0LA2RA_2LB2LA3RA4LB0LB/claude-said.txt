@@ -1,0 +1,6 @@
+FUNDAMENTAL REALIZATION: This TM's behavior involves an interaction between base-2 and base-3     
+  counters where the base-2 counter value determines overflow behavior. The non-halting argument
+  requires showing that the base-2 value never hits 2^n-1 at specific moments. This is inherently   
+  about the 2-adic properties of iterates of the map V → (V+3^d)/2 with growing d. No simple
+  mod-based invariant captures this.
+

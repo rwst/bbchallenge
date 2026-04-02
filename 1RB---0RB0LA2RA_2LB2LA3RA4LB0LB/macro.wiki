@@ -1,0 +1,642 @@
+= Macro Rules for TM 1RB---0RB0LA2RA_2LB2LA3RA4LB0LB =
+
+== Transition Table (2-state, 5-symbol) ==
+
+<pre>
+       0     1     2     3     4
+  A   1RB   ---   0RB   0LA   2RA
+  B   2LB   2LA   3RA   4LB   0LB
+</pre>
+
+Transition 
+<math>
+A,1
+</math>
+ is undefined (halt).
+
+== Tape Structure ==
+
+After initialization, the tape has the form (physical L to R):
+
+<pre>
+    0^inf  1 3  [binary cells in {2,3}]  [HEAD]  [ternary pairs]  2+  0^inf
+           ~~~                                                     ~~
+       terminator                                              padding
+</pre>
+
+* '''Terminator''': cells <code>1</code>, <code>3</code> at the physical left edge of nonzero tape.
+* '''Binary region''': cells in 
+<math>
+\{2,3\}
+</math>
+ between the terminator and the head. Encoding: <code>2</code> = bit 0, <code>3</code> = bit 1. LSB is closest to the head.
+* '''Head''': at the boundary between binary and ternary regions.
+* '''Ternary region''': consecutive pairs of cells, each pair encoding one ternary digit. Encoding: pair 
+<math>
+(2,2)
+</math>
+ = digit 0, pair 
+<math>
+(0,2)
+</math>
+ = digit 1, pair 
+<math>
+(4,2)
+</math>
+ = digit 2. LSB pair is closest to the head.
+* '''Padding''': one or more cells of value <code>2</code> at the right edge (extends during RInc bounce).
+
+In mxdys's reversed notation: 
+<math>
+.22 (42|02|22)^* (<A|B>) (2|3)^* 31.
+</math>
+
+== Canonical Configs ==
+
+'''CycleStart(<code>bin</code>, <code>tern</code>, <code>pad</code>)''':
+State A, head reading symbol <code>2</code>, at boundary between binary and ternary.
+
+<pre>
+    left  = bin ++ [3, 1]          (binary cells LSB-first, then reversed terminator)
+    head  = 2
+    right = tern ++ replicate pad 2 (ternary pairs, then padding 2s)
+</pre>
+
+where every cell in <code>bin</code> is <code>2</code> or <code>3</code>, and <code>tern</code> is a concatenation of pairs from 
+<math>
+\{(2,2), (0,2), (4,2)\}
+</math>
+.
+
+Observed at steps: 117, 155, 169, 173, 800, ...
+
+== RInc (Right Increment) ==
+
+Starts from CycleStart. The head sweeps right, alternating 
+<math>
+A,2 \to 0RB
+</math>
+ and 
+<math>
+B,2 \to 3RA
+</math>
+, converting ternary pairs 
+<math>
+22 \to 03
+</math>
+. When it reaches the right padding/blank edge, it bounces (
+<math>
+B,0 \to 2LB
+</math>
+ extending tape) and sweeps back left, converting 
+<math>
+03 \to 42
+</math>
+ via 
+<math>
+B,3 \to 4LB
+</math>
+ and 
+<math>
+B,0 \to 2LB
+</math>
+.
+
+During the leftward sweep, the head crosses back into the binary region and propagates a carry: 
+<math>
+B,3 \to 4LB
+</math>
+ continues the carry through 1-bits, 
+<math>
+B,2 \to 3RA
+</math>
+ stops the carry by flipping a 0-bit to 1.
+
+'''Normal carry (binary has a 0-bit):'''
+Binary value increments by 1. No change to binary digit count.
+After cleanup (
+<math>
+A,4 \to 2RA
+</math>
+ chain), returns to CycleStart with <code>binary</code>+1.
+
+'''Full carry (all binary bits are 1):'''
+Carry propagates through all binary bits and into the terminator.
+<math>
+B,3 \to 4LB
+</math>
+ hits terminator cell <code>3</code>, 
+<math>
+B,1 \to 2LA
+</math>
+ hits terminator cell <code>1</code>.
+<math>
+A,0 \to 1RB
+</math>
+ at blank re-creates terminator one position left.
+<math>
+B,2 \to 3RA
+</math>
+ and 
+<math>
+A,4 \to 2RA
+</math>
+ cleanup.
+Result: <code>binary</code> resets to all 0s with one additional digit, terminator shifts left.
+
+After RInc, the ternary region is all 
+<math>
+(4,2)
+</math>
+ pairs (digit 2 = max value), and one additional pair may have been created from the padding.
+
+== LInc (Left Decrement of Ternary) ==
+
+Immediately follows RInc (the machine is at CycleStart after RInc).
+The head enters the ternary region: 
+<math>
+A,2 \to 0RB
+</math>
+ then B reads the first ternary pair.
+
+'''Decrement of first (LSB) ternary digit:'''
+* If digit = 2 (pair 
+<math>
+42
+</math>
+): 
+<math>
+B,4 \to 0LB
+</math>
+, then bounce 
+<math>
+\to
+</math>
+ converts to 
+<math>
+(0,2)
+</math>
+ = digit 1. (The LInc borrow doesn't propagate.)
+* If digit = 1 (pair 
+<math>
+02
+</math>
+): 
+<math>
+B,0 \to 2LB
+</math>
+, 
+<math>
+B,2 \to 3RA
+</math>
+, eventually 
+<math>
+\to
+</math>
+ converts to 
+<math>
+(2,2)
+</math>
+ = digit 0. (Simple decrement.)
+* If digit = 0 (pair 
+<math>
+22
+</math>
+): borrow propagation, analogous to binary carry in RInc.
+
+'''Borrow propagation''': trailing 0-digits (22 pairs) get set to digit 2 (42 pairs), and the first non-zero digit is decremented.
+
+After LInc, returns to CycleStart with ternary value decremented by 1.
+
+== Normal Cycle ==
+
+One complete cycle = RInc + LInc:
+* Binary counter increments by 1
+* Ternary counter decrements by 1
+* Step count is proportional to tape length (which grows slowly)
+* Returns to CycleStart
+
+This repeats until the ternary counter reaches 0 (all pairs are 
+<math>
+(2,2)
+</math>
+).
+
+== Overflow (Ternary = 0) ==
+
+When the ternary counter is 0 and the next decrement would underflow, a complex reset sequence occurs. In mxdys's terminology:
+
+# '''LOv''': Adds a new zero-digit to the ternary counter.
+# '''RRstS''': Consumes binary 1-bits, creating new ternary counter segments.
+# '''RRst0''': Initializes the new ternary counter to all-2s (max).
+# '''LRst''': Merges ternary counter segments.
+
+Net effect of overflow:
+* Ternary digit count increases (by 2 in even overflows, by 1 in odd overflows — based on observed pattern of alternating "immediate" and "extended" overflows).
+* Binary counter is modified (may reset lower bits, grow digit count).
+* Ternary counter is re-initialized near max value for the new digit count.
+
+=== Observed overflow data ===
+
+<pre>
+    T_digits  B_value    step  delta_B
+    --------  -------  ------  -------
+           2        0      93
+           3        1     117        1  (immediate)
+           4       10     764        9  = 3^2
+           5       11     800        1  (immediate)
+           6      129    6635      118
+           7      130    6685        1  (immediate)
+           8     1425   59170     1295
+           9     1426   59228        1  (immediate)
+</pre>
+
+Pattern: overflows come in pairs. Odd-to-even 
+<math>
+T\_digits
+</math>
+ transitions are "immediate" (
+<math>
+\Delta B = 1
+</math>
+). Even-to-odd transitions take many cycles (
+<math>
+\Delta B
+</math>
+ grows 
+<math>
+\sim
+</math>
+exponentially).
+
+== Overflow Details ==
+
+=== Even overflow (<code>pad</code>=0 → <code>pad</code>=1) ===
+
+When ternary is all-zero at 
+<math>
+\text{pad}=0
+</math>
+, the 
+<math>
+\text{overflow\_cycle}
+</math>
+ theorem applies:
+* Input: <code>CycleStart bin (rep s2 (2*d)) 0</code> (
+<math>
+d
+</math>
+ ternary digit pairs, all zero)
+* Output: <code>CycleStart bin' (repPair s4 s2 d) 1</code> (
+<math>
+d
+</math>
+ pairs of digit 2 = max)
+* Binary is incremented by 1 (via <code>carry_stop</code> or <code>overflow_carry</code>)
+* Ternary is re-initialized to all-max (value 
+<math>
+3^d - 1
+</math>
+)
+
+The binary increment may be:
+* '''carry_stop''': flips lowest <code>s2</code> <math> \to </math> <code>s3</code>, standard +1. Binary length unchanged.
+* '''overflow_carry''': all bits are <code>s3</code> (value 
+<math>
+2^n-1
+</math>
+), wraps to <code>rep s2 (n+1)</code> (value 0), carry absorbed by terminator which shifts left. Binary grows by 1 digit.
+
+=== Odd overflow (<code>pad</code>=1 → <code>pad</code>=0) ===
+
+When ternary is all-zero at 
+<math>
+\text{pad}=1
+</math>
+, the head enters ternary, bounces, and cascades left into the binary region. Cases depend on the leading binary bits:
+
+'''Case 
+<math>
+k=0
+</math>
+''' (<code>bin</code> starts with <code>s2</code>, i.e., binary value is even):
+* The 
+<math>
+\text{overflow\_odd}
+</math>
+ theorem applies
+* Input: <code>CycleStart (s2 :: bin_rest) (rep s2 (2*d)) 1</code>
+* Output: <code>CycleStart bin_rest (rep s2 (2*(d+2))) 0</code>
+* The leading <code>s2</code> is consumed (absorbed into new ternary)
+* Ternary grows by 2 digit pairs (
+<math>
+d \to d+2
+</math>
+), re-initialized to all-zero
+* Binary shrinks by 1 cell
+* Steps: 
+<math>
+6d + 9
+</math>
+
+'''Case 
+<math>
+k=1
+</math>
+''' (<code>bin</code> = <code>s3 :: s2 :: bin_rest</code>, exactly one leading <code>s3</code>):
+* The 
+<math>
+\text{overflow\_odd\_k1}
+</math>
+ theorem applies
+* Input: <code>CycleStart (s3 :: s2 :: bin\_rest) (rep s2 (2*d)) 1</code>
+* Output: <code>CycleStart bin\_rest (s0 :: s2 :: rep s2 (2*(d+1))) 1</code>
+* The leading <code>s3</code> and <code>s2</code> are consumed, creating ternary digit 1 (pair <code>s0</code>,<code>s2</code>)
+* Ternary grows by 2 pairs (
+<math>
+d \to d+2
+</math>
+ total), first digit = 1, rest = 0
+* <code>pad</code> stays at 1 (another odd overflow follows with the new nonzero ternary)
+* Steps: 
+<math>
+6d + 10
+</math>
+
+'''Case 
+<math>
+k \ge 2
+</math>
+''' (<code>bin</code> = <code>rep s3 (k+1) ++ s2 :: bin_rest</code>, multiple leading <code>s3</code>s):
+* Not yet proved. The cascade creates 
+<math>
+k+1
+</math>
+ consecutive <code>s0</code> cells in the ternary region, which is not valid ternary for 
+<math>
+k \ge 2
+</math>
+ (pairs would be (<code>s0</code>,<code>s0</code>) etc.)
+* Needs separate analysis
+
+'''Case all-<code>s3</code>''' (<code>bin</code> = <code>rep s3 dd</code>):
+* Carry propagates through all binary cells into the terminator
+* Verified by simulation: this ALWAYS leads to A reading <code>s1</code> 
+<math>
+\to
+</math>
+ HALT
+* Must prove this configuration is unreachable
+
+=== Parity of binary at odd overflow ===
+
+The leading bit of binary at odd overflow is NOT fixed — both 
+<math>
+k=0
+</math>
+ and 
+<math>
+k \ge 1
+</math>
+ occur in practice:
+
+<pre>
+    T_dig  B_val  binOdd  case
+        3      1    true   k≥1 (s3 leading)
+        5     11    true   k≥1 (s3 leading)
+        7    130   false   k=0 (s2 leading)
+        9   1425    true   k≥1 (s3 leading)
+</pre>
+
+=== Binary value trajectory ===
+
+Tracing binary value (V) at even overflow entries and the parity of <code>bin_rest</code> at odd overflow outputs (the value that becomes the next even overflow input):
+
+<pre>
+    Era  V_entry  binOdd  d   V_after_era  bin_rest_val  binOdd(rest)
+      0        1    true  4            22            11         true
+      1       11    true  6           260           130        FALSE
+      2      130   false  8          2851          1425         true
+      3     1425    true 10         29754         14877         true
+      4    14877    true 12         38414         19207         true
+      5    19207    true 14        870016        435008        FALSE
+</pre>
+
+The pattern of <code>binOdd(bin_rest)</code> is: T, F, T, T, T, F, F, F, ...
+This is NOT periodic and NOT constant.
+
+'''CRITICAL FINDING:''' No simple mod-based parity invariant can determine <code>binOdd</code> at even overflow entries. The unconditional invariant <code>binOdd bin = (ternOdd tern == (pad == 1))</code> was proved preserved by <code>cycle_nonzero</code> (both flip) and <code>overflow_cycle</code>, but is FALSE at the output of <code>overflow_odd</code>: <code>binOdd bin_rest = true</code> fails at era 1 (<code>bin_rest</code> value 130 is even).
+
+The binary value at era end depends on the wrap history during <code>cycle_nonzero</code>: binary wraps (<code>overflow_carry</code>) multiple times per era since 
+<math>
+3^d \gg 2^{\text{bin.length}}
+</math>
+. The value after wraps is 
+<math>
+V_0 + T - \sum(2^{n_i})
+</math>
+ where 
+<math>
+n_i
+</math>
+ are binary lengths at each wrap. This makes the mod-4 (and higher) behavior of 
+<math>
+V_{\text{end}}
+</math>
+ depend on the exact wrap schedule, which varies per era.
+
+=== Safety: binary never all-<code>s3</code> at odd overflow ===
+
+All-<code>s3</code> at odd overflow (binary = <code>rep s3 dd</code>) leads to HALT (confirmed by simulation for all tested <code>dd</code> and <code>d</code> values). The nonhalting proof MUST show this never occurs.
+
+'''What doesn't work:'''
+* Parity invariant: <code>binOdd</code> at even overflow is not always true (era 2 has V=130, binOdd=false). So we cannot prove binOdd=false at odd overflow.
+* <code>binValue</code> conservation 
+<math>
+V+T=\text{const}
+</math>
+: FALSE because <code>overflow_carry</code> resets binary value to 0, not +1. The sum changes at every wrap.
+* Any simple mod-k invariant: the binary value mod 4 at overflow points depends on wrap history, which has no periodic pattern.
+
+'''What might work:'''
+* General overflow theorem for arbitrary 
+<math>
+k
+</math>
+: prove that for any 
+<math>
+k
+</math>
+ leading <code>s3</code>s followed by <code>s2::bin_rest</code>, the overflow produces a valid CycleStart. Combined with proving all-<code>s3</code> is unreachable, this would close all cases.
+* Binary length growth argument: show 
+<math>
+2^{\text{bin.length}}
+</math>
+ grows faster than 
+<math>
+3^d
+</math>
+, so that the gap (
+<math>
+2^n - 1 - \text{binValue}
+</math>
+) is always positive at odd overflow. But 
+<math>
+2^{\text{bin.length}} < 3^d
+</math>
+ in practice (wraps always happen), so this argument cannot work directly.
+* Computational verification: verify the first N eras by computation, then show a structural property (e.g., binary length 
+<math>
+\ge d + C
+</math>
+) holds from era N onward, making all-<code>s3</code> impossible.
+* The all-<code>s3</code> case requires 
+<math>
+\text{binValue} = 2^n - 1
+</math>
+, which means exactly 
+<math>
+T - \sum(2^{n_i}) + V_0 = 2^{n_{\text{final}}} - 1
+</math>
+. This is a precise Diophantine condition that may be provable to never hold.
+
+=== Multi-phase overflow structure ===
+
+The simulation data reveals that overflows are more complex than simple single-step transitions. The 
+<math>
+\Delta B
+</math>
+ values between consecutive 
+<math>
+T_{\text{dig}}
+</math>
+ transitions are:
+
+<pre>
+    T_dig transition  delta_B
+    2 → 3             1 (immediate)
+    3 → 4             9 = 3^2
+    4 → 5             1 (immediate)
+    5 → 6             118
+    6 → 7             1 (immediate)
+    7 → 8             1295
+</pre>
+
+The non-immediate 
+<math>
+\Delta B
+</math>
+ values (9, 118, 1295) are NOT simple powers of 3. This suggests that what the proof models as "one overflow + one era of cycle_nonzero" may actually involve nested canonical states at intermediate ternary sizes. The proof's 
+<math>
+\text{overflow\_cycle}
+</math>
+ theorem captures one phase of a multi-phase process, producing intermediate CycleStart states with smaller ternary counters than expected.
+
+However, this does not affect correctness of the nonhalting argument — each intermediate CycleStart is still a valid canonical form, and the proof only needs to show that every canonical form leads to another canonical form (progress), not that eras have a specific structure.
+
+== Nonhalting Argument ==
+
+The machine never halts because:
+# The normal cycle always terminates (finite sweep + carry, bounded by tape size).
+# When ternary overflows, the reset always terminates and produces a valid new CycleStart with more ternary digits.
+# The process repeats forever: each era has finitely many cycles, each overflow leads to a new era.
+# The undefined transition A,1 is never reached because binary is never all-<code>s3</code> at odd overflow (preventing the carry cascade from reaching the terminator).
+
+Point 4 is the crux — it requires showing all-<code>s3</code> is unreachable. See the "Safety" section above for the current state of this argument.
+
+=== Proof status ===
+
+The Lean proof in <code>machine.lean</code> establishes nonhalt modulo '''1 sorry''' in <code>canonical_progress</code>. The proof uses an unconditional parity invariant as IsCanonical field 8, but this invariant is FALSE for some reachable states.
+
+'''IsCanonical fields''' (current, 8 fields — field 8 is WRONG):
+# <code>c = CycleStart bin_cells tern_cells pad</code>
+# <code>∀ s ∈ bin_cells, s = s2 ∨ s = s3</code>
+# <code>ValidTern tern_cells</code>
+# <code>pad ≤ 1</code>
+# <code>tern_cells.length ≥ 2</code>
+# <code>bin_cells ≠ []</code>
+# <code>pad = 1 → bin_cells.length ≥ 2</code>
+# <code>binOdd bin_cells = (ternOdd tern_cells == (pad == 1))</code> ← '''FALSE at era 2'''
+
+Field 8 is preserved by <code>cycle_nonzero</code> (both <code>binOdd</code> and <code>ternOdd</code> flip each step) and by <code>overflow_cycle</code> (<code>binOdd</code> flips, <code>ternOdd</code> stays false). But it is NOT preserved by <code>overflow_odd</code>: the output requires <code>binOdd bin_rest = true</code>, which is false when <code>bin_rest</code> has even value (occurs at era 1: <code>bin_rest</code>=130).
+
+'''Proved theorems:'''
+* `reaches_canonical`: 
+<math>
+\text{native\_decide}
+</math>
+ (117 steps)
+* `cycle_nonzero`: fully proved, preserves all 8 fields
+* `overflow_cycle` (even overflow): fully proved
+* `overflow_odd` (odd overflow k=0): proved (6d+9 steps)
+* `overflow_odd_k1` (odd overflow k=1): proved (6d+10 steps)
+* At even overflow: parity invariant gives binOdd=true 
+<math>
+\to
+</math>
+ hlen2 
+<math>
+\to
+</math>
+ bin'.length 
+<math>
+\ge
+</math>
+ 2
+* At odd overflow: parity invariant gives binOdd=false 
+<math>
+\to
+</math>
+ k=0 only 
+<math>
+\to
+</math>
+ all other cases eliminated by contradiction
+
+'''Remaining sorry (1):'''
+<code>binOdd bin_rest = true</code> at k=0 odd overflow output — '''unprovable (false)'''.
+
+'''Consequence:''' The proof structure with the parity invariant as field 8 cannot work. Either:
+# Remove field 8 and handle all odd overflow cases (k=0, k=1, k≥2, all-<code>s3</code>) individually — reverting to the original 4-sorry structure
+# Find a correct invariant that rules out all-<code>s3</code>
+
+=== Binary length changes ===
+
+* overflow_carry: bin grows by 1 (rep s3 d 
+<math>
+\to
+</math>
+ rep s2 (d+1))
+* carry_stop: bin stays same length
+* cycle_nonzero: bin.length 
+<math>
+\ge
+</math>
+ bin.length (never shrinks)
+* odd overflow k=0: bin shrinks by 1
+* odd overflow k=1: bin shrinks by 2
+* odd overflow k≥2: bin shrinks by k+1
+
+During each era, binary wraps multiple times (
+<math>
+3^d \gg 2^{\text{bin.length}}
+</math>
+), growing by 
+<math>
+\sim 3
+</math>
+-5 cells per era from wraps. Ternary grows by 2 pairs per era. Binary length at even overflow entries: 2, 5, 8, 11, 14, 18, 21, 24, ...
+
+'''NOTE:''' 
+<math>
+k \ge 2
+</math>
+ IS reachable (B_val=11 at T_dig=5 has binary [<code>s3</code>,<code>s3</code>,<code>s2</code>,<code>s3</code>], k=2). Any approach must handle arbitrary 
+<math>
+k
+</math>
+, not assume 
+<math>
+k \le 1
+</math>
+.
