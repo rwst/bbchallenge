@@ -290,6 +290,132 @@ theorem binOdd_overflow_carry_flip (d : Nat) (hd : d ≥ 1) :
   | zero => omega
   | succ d => simp [rep, List.replicate_succ, binOdd_cons, s2, s3]
 
+/-- Boolean identity: negating the left argument of == is the same as negating the result. -/
+private theorem bool_not_beq (a b : Bool) : ((!a) == b) = Bool.not (a == b) := by
+  cases a <;> cases b <;> rfl
+
+/-- Binary value: list of s2/s3 cells interpreted as LSB-first binary number.
+    s2 = 0, s3 = 1. Empty list has value 0. -/
+def binValue : List Sym → Nat
+  | [] => 0
+  | s :: rest => (if s = s3 then 1 else 0) + 2 * binValue rest
+
+@[simp] theorem binValue_nil : binValue ([] : List Sym) = 0 := rfl
+
+private theorem s2_ne_s3 : (s2 : Sym) ≠ s3 := by decide
+
+theorem binValue_cons_s2 (rest : List Sym) :
+    binValue (s2 :: rest) = 2 * binValue rest := by
+  show (if (s2 : Sym) = s3 then 1 else 0) + 2 * binValue rest = _; simp [s2_ne_s3]
+theorem binValue_cons_s3 (rest : List Sym) :
+    binValue (s3 :: rest) = 1 + 2 * binValue rest := by
+  show (if (s3 : Sym) = s3 then 1 else 0) + 2 * binValue rest = _; simp
+
+theorem binValue_rep_s2 : (n : Nat) → binValue (rep s2 n) = 0
+  | 0 => rfl
+  | n + 1 => by
+    show binValue (s2 :: rep s2 n) = 0
+    rw [binValue_cons_s2, binValue_rep_s2 n, Nat.mul_zero]
+
+theorem binValue_rep_s3 : (n : Nat) → binValue (rep s3 n) = 2^n - 1
+  | 0 => rfl
+  | n + 1 => by
+    show binValue (s3 :: rep s3 n) = 2^(n+1) - 1
+    rw [binValue_cons_s3, binValue_rep_s3 n, Nat.pow_succ]
+    have : 2^n ≥ 1 := Nat.one_le_pow n 2 (by omega); omega
+
+/-- binValue of all-s3 list is odd when nonempty. -/
+theorem binValue_rep_s3_odd (n : Nat) (hn : n ≥ 1) : Odd (binValue (rep s3 n)) := by
+  rw [binValue_rep_s3]
+  cases n with
+  | zero => omega
+  | succ n =>
+    have : 2^(n+1) ≥ 2 := by
+      have := Nat.one_le_pow n 2 (by omega); rw [Nat.pow_succ]; omega
+    exact ⟨2^n - 1, by rw [Nat.pow_succ]; omega⟩
+
+/-- Relate binOdd to Odd binValue for valid binary cells. -/
+theorem binOdd_iff_odd_binValue (bin : List Sym)
+    (h : ∀ s ∈ bin, s = s2 ∨ s = s3) : binOdd bin = true ↔ Odd (binValue bin) := by
+  cases bin with
+  | nil => simp [binOdd, binValue]
+  | cons s rest =>
+    have hs := h s (by simp)
+    rcases hs with rfl | rfl
+    · -- s2 case: binOdd = false, binValue = 2*v (even)
+      simp only [binOdd_cons]
+      rw [binValue_cons_s2]
+      constructor
+      · intro h; exact absurd h (by trivial)
+      · intro ⟨k, hk⟩; omega
+    · -- s3 case: binOdd = true, binValue = 1 + 2*v (odd)
+      rw [binValue_cons_s3]
+      constructor
+      · intro; exact ⟨binValue rest, by omega⟩
+      · intro; simp [binOdd_cons]
+
+/-- carry_stop increments binValue by 1. -/
+theorem binValue_carry_stop : (k : Nat) → (rest : List Sym) →
+    binValue (rep s2 k ++ (s3 :: rest)) = binValue (rep s3 k ++ (s2 :: rest)) + 1
+  | 0, rest => by
+    simp only [rep, List.replicate_zero, List.nil_append]
+    rw [binValue_cons_s3, binValue_cons_s2]; omega
+  | k + 1, rest => by
+    show binValue (s2 :: (rep s2 k ++ (s3 :: rest))) =
+      binValue (s3 :: (rep s3 k ++ (s2 :: rest))) + 1
+    rw [binValue_cons_s2, binValue_cons_s3, binValue_carry_stop k rest]; omega
+
+-- Note: overflow_carry does NOT increment binValue. It wraps 2^d-1 → 0 (with extra cell).
+-- binValue (rep s2 (d+1)) = 0, binValue (rep s3 d) = 2^d - 1. These are unrelated by +1.
+
+/-- Ternary value: list of paired cells interpreted as base-3 number.
+    Pair (s2,s2) = 0, (s0,s2) = 1, (s4,s2) = 2. LSB pair first. -/
+def ternValue : List Sym → Nat
+  | [] => 0
+  | [_] => 0  -- malformed, treat as 0
+  | a :: _ :: rest =>
+    (if a = s0 then 1 else if a = s4 then 2 else 0) + 3 * ternValue rest
+
+@[simp] theorem ternValue_nil : ternValue ([] : List Sym) = 0 := rfl
+
+private theorem s2_ne_s0 : (s2 : Sym) ≠ s0 := by decide
+private theorem s2_ne_s4 : (s2 : Sym) ≠ s4 := by decide
+private theorem s4_ne_s0 : (s4 : Sym) ≠ s0 := by decide
+
+theorem ternValue_cons_s2_s2 (rest : List Sym) :
+    ternValue (s2 :: s2 :: rest) = 3 * ternValue rest := by
+  show (if (s2 : Sym) = s0 then 1 else if (s2 : Sym) = s4 then 2 else 0) + 3 * ternValue rest = _
+  simp [s2_ne_s0, s2_ne_s4]
+
+theorem ternValue_rep_s2 : (n : Nat) → ternValue (rep s2 n) = 0
+  | 0 => rfl
+  | 1 => by show ternValue [s2] = 0; rfl
+  | n + 2 => by
+    show ternValue (s2 :: s2 :: rep s2 n) = 0
+    rw [ternValue_cons_s2_s2, ternValue_rep_s2 n, Nat.mul_zero]
+
+theorem ternValue_cons_s4_s2 (rest : List Sym) :
+    ternValue (s4 :: s2 :: rest) = 2 + 3 * ternValue rest := by
+  show (if (s4 : Sym) = s0 then 1 else if (s4 : Sym) = s4 then 2 else 0) + 3 * ternValue rest = _
+  simp [s4_ne_s0]
+
+theorem ternValue_cons_s0_s2 (rest : List Sym) :
+    ternValue (s0 :: s2 :: rest) = 1 + 3 * ternValue rest := by
+  show (if (s0 : Sym) = s0 then 1 else if (s0 : Sym) = s4 then 2 else 0) + 3 * ternValue rest = _
+  simp
+
+theorem ternValue_repPair_s4_s2 : (d : Nat) → ternValue (repPair s4 s2 d) = 3^d - 1
+  | 0 => rfl
+  | d + 1 => by
+    show ternValue (s4 :: s2 :: repPair s4 s2 d) = _
+    rw [ternValue_cons_s4_s2, ternValue_repPair_s4_s2 d]
+    have : 3^d ≥ 1 := Nat.one_le_pow d 3 (by omega); omega
+
+/-- 3^d - 1 is even for d ≥ 1. -/
+theorem three_pow_sub_one_even (d : Nat) : Even (3^d - 1) := by
+  have h : Odd (3^d) := Odd.pow (by decide : Odd 3)
+  obtain ⟨k, hk⟩ := h; exact ⟨k, by omega⟩
+
 /-- Decompose binary cells into leading s3's + first s2 + rest, or all s3's. -/
 theorem bin_decompose : (bin : List Sym) → (∀ s ∈ bin, s = s2 ∨ s = s3) →
     (∃ k rest, bin = rep s3 k ++ (s2 :: rest) ∧ ∀ s ∈ rest, s = s2 ∨ s = s3) ∨
@@ -893,7 +1019,8 @@ theorem overflow_odd_k1 (bin_rest : List Sym) (d : Nat) :
     - bin_cells ⊆ {s2, s3} (valid binary), nonempty
     - tern_cells satisfies ValidTern (pairs from {(s2,s2),(s0,s2),(s4,s2)}), length ≥ 2
     - pad ≤ 1
-    - pad = 1 → bin_cells.length ≥ 2 -/
+    - pad = 1 → bin_cells.length ≥ 2
+    - At even overflow (pad=0, tern all-zero): binary is odd (binOdd = true) -/
 def IsCanonical (c : Config) : Prop :=
   ∃ (bin_cells tern_cells : List Sym) (pad : Nat),
     c = CycleStart bin_cells tern_cells pad ∧
@@ -902,7 +1029,8 @@ def IsCanonical (c : Config) : Prop :=
     pad ≤ 1 ∧
     tern_cells.length ≥ 2 ∧
     bin_cells ≠ [] ∧
-    (pad = 1 → bin_cells.length ≥ 2)
+    (pad = 1 → bin_cells.length ≥ 2) ∧
+    binOdd bin_cells = (ternOdd tern_cells == (pad == 1))
 
 -- Key property: CycleStart right side is tern ++ rep s2 pad.
 -- When ternary is all-zero, right = rep s2 (tern.length + pad), all s2.
@@ -925,7 +1053,7 @@ theorem rep_s2_repartition (tern_cells : List Sym) (pad : Nat)
 theorem canonical_progress :
     ∀ c, IsCanonical c →
     ∃ k, 0 < k ∧ IsCanonical (run tm c k) ∧ (run tm c k).state ≠ none := by
-  intro c ⟨bin, tern, pad, hc, hbin, hv, hpad, hlen, hne_bin, hlen_bin⟩
+  intro c ⟨bin, tern, pad, hc, hbin, hv, hpad, hlen, hne_bin, hlen_bin, hodd_inv⟩
   subst hc
   by_cases hne : ∃ x ∈ tern, x ≠ s2
   · -- Normal cycle: ternary is nonzero, cycle_nonzero applies
@@ -938,8 +1066,11 @@ theorem canonical_progress :
       omega
     refine ⟨steps, hpos, ⟨bin', tern', pad, ?_, hbin', hv', hpad, hlen', hne_bin', ?_⟩, ?_⟩
     · exact hrun
-    · -- pad=1 → bin'.length ≥ 2
-      intro hp1; exact le_trans (hlen_bin hp1) hlen_ge
+    · constructor
+      · intro hp1; exact le_trans (hlen_bin hp1) hlen_ge
+      · rw [hbo_flip, hto_flip, hodd_inv]
+        generalize (pad == 1 : Bool) = p
+        cases ternOdd tern <;> cases p <;> rfl
     · rw [show run tm (CycleStart bin tern pad) steps = CycleStart bin' tern' pad from hrun]
       simp [CycleStart]
   · -- Overflow: ternary is all-zero
@@ -963,77 +1094,51 @@ theorem canonical_progress :
       refine ⟨steps, hpos, ⟨bin', repPair s4 s2 d, 1, ?_, hbin',
         validTern_repPair_s4_s2 d, by omega, by rw [repPair_length]; omega, hne_bin', ?_⟩, ?_⟩
       · exact hrun
-      · -- pad=1 → bin'.length ≥ 2
-        intro _
-        -- overflow_cycle guarantees: binOdd bin = true → bin'.length ≥ 2
-        -- We need this without knowing binOdd bin. Two cases:
-        rcases bin_decompose bin hbin with ⟨k, bin_rest, hbin_eq, hbr⟩ | ⟨dd, hbin_eq⟩
-        · -- carry_stop: bin' = rep s2 k ++ s3 :: bin_rest, length = k + 1 + bin_rest.length
-          -- bin.length = k + 1 + bin_rest.length, so bin'.length = bin.length ≥ 1.
-          -- Actually we need ≥ 2. bin has length ≥ 1 (nonempty).
-          -- If bin = [s2] (length 1), then k=0, bin_rest=[], bin' = [s3], length 1.
-          -- But wait: overflow_cycle with bin=[s2] gives bin'=[s3], length 1. pad=1 needs length ≥ 2.
-          -- Hmm, we need bin.length ≥ 2 at even overflow? Not necessarily...
-          -- Actually the output bin' has length = k + 1 + bin_rest.length = bin.length (same length in carry_stop).
-          -- From the overflow_cycle spec, the length condition hlen2 says: binOdd bin = true → length ≥ 2.
-          -- Without parity we don't know binOdd bin.
-          -- But for carry_stop case: bin = rep s3 k ++ s2 :: bin_rest.
-          -- binOdd bin = (k > 0 → s3 == s3 = true, k = 0 → s2 == s3 = false).
-          -- When binOdd bin = false (k=0): bin = s2 :: bin_rest, bin' = s3 :: bin_rest.
-          -- hlen2 does NOT guarantee length ≥ 2 in this case.
-          -- We need bin.length ≥ 2 OR some other argument.
-          sorry
-        · -- overflow_carry: bin is all s3, so binOdd = true, hlen2 gives length ≥ 2
-          subst hbin_eq
-          have hdd_pos : dd ≥ 1 := by
-            cases dd with | zero => simp at hne_bin | succ dd => omega
-          have : binOdd (rep s3 dd) = true := by
-            cases dd with
-            | zero => omega
-            | succ dd => simp [rep, List.replicate_succ, binOdd_cons, s3]
-          exact hlen2 this
+      · -- From invariant: binOdd bin = true at even overflow (pad=0)
+        have hbo : binOdd bin = true := by
+          rw [hodd_inv, ternOdd_rep_s2]; decide
+        constructor
+        · intro; exact hlen2 hbo
+        · rw [hbo_flip, hbo, ternOdd_repPair_s4_s2]; decide
       · rw [show run tm (CycleStart bin (rep s2 (2 * d)) 0) steps =
             CycleStart bin' (repPair s4 s2 d) 1 from hrun]; simp [CycleStart]
     · -- Odd total right: use overflow_odd (pad=1)
       have hp1 : pad = 1 := by omega
       subst hp1
+      -- From invariant: binOdd bin = false at odd overflow (pad=1)
+      have hbo : binOdd bin = false := by
+        rw [hodd_inv, ternOdd_rep_s2]; decide
       -- Decompose binary: leading s3s + first s2 + rest, or all s3
       rcases bin_decompose bin hbin with ⟨k, bin_rest, hbin_eq, hbr⟩ | ⟨dd, hbin_eq⟩
       · -- Binary has a s2 bit at position k
         subst hbin_eq
-        -- bin.length ≥ 2 (from pad=1 condition)
-        have hbl := hlen_bin rfl
+        -- k must be 0 because binOdd = false (first element is s2, not s3)
         cases k with
         | zero =>
           -- k=0: bin = s2 :: bin_rest, use overflow_odd
-          simp [rep] at hbl ⊢
-          have hne_br : bin_rest ≠ [] := by
-            intro h; simp [h] at hbl
+          simp [rep]
+          have hbl := hlen_bin rfl
+          simp [rep] at hbl
+          have hne_br : bin_rest ≠ [] := by intro h; simp [h] at hbl
           have hodd := overflow_odd bin_rest d
           refine ⟨6*d+9, by omega, ⟨bin_rest, rep s2 (2*(d+2)), 0, ?_, hbr,
             validTern_rep_s2 _, by omega, by simp [rep], hne_br, ?_⟩, ?_⟩
           · exact hodd
-          · intro h; omega
+          · constructor
+            · intro h; omega
+            · -- Need: binOdd bin_rest = true (the remaining sorry)
+              rw [ternOdd_rep_s2]; simp
+              sorry
           · change (run tm (CycleStart (s2 :: bin_rest) (rep s2 (2*d)) 1) (6*d+9)).state ≠ none
             rw [show run tm = tmRun from rfl, hodd]; simp [CycleStart]
         | succ k =>
-          -- k≥1: bin = rep s3 (k+1) ++ s2 :: bin_rest
-          simp only [rep_succ, List.cons_append] at hbl ⊢
-          cases k with
-          | zero =>
-            -- k=1 (exactly one leading s3): bin = s3 :: s2 :: bin_rest
-            simp only [rep_zero, List.nil_append]
-            -- Output: CycleStart bin_rest (s0 :: s2 :: rep s2 (2*(d+1))) 1
-            -- Need bin_rest ≠ [] and bin_rest.length ≥ 2 (for pad=1 output).
-            -- Current invariant only gives bin.length ≥ 2, i.e., bin_rest.length ≥ 0.
-            -- This requires a stronger invariant (e.g., bin.length ≥ 4 at pad=1 odd overflow).
-            sorry
-          | succ k =>
-            -- k≥2: bin = s3 :: s3 :: rep s3 k ++ s2 :: bin_rest
-            -- Multiple leading s3 bits create complex cascade behavior
-            sorry
-      · -- Binary is all s3: this leads to halting, must prove unreachable
-        sorry
+          -- k≥1: binOdd = true (starts with s3), contradicts hbo
+          simp [rep, List.replicate_succ, List.cons_append, binOdd_cons, s3] at hbo
+      · -- Binary is all s3: binOdd = true for dd≥1, contradicts hbo
+        subst hbin_eq
+        cases dd with
+        | zero => simp at hne_bin
+        | succ dd => simp [rep, List.replicate_succ, binOdd_cons, s3] at hbo
 
 /-- The machine reaches a canonical config after 117 initial steps. -/
 theorem reaches_canonical :
@@ -1042,7 +1147,8 @@ theorem reaches_canonical :
   exact ⟨[s3, s2], rep s2 8, 0, rfl,
     fun s hs => by simp [s3, s2] at hs; rcases hs with rfl | rfl <;> simp,
     validTern_rep_s2 4, by omega, by simp [rep],
-    by simp, by intro h; omega⟩
+    by simp, by intro h; omega,
+    by rw [binOdd_cons, ternOdd_rep_s2]; decide⟩
 
 /-- **Main theorem**: the machine does not halt from the initial configuration. -/
 theorem nonhalt : ∀ m, (run tm initConfig m).state ≠ none := by
