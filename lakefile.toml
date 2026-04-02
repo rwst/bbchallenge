@@ -19,3 +19,8 @@ srcDir = "Antihydra"
 [[lean_lib]]
 name = "Cryptid"
 srcDir = "Cryptid"
+
+[[lean_lib]]
+name = "TM5"
+srcDir = "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB"
+roots = ["machine"]
