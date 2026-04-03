@@ -309,12 +309,10 @@ def SafeRight : List Sym → Prop
 
 /-- SafeRight implies C reads 0 (the first element is false or list is empty). -/
 lemma SafeRight_head {R : List Sym} (h : SafeRight R) : listHead R false = false := by
-  cases R with
-  | nil => rfl
-  | cons r _ =>
-    cases r with
-    | true => simp [SafeRight] at h
-    | false => rfl
+  match R, h with
+  | [], _ => rfl
+  | true :: _, h => simp [SafeRight] at h
+  | false :: _, _ => rfl
 
 /-- SafeRight1: shifted SafeRight for state C. Tracks positions 1+ of B.right
     through the B→C→D chain. C.right = listTail(B.right). -/
@@ -329,12 +327,9 @@ def SafeRight1 : List Sym → Prop
 lemma SafeRight_to_SafeRight1 {R : List Sym} (h : SafeRight R) :
     SafeRight1 (listTail R) := by
   match R, h with
-  | [], _ => simp [listTail, SafeRight1]
-  | true :: _, h => simp [SafeRight] at h
-  | false :: [], _ => simp [listTail, SafeRight1]
-  | false :: false :: _, _ => simp [listTail, SafeRight1]
-  | false :: true :: [], _ => simp [listTail, SafeRight1]
+  | [], _ | false :: [], _ | false :: false :: _, _ | false :: true :: [], _
   | false :: true :: true :: _, _ => simp [listTail, SafeRight1]
+  | true :: _, h => simp [SafeRight] at h
   | false :: true :: false :: rest, h => exact h
 
 /-- SafeRight2: shifted SafeRight for state D. Tracks position 2+ of B.right.
@@ -348,10 +343,8 @@ def SafeRight2 : List Sym → Prop
 lemma SafeRight1_to_SafeRight2 {R : List Sym} (h : SafeRight1 R)
     (hd : listHead R false = true) : SafeRight2 (listTail R) := by
   match R, h, hd with
-  | [], _, hd => simp [listHead] at hd
-  | false :: _, _, hd => simp [listHead] at hd
-  | true :: [], _, _ => simp [listTail, SafeRight2]
-  | true :: true :: _, _, _ => simp [listTail, SafeRight2]
+  | [], _, hd | false :: _, _, hd => simp [listHead] at hd
+  | true :: [], _, _ | true :: true :: _, _, _ => simp [listTail, SafeRight2]
   | true :: false :: rest, h, _ => exact h
 
 /-- SafeRight2 → SafeRight after D→B shift (when new B reads 0). -/
@@ -584,8 +577,7 @@ The tape continues to grow but with persistent zero-markers. -/
 /-- Era 0 → Era 1: from all-1s tape of length 5 to all-1s tape of length 11.
     E_Config 4 0 evolves to E_Config 10 0 in exactly 65 steps. -/
 theorem era_0_to_1 :
-    run sweeper (E_Config 4 0) 65 = E_Config 10 0 := by
-  rfl
+    run sweeper (E_Config 4 0) 65 = E_Config 10 0 := rfl
 
 -- ============================================================
 -- Conjecture C5: Identity sweeps
@@ -633,8 +625,7 @@ step count grows exponentially. -/
 /-- The machine starts in state A on a blank tape.
     After 19 steps it reaches E_Config 4 0 (all-1s tape of length 5). -/
 theorem sweeper_init_to_era0 :
-    run sweeper (initConfig 6) 19 = E_Config 4 0 := by
-  rfl
+    run sweeper (initConfig 6) 19 = E_Config 4 0 := rfl
 
 -- ============================================================
 -- Main non-halting conjecture
