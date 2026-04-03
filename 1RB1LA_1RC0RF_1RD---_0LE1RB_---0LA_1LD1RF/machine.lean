@@ -274,7 +274,233 @@ The only remaining halt path is C,1, which requires B to read 0
 with a 1 to its right (c1_halt_via_b).
 
 The tape invariant only needs to show:
-- B reads 0 only at the right tape edge (where right tape is all 0s) -/
+- B reads 0 only at the right tape edge (where right tape is all 0s)
+
+### SafeRight predicate
+
+Period-3 recursive predicate on B.right. Ensures C always reads 0
+through arbitrary depth of B→C→D chain recursion:
+- B reads 0, C reads R[0]. Must be false.
+- C,0→1RD: D reads R[1].
+  - D reads 0: BCD extension at right edge. Safe.
+  - D reads 1: D,1→1RB. New B reads R[2].
+    - B reads 1: goes to F. Safe.
+    - B reads 0: enters C again. Recurse on R[3:].
+
+### A-condition
+
+At A,0→B: B.head = listHead(A.right), B.right = listTail(A.right).
+If B reads 1 (listHead A.right = true), B→F (safe, no C entry).
+If B reads 0, we need SafeRight(B.right) = SafeRight(listTail A.right).
+
+So the A-condition is: A reads 0 → either B will read 1 (safe) or
+B's right tape satisfies SafeRight. -/
+
+/-- SafeRight: period-3 recursive predicate on B.right tape.
+    Ensures C always reads 0 through arbitrary B→C→D chain depth. -/
+def SafeRight : List Sym → Prop
+  | [] => True
+  | true :: _ => False
+  | false :: [] => True
+  | false :: false :: _ => True
+  | false :: true :: [] => True
+  | false :: true :: true :: _ => True
+  | false :: true :: false :: rest => SafeRight rest
+
+/-- SafeRight implies C reads 0 (the first element is false or list is empty). -/
+lemma SafeRight_head {R : List Sym} (h : SafeRight R) : listHead R false = false := by
+  cases R with
+  | nil => rfl
+  | cons r _ =>
+    cases r with
+    | true => simp [SafeRight] at h
+    | false => rfl
+
+/-- SafeRight1: shifted SafeRight for state C. Tracks positions 1+ of B.right
+    through the B→C→D chain. C.right = listTail(B.right). -/
+def SafeRight1 : List Sym → Prop
+  | [] => True
+  | false :: _ => True
+  | true :: [] => True
+  | true :: true :: _ => True
+  | true :: false :: rest => SafeRight rest
+
+/-- SafeRight → SafeRight1 after B→C shift. -/
+lemma SafeRight_to_SafeRight1 {R : List Sym} (h : SafeRight R) :
+    SafeRight1 (listTail R) := by
+  match R, h with
+  | [], _ => simp [listTail, SafeRight1]
+  | true :: _, h => simp [SafeRight] at h
+  | false :: [], _ => simp [listTail, SafeRight1]
+  | false :: false :: _, _ => simp [listTail, SafeRight1]
+  | false :: true :: [], _ => simp [listTail, SafeRight1]
+  | false :: true :: true :: _, _ => simp [listTail, SafeRight1]
+  | false :: true :: false :: rest, h => exact h
+
+/-- SafeRight2: shifted SafeRight for state D. Tracks position 2+ of B.right.
+    D.right = listTail(C.right) = listTail(listTail(B.right)). -/
+def SafeRight2 : List Sym → Prop
+  | [] => True
+  | true :: _ => True
+  | false :: rest => SafeRight rest
+
+/-- SafeRight1 → SafeRight2 after C→D shift (when D reads 1). -/
+lemma SafeRight1_to_SafeRight2 {R : List Sym} (h : SafeRight1 R)
+    (hd : listHead R false = true) : SafeRight2 (listTail R) := by
+  match R, h, hd with
+  | [], _, hd => simp [listHead] at hd
+  | false :: _, _, hd => simp [listHead] at hd
+  | true :: [], _, _ => simp [listTail, SafeRight2]
+  | true :: true :: _, _, _ => simp [listTail, SafeRight2]
+  | true :: false :: rest, h, _ => exact h
+
+/-- SafeRight2 → SafeRight after D→B shift (when new B reads 0). -/
+lemma SafeRight2_to_SafeRight {R : List Sym} (h : SafeRight2 R)
+    (hd : listHead R false = false) : SafeRight (listTail R) := by
+  match R, h, hd with
+  | [], _, _ => simp [listTail, SafeRight]
+  | true :: _, _, hd => simp [listHead] at hd
+  | false :: rest, h, _ => exact h
+
+/-- Step-inductive invariant for C,1 elimination.
+    B-condition: when B reads 0, SafeRight on right tape.
+    A-condition: when A reads 0, B reads 1 or SafeRight for B's right.
+    C-condition: when C reads 0, SafeRight1 on right (chain position 1+).
+    D-condition: when D reads 1, SafeRight2 on right (chain position 2+). -/
+private def C1Inv (c : Config 6) : Prop :=
+  (c.state = some stB → c.head = false → SafeRight c.right) ∧
+  (c.state = some stA → c.head = false →
+    listHead c.right false = true ∨ SafeRight (listTail c.right)) ∧
+  (c.state = some stC → c.head = false → SafeRight1 c.right) ∧
+  (c.state = some stD → c.head = true → SafeRight2 c.right)
+
+private lemma c1inv_init : C1Inv (initConfig 6) := by
+  simp [C1Inv, initConfig, SafeRight, SafeRight1, SafeRight2, stB, stA, stC, stD]
+
+private lemma c1inv_step (c : Config 6) (h : C1Inv c) : C1Inv (step sweeper c) := by
+  obtain ⟨hB, hA, hC, hD⟩ := h
+  rcases c with ⟨s, l, hd, r⟩
+  simp only [] at hB hA hC hD
+  cases s with
+  | none => simp [C1Inv, step]
+  | some q =>
+    fin_cases q <;> cases hd <;>
+      simp only [step, sw_A0, sw_A1, sw_B0, sw_B1, sw_C0, sw_C1, sw_D0, sw_D1,
+        sw_E0, sw_E1, sw_F0, sw_F1, listHead_cons, listTail_cons, C1Inv] <;>
+      simp_all [stA, stB, stC, stD, stE, stF]
+    -- case A,0 → B: hA gives Or, listHead r = false kills left branch
+    · intro h; rcases hA with h1 | h2
+      · rw [h] at h1; exact absurd h1 Bool.noConfusion
+      · exact h2
+    -- case B,0 → C: SafeRight → SafeRight1
+    · intro _; exact SafeRight_to_SafeRight1 hB
+    -- case C,0 → D: SafeRight1 → SafeRight2
+    · exact SafeRight1_to_SafeRight2 hC
+    -- case D,1 → B: SafeRight2 → SafeRight
+    · exact SafeRight2_to_SafeRight hD
+    -- case E,1 → A: need SafeRight(E.right) when listHead l false = false
+    -- This is the sole remaining sorry. See e1_to_a_safe below.
+    · intro _; exact sorry
+    -- case F,0 → D: SafeRight2(true :: r) = True
+    · intro _; simp [SafeRight2]
+
+-- ============================================================
+-- E,1→A sorry analysis: the F-joint condition
+-- ============================================================
+
+/-! ### E,1→A: the sole remaining obstacle for c1inv_step
+
+E enters only from D,0 → 0LE. D is entered from C,0 → 1RD or F,0 → 1LD.
+
+**C→D→E path**: C reads 0, writes 1, moves R to D. D reads 0, writes 0,
+moves L to E. E.left = `true :: B.left` (C wrote 1). So `listHead(E.left) = true`.
+A reads 1 → A sweeps left (no B,0 event). **Vacuous** for the A-condition.
+
+**F→D→E path**: F reads 0, writes 1, moves L to D. D reads 0, writes 0,
+moves L to E. E.right = `false :: true :: F.right`. E.left[0] = F.left[2].
+
+When F.left[2] = true: A reads 1 → vacuous for A-condition.
+When F.left[2] = false: need `SafeRight(false :: true :: F.right)`.
+
+`SafeRight(false :: true :: F.right)` is True except when
+F.right = `false :: true :: rest` with ¬SafeRight(rest).
+
+**The F-joint condition**: When F.head=false ∧ F.left[0]=false ∧ F.left[2]=false,
+F.right never starts with `false :: true :: ...`. Equivalently:
+  `SafeRight(false :: true :: F.right)` holds.
+
+This is confirmed by simulation over 1M steps but couples F.left[2]
+with F.right structure — a global tape property (zero-marker spacing). -/
+
+/-- Extended invariant for C,1 elimination, adding an F-condition to C1Inv.
+    The F-condition captures the joint left/right coupling:
+    when F reads 0 with F.left[0]=false and F.left[2]=false,
+    SafeRight must hold for the resulting E.right = false :: true :: F.right.
+
+    This is equivalent to: F.left[2]=false → F.right does not start with
+    false :: true :: rest where ¬SafeRight(rest).
+
+    Simulation confirms over 1M steps: when F.left[2]=false,
+    F.right is always empty or starts with true — never [false, true, ...].
+
+    This is the SOLE remaining obstacle for c1_never_reached. -/
+private def C1Inv_ext (c : Config 6) : Prop :=
+  C1Inv c ∧
+  -- Left-tape conditions (from E0Inv, needed to make D-cond vacuous at C→D)
+  (c.state = some stB → listHead c.left false = true) ∧
+  (c.state = some stC → listHead c.left false = true) ∧
+  -- F-condition: when F reads 0 at interior zero (left[0]=false),
+  -- and A will read 0 immediately (left[2]=false),
+  -- the right tape satisfies SafeRight for the eventual B,0 event.
+  (c.state = some stF → c.head = false →
+    listHead c.left false = false →
+    listHead (listTail (listTail c.left)) false = false →
+    SafeRight (false :: true :: c.right)) ∧
+  -- D-condition (augmented): when D reads 0 (head=false) and the
+  -- cell 2 left of D's position is 0 (left[1]=false), the right
+  -- tape prepended with false satisfies SafeRight.
+  -- Propagates F-condition through F,0→D.
+  (c.state = some stD → c.head = false →
+    listHead (listTail c.left) false = false →
+    SafeRight (false :: c.right)) ∧
+  -- E-condition: when E reads 1 (head=true) and E.left[0]=false
+  -- (meaning A will read 0 next), SafeRight holds on E's right tape.
+  -- Propagates D-condition through D,0→E.
+  (c.state = some stE → c.head = true →
+    listHead c.left false = false →
+    SafeRight c.right)
+
+/-- C1Inv_ext holds for the initial configuration. -/
+private lemma c1inv_ext_init : C1Inv_ext (initConfig 6) := by
+  simp [C1Inv_ext, C1Inv, initConfig, SafeRight, SafeRight1, SafeRight2,
+        stB, stA, stC, stD, stE, stF]
+
+/-- C1Inv_ext is step-inductive. Once proven, c1_never_reached follows. -/
+private lemma c1inv_ext_step (c : Config 6) (h : C1Inv_ext c) :
+    C1Inv_ext (step sweeper c) := by
+  rcases c with ⟨s, l, hd, r⟩
+  cases s with
+  | none => simp [C1Inv_ext, C1Inv, step]
+  | some q =>
+    unfold C1Inv_ext C1Inv at h
+    fin_cases q <;> cases hd <;>
+      simp only [step, sw_A0, sw_A1, sw_B0, sw_B1, sw_C0, sw_C1, sw_D0, sw_D1,
+        sw_E0, sw_E1, sw_F0, sw_F1, listHead_cons, listTail_cons,
+        C1Inv_ext, C1Inv, stA, stB, stC, stD, stE, stF] <;>
+      simp_all [stA, stB, stC, stD, stE, stF, SafeRight2]
+    -- A,0→B: A-condition gives B-condition
+    · intro hh; cases h with
+      | inl h1 => rw [hh] at h1; exact absurd h1 Bool.noConfusion
+      | inr h2 => exact h2
+    -- B,0→C: SafeRight → SafeRight1
+    · intro _; exact SafeRight_to_SafeRight1 h.1
+    -- B,1→F: SOLE REMAINING SORRY
+    · sorry
+    -- C,0→D: SafeRight1 → SafeRight2
+    · exact SafeRight1_to_SafeRight2 h.1
+    -- D,1→B: SafeRight2 → SafeRight
+    · change SafeRight2 r at h
+      exact SafeRight2_to_SafeRight h
 
 /-- C,1 is unreachable: B reads 0 only at or beyond the right tape edge. -/
 theorem c1_never_reached (k : Nat) :

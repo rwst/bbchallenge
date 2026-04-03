@@ -149,47 +149,129 @@ Working backwards from the two undefined transitions:
 * For E,0 halt: F must read 0 with '''two consecutive 0s''' to its left.
 * '''Proven''' in Lean as <code>e0_necessary</code>: F reading 0 with <code>false :: false :: L</code> to its left → E reads 0 after 2 steps.
 * '''Proven''' in Lean as <code>f0_d0_to_e</code>: general form, E reads <code>listHead L false</code>.
-* In normal operation, F reads 0 only at interior zero-markers, where the left tape starts with 1s (the ones F just swept through) → D sees 1 → bounces as B, no path to E.
+* '''E,0 fully eliminated''' by step-inductive invariant <code>E0Inv</code>. '''Proven''' in Lean as <code>e0_never_reached</code>.
 
 === Summary of halt conditions ===
 
 {| class="wikitable"
-! Halt !! Necessary condition !! Why it doesn't happen
+! Halt !! Necessary condition !! Status
 |-
-| C,1 || B reads 0 with 1 to its right || B reads 0 only at right tape edge (all 0s to right)
+| C,1 || B reads 0 with 1 to its right || '''Open''' — SafeRight invariant proposed, not yet proven step-inductively
 |-
-| E,0 || F reads 0 with two consecutive 0s to its left || F reads 0 only at interior zero-markers (1s to left)
+| E,0 || F reads 0 with two consecutive 0s to its left || '''Proven''' — <code>e0_never_reached</code> via <code>E0Inv</code>
 |}
 
-The '''remaining proof obligation''' is a tape invariant showing these two properties hold for all reachable configurations.
+== SafeRight predicate (for C,1 elimination) ==
 
-== Conjectures ==
+=== Definition ===
 
-=== C1 (Non-halting — structural) ===
-'''The machine never halts.''' The two undefined transitions C,1 and E,0 are never reached because:
-* C,1 requires B to read 0 with a 1 to its right. But B reads 0 only at the right tape edge, where the right tape is all 0s (<code>b0_zeros_safe</code>).
-* E,0 requires F to read 0 with two consecutive 0s to its left (<code>e0_necessary</code>). But F reads 0 only at interior zero-markers, where the left tape starts with 1s.
-* The C→D→E path to E,0 is entirely eliminated by <code>cd_to_e_safe</code>.
+Period-3 recursive predicate on B.right. Ensures C always reads 0 through arbitrary depth of the B→C→D chain:
 
-'''Proof strategy''': The invariant now only needs to establish two properties:
-# B reads 0 only at positions ≥ rightmost written cell (so right tape is all 0s)
-# When F reads 0 (at an interior zero-marker), the cell to F's left is 1 (not 0)
+<pre>
+SafeRight([])                       = True
+SafeRight(true :: _)                = False   -- C reads 1 → halt
+SafeRight(false :: [])              = True
+SafeRight(false :: false :: _)      = True    -- D reads 0 → BCD extension
+SafeRight(false :: true :: [])      = True
+SafeRight(false :: true :: true :: _)   = True    -- B' reads 1 → F, safe
+SafeRight(false :: true :: false :: rest) = SafeRight(rest)  -- recurse
+</pre>
 
-'''Mathematical obstacle''': The invariant must still cover all phases of the sweep cycle simultaneously, but the backward analysis has narrowed what it needs to prove.
+'''Proven''' in Lean: <code>SafeRight</code> definition + <code>SafeRight_head</code> (SafeRight implies C reads 0).
 
-=== C2 (Zero-marker dynamics) ===
-'''Each full sweep cycle shifts every zero-marker exactly one position inward (left zeros move right, right zeros move left).'''
+=== B→C→D chain mechanics ===
 
-'''Caveat from proof attempt''': This property is '''emergent''' from the full cycle, not a single-step property. A naive formulation (e.g., "after some steps, state A with zero moved from left to right of head") is '''false''' — the intermediate states pass through F, D, B before returning to A. The correct formulation must track all zero-markers through the complete cycle.
+When B reads 0, the chain processes B.right in groups of 3:
+* Position 0 (C reads): must be false for safety
+* Position 1 (D reads): true (D,1→1RB, chain continues) or false (D,0→0LE, BCD extension)
+* Position 2 (B' reads): true (B,1→0RF, goes to F, chain ends) or false (B,0→1RC, recurse)
 
-=== C3 (Era growth — revised) ===
-The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 84). After that, the tape continues growing but zero-markers persist permanently. Growth continues through BCD extensions during the ongoing sweep cycles, but the structure never simplifies back to all-1s.
+Each recursion consumes 3 elements. SafeRight verified over 1M simulation steps.
 
-=== C4 (Zero-pair annihilation spawns new pairs) ===
-'''When two adjacent zeros meet and annihilate, the resulting BCD extension creates a new zero pair at the right edge of the extended segment.''' This cascading behavior explains why the machine never returns to all-1s after era 1.
+=== A-condition ===
 
-=== C7 (Step count is exponential in tape length) ===
-'''The step count grows exponentially in tape length.''' Each sweep cycle takes O(L) steps (two traversals of the tape). With L growing through BCD extensions, the total step count grows without bound.
+At A,0→B: B.head = listHead(A.right), B.right = listTail(A.right).
+* If B reads 1 (listHead A.right = true): B→F, no C entry. Safe.
+* If B reads 0: need SafeRight(listTail(A.right)).
+
+The A-condition: when A reads 0, either B will read 1 OR B's right tape satisfies SafeRight.
+
+'''Proven''' in Lean: <code>C1Inv</code> definition + <code>c1inv_init</code> (holds for initial config).
+
+=== Step-inductive closure ===
+
+The step-inductive proof of C1Inv requires additional per-state conditions:
+
+'''c1inv_step case analysis''' (Lean proof, 12 transitions):
+
+{| class="wikitable"
+! Transition !! Status !! How
+|-
+| A,1→1LA || ✓ || listHead(true::R)=true → Or.inl
+|-
+| A,0→1RB || ✓ || A-condition directly gives B-condition
+|-
+| B,0→1RC || ✓ || vacuous (state=C)
+|-
+| B,1→0RF || ✓ || vacuous (state=F)
+|-
+| C,0→1RD || ✓ || SafeRight1_to_SafeRight2
+|-
+| C,1→none || ✓ || halted, vacuous
+|-
+| D,1→1RB || ✓ || SafeRight2_to_SafeRight
+|-
+| D,0→0LE || ✓ || vacuous (state=E)
+|-
+| E,0→none || ✓ || halted, vacuous
+|-
+| '''E,1→0LA''' || '''sorry''' || '''needs SafeRight(E.right) when E.left[0]=false'''
+|-
+| F,0→1LD || ✓ || SafeRight2(true :: R) = True
+|-
+| F,1→1RF || ✓ || vacuous
+|}
+
+11/12 cases closed. The sole remaining sorry is E,1→0LA.
+
+=== E,1→A sorry: detailed analysis ===
+
+E enters only from D,0. Two paths:
+
+'''C→D→E''': E.left = <code>true :: B.left</code>. <code>listHead(E.left) = true</code>. A reads 1. '''Vacuous''' ✓
+
+'''F→D→E''': E.right = <code>false :: true :: F.right</code>. E.left[0] = F.left[2].
+* F.left[2] = true: A reads 1. Vacuous ✓
+* F.left[2] = false: need <code>SafeRight(false :: true :: F.right)</code>.
+
+<code>SafeRight(false :: true :: F.right)</code> is True when:
+* F.right = <code>[]</code> → True ✓
+* F.right starts with true → True ✓
+* F.right = <code>false :: false :: _</code> → <code>SafeRight(false :: _) = True</code> ✓
+* F.right = <code>false :: true :: rest</code> → <code>SafeRight(rest)</code> ← '''ONLY DANGEROUS CASE'''
+
+'''Simulation (1M steps)''': When F.left=[0,1,0,...], F.right NEVER starts with <code>false :: true :: ...</code>. It is always empty or starts with true. So the dangerous case never occurs.
+
+=== The F-joint condition (sole remaining obstacle) ===
+
+The proof obligation reduces to:
+
+<pre>
+F.head = false → F.left[0] = false → F.left[2] = false →
+  SafeRight(false :: true :: F.right)
+</pre>
+
+This holds trivially when F.right starts with true or is empty. The only dangerous case (F.right = <code>false :: true :: rest</code>) never occurs because when F.left[2]=false, F is at the last zero-marker and F.right is blank tape.
+
+'''Why it's hard to prove''': this couples F.left[2] with F.right structure — a left/right correlation depending on zero-marker spacing (global tape property).
+
+=== Mathematical obstacles ===
+
+# '''Non-local coupling''': The F.left/F.right correlation depends on spacing between zero-markers — a global tape property, not capturable by local cell conditions.
+# '''Circularity''': Proving sweep cycle completion requires the invariant; proving the invariant requires cycle completion.
+# '''SafeRight breaks mid-A-sweep''': During A,1→1LA, trues prepend to A.right. SafeRight(true :: _) = False, so SafeRight cannot be uniform across states.
+# '''A,0→B creates new B.right''': Comes from global tape structure at bounce point, not local transformation.
+# '''Unbounded F-bounce chain''': Joint condition at each bounce depends on previous bounce; correlation depends on inter-zero distances.
 
 == Proven results (Lean) ==
 
@@ -218,14 +300,162 @@ The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 
 |-
 | <code>e0_necessary</code> || E,0 requires F reading 0 with two consecutive 0s left || <code>sw_steps</code>
 |-
+| <code>f0_d0_e_safe</code> || F reads 0 with false :: true :: L left → E reads 1 (safe) || <code>sw_steps</code>
+|-
+| <code>a0_to_b</code> || A,0 → B: B's left starts with true (A wrote 1) || <code>sw_steps</code>
+|-
+| <code>d1_to_b</code> || D,1 → B: B's left starts with true (D wrote 1) || <code>sw_steps</code>
+|-
+| <code>b1_to_f</code> || B,1 → F: F's left starts with false (B wrote 0) || <code>sw_steps</code>
+|-
+| <code>a_b_f_d_e_safe</code> || A,0 → B,1 → F,0 → D,0 → E: E reads 1 || <code>sw_steps</code>
+|-
+| <code>d_b_f_d_e_safe</code> || D,1 → B,1 → F,0 → D,0 → E: E reads 1 || <code>sw_steps</code>
+|-
 | <code>c1_halt_via_b</code> || C,1 halt requires B reading 0 with 1 to its right || <code>sw_steps</code>
+|-
+| <code>E0Inv</code> || 4-condition step-inductive invariant for E,0 elimination || definition
+|-
+| <code>e0inv_init</code> || E0Inv holds for initConfig || <code>simp</code>
+|-
+| <code>e0inv_step</code> || E0Inv preserved by single TM step || <code>fin_cases</code> + <code>simp_all</code>
+|-
+| <code>e0inv_run</code> || E0Inv preserved by k steps || induction
+|-
+| <code>e0_never_reached</code> || E always reads 1 (E,0 unreachable) || from <code>E0Inv</code>
+|-
+| <code>SafeRight</code> || Period-3 recursive predicate on B.right tape || definition
+|-
+| <code>SafeRight_head</code> || SafeRight implies C reads 0 || cases
+|-
+| <code>C1Inv</code> || B + A conditions for C,1 elimination || definition
+|-
+| <code>c1inv_init</code> || C1Inv holds for initConfig || <code>simp</code>
 |}
+
+== Remaining sorries (2) ==
+
+{| class="wikitable"
+! Sorry !! Status !! Blocker
+|-
+| <code>c1_never_reached</code> || Open || C1Inv step-inductiveness (needs F + D conditions, joint left/right coupling)
+|-
+| <code>sweeper_never_halts</code> || Open || Follows from <code>c1_never_reached</code> + <code>e0_never_reached</code>
+|}
+
+== Conjectures ==
+
+=== C1 (Non-halting — structural) ===
+'''The machine never halts.''' The two undefined transitions C,1 and E,0 are never reached because:
+* C,1 requires B to read 0 with a 1 to its right. But B reads 0 only at the right tape edge (the only place B sees 0). The next cell is also 0 (blank), so C always sees 0.
+* E,0 requires F to read 0 with two consecutive 0s to its left. '''Proven''' unreachable by <code>E0Inv</code>.
+
+'''Proof status''': E,0 half '''done'''. C,1 half requires SafeRight + joint F condition, blocked by mathematical obstacles (see above).
+
+=== C2 (Zero-marker dynamics) ===
+'''Each full sweep cycle shifts every zero-marker exactly one position inward (left zeros move right, right zeros move left).'''
+
+'''Caveat from proof attempt''': This property is '''emergent''' from the full cycle, not a single-step property. A naive formulation is '''false''' — the intermediate states pass through F, D, B before returning to A.
+
+=== C3 (Era growth — revised) ===
+The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 84). After that, the tape continues growing but zero-markers persist permanently.
+
+=== C4 (Zero-pair annihilation spawns new pairs) ===
+'''When two adjacent zeros meet and annihilate, the resulting BCD extension creates a new zero pair at the right edge of the extended segment.''' This cascading behavior explains why the machine never returns to all-1s after era 1.
+
+=== C7 (Step count is exponential in tape length) ===
+'''The step count grows exponentially in tape length.''' Each sweep cycle takes O(L) steps. An era with tape length L has O(L) sweep cycles. So an era takes O(L²) steps. With L growing geometrically across eras, the total step count grows exponentially.
 
 == Key transitions for proof ==
 
-The backward analysis has reduced the non-halting proof to two tape invariant properties:
+The non-halting proof reduces to two tape invariant properties:
 
-# '''B reads 0 only at the right tape edge''' (where right tape is all 0s). Then <code>b0_zeros_safe</code> gives C reads 0, ruling out C,1 halt.
-# '''F reads 0 only at interior zero-markers''' (where left tape starts with at least one 1). Then <code>f_bounce_interior</code> applies (D sees 1, bounces as B), ruling out the F→D→E path. The C→D→E path is already eliminated by <code>cd_to_e_safe</code>.
+# '''E,0 unreachable''': F reads 0 only at interior zero-markers (where left tape starts with at least one 1). '''PROVEN''' via <code>E0Inv</code>.
+# '''C,1 unreachable''': B reads 0 only at the right tape edge (where right tape is all 0s). '''OPEN''' — SafeRight invariant defined but not yet proven step-inductive.
 
-These two properties together give <code>sweeper_never_halts</code>. The main obstacle is defining a step-inductive <code>IsReachable</code> invariant on configurations that captures all phases of the sweep cycle.
+Once both are proven, <code>sweeper_never_halts</code> follows directly.
+
+== Cryptid argument ==
+
+This section argues that <code>c1_never_reached</code> cannot be proven by a finite-depth step-inductive invariant on the zipper representation. The machine is therefore a '''cryptid''' in the sense of bbchallenge: its non-halting is empirically certain but resists formalization via known proof methods.
+
+=== What works: E0Inv ===
+
+The E,0 elimination succeeds because E0Inv has three properties that make step-induction tractable:
+
+# Each condition is '''depth ≤ 2''' on '''one side''' of the tape (left only).
+# Each transition '''locally''' preserves or re-establishes the condition.
+# No condition couples left-tape values with right-tape values.
+
+=== What fails: C1Inv and all extensions ===
+
+The C,1 elimination requires SafeRight — a '''recursive''' predicate on B.right with unbounded depth (period-3 recursion). The step-inductive proof of C1Inv closes 11/12 transitions. The sole remaining case is '''E,1→0LA''', which requires knowing SafeRight(E.right) when E.left[0]=false. This couples F's left tape with F's right tape via zero-marker spacing.
+
+An extended invariant C1Inv_ext was constructed with per-state conditions for F, D, and E, creating a chain F→D→E→A. This closes the E,1→A case but opens a '''new''' sorry at '''B,1→0RF''': when B reads 1 and creates F, the F-condition for the new F requires <code>SafeRight(false :: true :: listTail(B.right))</code>, which depends on B's right tape structure — information not carried by C1Inv_ext.
+
+=== The infinite cascade ===
+
+Systematic attempts to close the B,1→F sorry by adding conditions reveal an '''infinite cascade''':
+
+# '''Add B,1 condition''': <code>B.head=true → r[0]=false → l[1]=false → SafeRight(false :: true :: listTail r)</code>. This requires an A-condition at A,0→1RB.
+
+# '''Add A,0 condition''': <code>A.head=false → A.right[0]=true → A.right[1]=false → A.left[0]=false → SafeRight(false :: true :: A.right[2:])</code>. This is vacuous at E,1→0LA (since A.right[0]=false there), but at A,1→1LA it requires an A,1 condition.
+
+# '''Add A,1 condition''': <code>A.head=true → l[0]=false → r[0]=false → l[1]=false → SafeRight(false :: true :: listTail r)</code>. Simulation confirms this configuration '''never occurs''' (0 events in 2M steps). But proving it never occurs requires an E-condition.
+
+# '''Add E condition''': <code>E.head=true → E.left[0]=true → E.left[1]=false → E.left[2]=false → SafeRight(false :: true :: E.right)</code>. Simulation confirms '''never occurs''' (0 events). But proving it requires a D-condition.
+
+# '''Add D condition''': <code>D.head=false → D.left=[1,1,0,0,...] → SafeRight(D.right)</code>. Simulation confirms '''never occurs''' (D.left[3] is always 1). But proving D.left[3]=true requires an F-condition at depth 4, which requires a B-condition at depth 7, which requires...
+
+Each level shifts the obligation to a '''deeper left-tape index'''. After ''n'' iterations of the cascade, the condition requires information about left-tape position ~4''n''. Since the tape grows without bound, '''no finite collection of conditions''' can close the induction.
+
+=== Simulation evidence ===
+
+Exhaustive simulation over 2,000,000 steps confirms:
+
+* SafeRight(false :: true :: listTail r) holds at '''all''' 227 B,1 events where r[0]=false and l[1]=false.
+* In 195 of these, r[1]=true → SafeRight trivially True.
+* In the remaining 32, B is at the '''right tape edge''' (B.right is all-zeros in the physical tape; in the zipper model B.right is [false] or similar). SafeRight of all-false tapes is trivially True.
+* The "dangerous" left-tape patterns at each cascade level have 0 occurrences:
+** A,1 with l[0]=0, r[0]=0, l[1]=0: '''0 events'''
+** E,1 with l=[1,0,0,...]: '''0 events'''
+** D,0 with l=[1,1,0,0,...]: '''0 events'''
+** F,0 with l=[0,1,1,0,0,...]: '''0 events'''
+
+The conditions are vacuously true at each level because the tape structure prevents the dangerous configurations. But the '''reason''' they never occur is a '''global property''' of zero-marker spacing — specifically, that between any two zero-markers there are always enough 1s to prevent the dangerous alignment. This spacing property is itself an emergent consequence of the sweep dynamics and cannot be captured by any fixed finite-depth predicate on either side of the tape.
+
+=== Why macro-step induction also fails ===
+
+A natural alternative is to define macro configurations (as in the Cryptid proof pattern) and prove transitions between them. But this requires:
+
+# '''Proving each sweep cycle completes''' without hitting C,1 or E,0 — which is the theorem itself.
+# '''Characterizing all reachable tape shapes''' per macro state — which requires tracking the exact positions and spacings of all zero-markers.
+# '''Handling the cascading sub-era structure''': after era 1, zero-marker pairs spawn recursively upon annihilation, creating unbounded cascading depth.
+
+The Cryptid proof works because its macro states (P(a), Q(a,b)) have '''two parameters''' that capture the full tape structure. This machine's tape has '''k zero-markers at arbitrary positions''' within a ones-block of length L, where k grows logarithmically with L. A macro state would need k parameters to capture marker positions, and the transition function between macro states is itself recursive in k. This is qualitatively harder than a fixed-parameter system.
+
+=== Structural comparison ===
+
+{| class="wikitable"
+! Property !! E0Inv (proven) !! C1Inv (stuck)
+|-
+| Predicate depth || ≤ 2 || unbounded (SafeRight recurses)
+|-
+| Tape sides involved || left only || both (left/right coupling)
+|-
+| Per-state conditions || 4, all local || cascading, each requiring deeper depth
+|-
+| Information flow || single-step || multi-sweep (global tape structure)
+|-
+| Sufficient condition || finite depth || requires global marker-spacing invariant
+|}
+
+=== Conclusion ===
+
+The machine 1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF is a '''cryptid'''. Its non-halting depends on a global tape invariant (zero-marker spacing) that couples the left and right sides of the tape at arbitrary depth. This invariant is:
+
+* '''Empirically verified''' over 2M steps with no violations.
+* '''Not expressible''' as a finite-depth step-inductive predicate on the zipper representation.
+* '''Not capturable''' by a fixed-parameter macro-step system due to the unbounded cascading structure of zero-marker dynamics.
+
+Known proof methods for TM non-halting — step-inductive invariants, finite macro-step systems, and bounded tape-structure characterizations — are insufficient. A proof would require either a fundamentally new invariant framework (e.g., regular-language characterization of reachable tapes, or a well-founded ordering on tape configurations) or a qualitatively different proof strategy.

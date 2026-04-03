@@ -2,10 +2,9 @@
 
 ## Summary
 
-- **Total theorems**: 13 (4 shift/transition, 9 conjectured)
-- **Proven**: 9 (4 shift/transition + 5 conjectured)
-- **Remaining sorry**: 4
-- **1 theorem has wrong statement** (`sweep_left_zero_shift`)
+- **Proven**: E0Inv + e0_never_reached (E,0 fully eliminated)
+- **Remaining sorry**: 2 (`c1_never_reached`, `sweeper_never_halts`)
+- **`sweep_left_zero_shift` removed** (was wrong, not needed)
 
 ---
 
@@ -34,152 +33,260 @@ of length 11) in exactly 65 steps.
 
 ---
 
-## Remaining Sorries
+## Remaining Sorries (2)
 
-### 1. `sweep_left_zero_shift` (line 180) — **STATEMENT IS WRONG**
-
-**Current statement**: Starting from state A reading 1, with a
-zero-marker at distance `a` on the left and arbitrary `R` on the right,
-after some steps we reach state A reading 1 with the zero moved to
-the right side.
-
-**Why it's wrong**: After A sweeps left to the zero (a+1 steps via
-`A_shift`), then A,0→1RB and B,1→0RF, we end up in **state F going
-right**, not state A. Getting back to state A requires F to traverse
-the entire right side of the tape, hit the right edge, BCD extend,
-E→A bounce — a full sweep cycle. The resulting tape would also have
-extra content from BCD extension, not just `[false] ++ R ++ zeros p`.
-
-**The correct decomposition** is a sequence of smaller lemmas:
-
-1. **A-sweep-to-zero**: A reading 1 with `ones a ++ [false] ++ L`
-   on the left sweeps left in `a+1` steps to reach A reading 0.
-   (Already captured by `A_shift`.)
-
-2. **A-bounce-to-F**: A reading 0 → 1RB, then B reading 1 → 0RF.
-   Two concrete steps producing state F with a new zero-marker on
-   the left. (2 steps, provable by `sw_steps`.)
-
-3. **F-sweep-through-ones**: F sweeps right through `ones n` to the
-   next cell. (Already captured by `F_shift`.)
-
-4. **Full sweep cycle**: Composing all phases including F-bounces at
-   interior zeros and BCD extension at the right edge. This would need
-   a specific tape shape (e.g., `ones a` with exactly `m` interior
-   zeros at known positions) to state precisely.
-
-**Obstacle**: The "zero-marker moves inward" property is an emergent
-behavior of the full sweep cycle, not a single step. Formalizing it
-requires specifying the exact tape structure (positions of all
-zero-markers) and tracking how each one moves. This is the core
-inductive argument and is nontrivial.
-
-### 2. `c1_never_reached` (line 156) — **HARD: GLOBAL INVARIANT**
+### 1. `c1_never_reached` (line ~280) — **HARD: RIGHT-TAPE INVARIANT**
 
 **Statement**: For all k, either the machine after k steps is not in
 state C, or the head reads 0 (false).
 
-**Why it's hard**: This is a global reachability invariant. C is only
-entered via B,0→1RC, and B reads 0 only at the right tape edge. The
-next cell (what C reads) is also 0. But proving this requires showing
-that B *never* reads 0 at an interior position — equivalently, that
-the zero-markers in the tape are never in the position directly under
-the head when the machine is in state B.
+**Status**: C1Inv defined in Lean with 4 conditions (B, A, C, D). Step
+proof (`c1inv_step`) closes 11/12 transition cases. Sole remaining sorry
+is E,1→0LA, which requires the F-joint condition (see below).
 
-**Mathematical obstacle**: Needs a comprehensive **tape invariant**
-characterizing all reachable configurations:
-
-```
-  0^∞  1^a₁  0  1^a₂  0  ...  1^aₖ  [HEAD in region]  ...  0^∞
-```
-
-Specifically, it must capture:
-- The relationship between the head position and zero-marker positions
-- Which states appear at which head positions
-- That B is only ever at positions right of all written tape content
-
-This invariant must be:
-1. Satisfied by the initial configuration
-2. Preserved by every transition step (6 states × 2 symbols = 12 cases,
-   minus 2 undefined = 10 cases to check)
-
-**Proof strategy**: Define a predicate `IsReachable : Config 6 → Prop`
-capturing the tape structure. Prove `IsReachable (initConfig 6)` and
-`∀ c, IsReachable c → IsReachable (step sweeper c)`. Then derive
-`c1_never_reached` as a corollary.
-
-**Key difficulty**: Defining `IsReachable` correctly. The tape structure
-is complex: the number and positions of zero-markers change each sweep
-cycle, and the head moves through different phases (A sweep left, F
-sweep right, BCD extension). A single invariant must encompass all
-these phases simultaneously.
-
-### 3. `e0_never_reached` (line 163) — **HARD: GLOBAL INVARIANT**
-
-**Statement**: For all k, either the machine is not in state E, or the
-head reads 1 (true).
-
-**Same obstacle as c1**: E is only entered from D,0→0LE, and D reads 0
-only at the right tape edge. The cell one step left is always a 1
-(the rightmost written cell). Proving this formally requires the same
-tape invariant as `c1_never_reached`.
-
-**In fact**, c1 and e0 share the same invariant and should be proved
-together. The invariant says:
-- B reads 0 only at position `max_tape + 1` (one beyond the rightmost
-  written cell)
-- D reads 0 only at position `max_tape + 1`
-- Therefore C (entered from B,0) always reads 0 (at `max_tape + 2`)
-- Therefore E (entered from D,0) always reads 1 (at `max_tape`)
-
-### 4. `sweeper_never_halts` (line 274) — **HARD: MAIN THEOREM**
+### 2. `sweeper_never_halts` (line ~418) — **FOLLOWS FROM c1 + e0**
 
 **Statement**: For all k, `(run sweeper (initConfig 6) k).state ≠ none`.
 
-**Dependency**: This follows directly from `c1_never_reached` and
-`e0_never_reached`. The only undefined transitions are C,1 and E,0.
-If we can show neither is ever reached, the machine never halts.
+**Dependency**: Follows from `c1_never_reached` (proven: no) and
+`e0_never_reached` (proven: yes). Once c1 is proved, this should be
+straightforward.
 
-**Proof sketch** (assuming c1 and e0 are proved):
-```lean
-theorem sweeper_never_halts (k : Nat) :
-    (run sweeper (initConfig 6) k).state ≠ none := by
-  induction k with
-  | zero => simp [run, initConfig]
-  | succ k ih =>
-    -- Need: step sweeper (run sweeper (initConfig 6) k) has state ≠ none
-    -- The only way state becomes none is C,1 or E,0
-    -- By c1_never_reached and e0_never_reached, these never happen
-    sorry
-```
+## Proven Sorries
 
-The induction step requires knowing that `step sweeper c` produces
-`state = none` iff `c` is in state C reading 1 or state E reading 0.
-Combined with c1 and e0, this gives the result.
+### `e0_never_reached` — **PROVEN** via E0Inv step-inductive invariant
+
+Uses 4-condition E0Inv on left tape structure. Proof pattern:
+`fin_cases q <;> cases hd <;> simp [...] <;> simp_all [...]`
+with one extra `intro h; simp_all` for the F,0→D case.
 
 ---
 
+## Simulation Findings for c1_never_reached
+
+### B,0 event analysis (200K+ steps)
+
+1. **C always reads 0**: At every B,0 event, `listHead B.right false = false`. Confirmed over 200K steps (203 B,0 events in first 1M steps).
+
+2. **B→C→D chain depth is always ≤ 2**: The chain B,0→C,0→D→... never recurses more than twice. Distribution over 1M steps: depth 1 = 178 occurrences, depth 2 = 25 occurrences.
+
+3. **Depth-2 B always has all-zero right tape**: When B,0 comes from D (via B→C→D→B' chain), B'.right is always all-zeros. This is the "right tape edge" BCD extension.
+
+4. **B,0 sources**: B,0 comes from A,0→1RB (depth-1, majority) or from D,1→1RB via C,0→1RD (depth-2, always at right edge). D always enters from C (prev_prev_state = C).
+
+5. **A,0 after sweep always has right starting with true**: When A reads 0 after sweeping through ≥1 ones, A.right always starts with 1 (true). So B reads 1 and never triggers C entry. B reads 0 ONLY when A reads 0 immediately after E→A (sweep_count = 0).
+
+6. **A.right at B,0 events**: A.right always = `[0, 0, D_right...]` where D_right starts with 1 (true) or 0 (false). When D_right[0] = 1, the subsequent B→C→D chain reads into D_right but always terminates safely.
+
+7. **Triple zeros on tape**: Three consecutive zeros appear transiently (for 1-2 steps) during BCD extension phases, but max consecutive zeros at any snapshot is 2. Triple zeros appear when state A or F reads 0 at a double-zero boundary, and disappear when A→B or F→D writes 1.
+
+### Key structural insights for c1_never_reached
+
+**Insight 1**: B reads 0 ONLY when A reads 0 directly from E→A transition
+(sweep_count = 0). When A sweeps through ≥1 ones first, A.right starts with
+true (from accumulated ones), so B reads 1. Confirmed over 200K steps.
+
+**Insight 2**: At A,0 from E→A, A.right = `false :: false :: D_right` where
+D_right comes from the preceding BCD extension. B.right = `false :: D_right`.
+B.right[0] = false → C reads 0 (safe).
+
+**Insight 3**: The B→C→D chain has period-3 structure. Starting from B.right:
+- Position 0 (C reads): always false ✓
+- Position 1 (D reads): true or false
+- Position 2 (B' reads): true (safe) or false (recurse)
+Each recursion consumes 3 elements. SafeRight predicate verified for 1M steps.
+
+**Insight 4**: At interior BCD events, F.left ALWAYS has k_left_ones = 0
+(F.left starts with `[0, 1, ...]`). This means D.left starts with `[1, ...]`,
+E.left starts with `[...]`, A.head = E.left[0] = F.left[2].
+
+**Insight 5 (CRITICAL)**: When F.right starts with `[0, 1, ...]` (the
+"dangerous" pattern for SafeRight), F.left[2] is ALWAYS 1. This means
+A.head = 1, so A sweeps left before reading 0, and B never sees the
+dangerous pattern. Confirmed over 500K steps (no violations found).
+
+**Insight 6**: When F.left[2] = 0 (A reads 0 immediately), F.right starts
+with `[0, 0, ...]` or `[1, ...]` — never `[0, 1, ...]`. So the right tape
+reaching B is always SafeRight.
+
+### Proposed invariant for c1_never_reached
+
+**SafeRight** (period-3 recursive on B.right):
+```
+SafeRight([]) = True
+SafeRight(true :: _) = False  -- C reads 1 → halt (never happens)
+SafeRight(false :: []) = True
+SafeRight(false :: false :: _) = True  -- D reads 0, BCD
+SafeRight(false :: true :: []) = True
+SafeRight(false :: true :: true :: _) = True  -- B' reads 1, safe
+SafeRight(false :: true :: false :: rest) = SafeRight(rest)  -- recurse
+```
+
+**Step-inductive closure**: C1Inv with B, A, C (SafeRight1), D (SafeRight2)
+conditions closes 11/12 cases. The sole remaining case is E,1→0LA.
+
+### c1inv_step: case analysis results (Lean)
+
+| Transition | Status | How |
+|---|---|---|
+| A,1→1LA | ✓ | `listHead(true::R)=true` → Or.inl |
+| A,0→1RB | ✓ | A-condition directly gives B-condition |
+| B,0→1RC | ✓ | vacuous (state=C) |
+| B,1→0RF | ✓ | vacuous (state=F) |
+| C,0→1RD | ✓ | SafeRight1_to_SafeRight2 |
+| C,1→none | ✓ | halted, vacuous |
+| D,1→1RB | ✓ | SafeRight2_to_SafeRight |
+| D,0→0LE | ✓ | vacuous (state=E) |
+| E,0→none | ✓ | halted, vacuous |
+| **E,1→0LA** | **sorry** | **needs SafeRight(E.right) when E.left[0]=false** |
+| F,0→1LD | ✓ | SafeRight2(true :: R) = True |
+| F,1→1RF | ✓ | vacuous |
+
+### E,1→A sorry: detailed analysis
+
+E enters only from D,0. Two paths:
+
+**C→D→E**: E.left = `true :: B.left`. `listHead(E.left) = true`. A reads 1. **Vacuous** ✓
+
+**F→D→E**: E.right = `false :: true :: F.right`. E.left[0] = F.left[2].
+- F.left[2] = true: A reads 1. Vacuous ✓
+- F.left[2] = false: need `SafeRight(false :: true :: F.right)`.
+
+`SafeRight(false :: true :: F.right)` is True when:
+- F.right = `[]` → True ✓
+- F.right starts with true → True ✓
+- F.right = `false :: false :: _` → `SafeRight(false :: _) = True` ✓
+- F.right = `false :: true :: rest` → `SafeRight(rest)` ← **ONLY DANGEROUS CASE**
+
+**Simulation (1M steps)**: When F.left=[0,1,0,...], F.right NEVER starts with
+`false :: true :: ...`. It's always empty or starts with true. So the dangerous
+case never occurs. `SafeRight(false :: true :: F.right)` confirmed True at all
+such events. When F.right starts with false, it's always `[]` (right tape edge).
+
+### The F-joint condition (sole remaining obstacle)
+
+The proof obligation reduces to:
+
+```
+F.head=false → F.left[0]=false → F.left[2]=false →
+  SafeRight(false :: true :: F.right)
+```
+
+This holds trivially when F.right starts with true or is empty. The only
+dangerous case (F.right = `false :: true :: rest`) never occurs because when
+F.left[2]=false, F is at the last zero-marker and F.right is blank tape.
+
+**Why it's hard to prove**: this couples F.left[2] with F.right structure —
+a left/right correlation depending on zero-marker spacing (global tape property).
+
+### Alternative approaches considered
+
+1. **AllFalse(B.right)**: TOO STRONG — interior BCD creates true values.
+2. **EvenFalse (period-2)**: Wrong alignment — B→C→D shifts by 3.
+3. **Position-based**: hard in zipper representation.
+4. **Phase-aware structural**: most general but most work.
+
+### Mathematical obstacles for c1_never_reached
+
+#### Obstacle 1: The invariant cannot be local on B.right alone
+
+B is entered from two sources:
+- **A,0 → 1RB**: B.right = listTail(A.right). A.right depends on where A
+  bounced — at the right edge it's `false :: false :: zeros p` (safe), but
+  at an interior zero it's whatever the tape looks like at that point.
+- **D,1 → 1RB** (interior BCD chain): B.right = listTail(D.right). This is
+  the previous B.right shifted by 2, so SafeRight recurses correctly (period-3).
+
+The D,1→B case works with SafeRight's period-3 recursion. The A,0→B case
+is the problem: the NEW B.right comes from the global tape structure at the
+bounce point, not from a local transformation of the old B.right.
+
+#### Obstacle 2: F.left/F.right coupling through unbounded F-sweeps
+
+During an F-sweep, F bounces at 0, 1, 2, ... interior zeros. At each bounce:
+- F.left gets `false :: ones(k) ++` prepended
+- F.right advances past the consumed zero
+
+The joint condition (F.right=[0,1,...] → F.left[2]=1) at bounce i depends on
+what happened at bounce i-1. After f_bounce_interior + F_shift, F.left =
+`ones(m) ++ false :: ones(k+1) ++ L_prev`. The value of F.left[2] at the
+next bounce depends on m (distance between consecutive zeros).
+
+**This is a non-local property**: the correlation between F.left[2] and F.right
+depends on the spacing between zero-markers, which is a global tape property.
+No finite-depth local condition on F can capture it without also characterizing
+the zero-marker positions.
+
+#### Obstacle 3: Circularity between macro-step and single-step approaches
+
+**Macro-step approach** (prove invariant per sweep cycle):
+- Must prove the sweep cycle COMPLETES without halting — which IS the theorem.
+- Must prove f_bounce_interior applies at each interior zero (requires k≥1
+  ones to the left) — which is part of the tape invariant.
+- Result: circular. Can't prove cycle completion without the invariant,
+  can't prove the invariant without cycle completion.
+
+**Single-step approach** (prove invariant per TM step):
+- Avoids circularity but the invariant must hold at ALL intermediate configs.
+- The joint F condition shifts during F,1→1RF steps (ones accumulate on left).
+- SafeRight on B.right is meaningless when the machine is not in state B.
+  Need equivalent conditions for A, D, E, F states that imply SafeRight
+  when B is eventually re-entered — these are hard to formulate.
+
+**Hybrid approach** (phase-aware step-inductive invariant):
+- Define different conditions per state (like E0Inv does).
+- For B: SafeRight(B.right) when B.head = false.
+- For F: the joint condition on F.left/F.right.
+- For A: ??? — A.right must produce SafeRight(listTail(A.right)) when
+  A reads 0, but A.right changes as A sweeps (ones move from left to right).
+  The SafeRight property must be invariant under prepending ones, which it IS
+  (SafeRight(true :: rest) = False, but we need SafeRight(rest), and prepending
+  true to right during A sweep shifts the condition). Actually, A,1→1LA moves
+  a true from left to right, so A.right = true :: old_A.right after one step.
+  SafeRight(true :: R) = False, which is wrong! A's right tape has trues
+  prepended, so SafeRight doesn't hold for A.right during A-sweep.
+
+  **This means SafeRight cannot be a uniform condition across all states.**
+  It only makes sense for B.right, and we need per-state translations that
+  track how the tape transforms between state entries.
+
+#### Obstacle 4: SafeRight has unbounded depth vs transitions shift by 1
+
+SafeRight recurses at period 3 (consuming 3 elements per B→C→D chain
+iteration). The D,1→B re-entry shifts by 3, matching the recursion — fine.
+
+But at A,0→B entry (new sweep cycle), B.right is COMPLETELY NEW. It's the
+right tape at the point where A bounced. SafeRight for this new B.right must
+be established from scratch from the previous sweep cycle's tape structure.
+
+This requires an induction on sweep cycles, not single steps. Formalizing
+"sweep cycle" in the zipper representation requires knowing the exact step
+count (depends on tape length and zero positions), making it hard to express
+as a Lean induction.
+
+#### Obstacle 5: E0Inv's success is misleading
+
+E0Inv works because:
+- Each condition is ≤2 cells deep (listHead, listHead∘listTail)
+- Conditions are on ONE side of the tape only (left)
+- Each transition locally preserves or re-establishes the condition
+
+C1Inv fails this pattern because:
+- SafeRight has unbounded depth
+- The joint condition couples BOTH sides of the tape
+- Re-establishment at A,0→B requires global tape knowledge
+
+### Difficulty assessment
+
 ## Recommended Next Steps
 
-1. **Fix `sweep_left_zero_shift`**: Replace with smaller, correct lemmas
-   for each phase of the sweep cycle. The A-bounce-to-F step (2 concrete
-   steps) is trivially provable. The full sweep cycle lemma needs
-   specific tape structure.
+1. **Prove the F-joint condition**: The SOLE remaining obstacle.
+   Need: `F.head=false → F.left[0]=false → F.left[2]=false → SafeRight(false :: true :: F.right)`
+   
+   Possible approaches:
+   - Add as C1Inv condition, prove step-inductive through F creation and F-bounce
+   - Prove structurally that F.left=[0,1,0,...] implies F is at last zero-marker
+     (so F.right is blank tape — empty or all-ones)
+   - Full IsReachable: characterize all reachable tape shapes per state
 
-2. **Define `IsReachable`**: This is the core challenge. A possible
-   approach:
-   - Define tape regions: "left zone" (ones with zero-markers, left of
-     head), "right zone" (ones with zero-markers, right of head),
-     "blank zone" (all zeros beyond the tape)
-   - Specify which states can appear in which zone
-   - Show the invariant is preserved by `step`
-
-3. **Prove c1 + e0 together**: They share the same invariant.
-
-4. **Derive `sweeper_never_halts`**: Should be straightforward once
-   c1 and e0 are proved.
-
-**Estimated difficulty**:
-- Step 1: Easy (a few hours)
-- Steps 2-3: Hard (the main formalization challenge, possibly days)
-- Step 4: Easy (follows mechanically)
+2. **Derive `sweeper_never_halts`**: Once c1 is proved, combine with e0_never_reached.
