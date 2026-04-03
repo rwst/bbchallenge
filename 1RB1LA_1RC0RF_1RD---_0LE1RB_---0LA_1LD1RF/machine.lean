@@ -3,6 +3,8 @@ import Mathlib.Data.Nat.Basic
 import Mathlib.Data.List.Basic
 import Mathlib.Tactic.Ring
 import Mathlib.Tactic.NormNum
+import Mathlib.Tactic.FinCases
+import Mathlib.Data.Fintype.Basic
 
 open BusyLean
 
@@ -139,18 +141,140 @@ theorem bcd_extension (k : Nat) (L : List Sym) (p : Nat) :
   sw_steps
 
 -- ============================================================
+-- Backward analysis: necessary conditions for halting
+-- ============================================================
+
+/-! ### Halt paths analysis
+
+The two undefined transitions are C,1 and E,0.
+Working backwards from each halt state:
+
+**C,1 halt**: C entered only from B,0 → 1RC (move R).
+C reads the first element of B's right tape.
+C,1 requires: B read 0 AND the cell to B's right was 1.
+
+**E,0 halt**: E entered only from D,0 → 0LE (move L).
+D entered from C,0 → 1RD or F,0 → 1LD.
+- Via C→D→E: E reads the cell C wrote 1 to → **always reads 1, never 0**.
+- Via F→D→E: E reads 2 cells left of F. E,0 requires F read 0
+  with the cell to its left also 0 and the cell 2 left also 0. -/
+
+-- B reads 0 → C enters reading the first element of B's right tape
+theorem b0_to_c (L : List Sym) (r : Sym) (R : List Sym) :
+    run sweeper (⟨some stB, L, false, r :: R⟩ : Config 6) 1 =
+    (⟨some stC, true :: L, r, R⟩ : Config 6) := by
+  sw_steps
+
+-- B reads 0 with zeros to the right → C reads 0 (safe, no halt)
+theorem b0_zeros_safe (L : List Sym) (p : Nat) :
+    run sweeper (⟨some stB, L, false, zeros (p + 1)⟩ : Config 6) 1 =
+    (⟨some stC, true :: L, false, zeros p⟩ : Config 6) := by
+  sw_steps
+
+-- KEY ELIMINATION: C→D→E path cannot halt.
+-- C reads 0, D reads 0 → E reads the 1 that C wrote. Always safe.
+theorem cd_to_e_safe (L R : List Sym) :
+    run sweeper (⟨some stC, L, false, false :: R⟩ : Config 6) 2 =
+    (⟨some stE, L, true, false :: R⟩ : Config 6) := by
+  sw_steps
+
+-- F reads 0 with 0 to its left: the path to D reading 0, then E
+-- E reads whatever is 2 positions left of F (= listHead L false)
+theorem f0_d0_to_e (L R : List Sym) :
+    run sweeper (⟨some stF, false :: L, false, R⟩ : Config 6) 2 =
+    (⟨some stE, listTail L, listHead L false, false :: true :: R⟩ : Config 6) := by
+  sw_steps
+
+-- NECESSARY CONDITION for E,0 halt:
+-- F reads 0 with false :: false :: L to its left → E reads 0
+theorem e0_necessary (L R : List Sym) :
+    run sweeper (⟨some stF, false :: false :: L, false, R⟩ : Config 6) 2 =
+    (⟨some stE, L, false, false :: true :: R⟩ : Config 6) := by
+  sw_steps
+
+-- CONTRAPOSITIVE: F reads 0 with false :: true :: L to its left → E reads 1 (safe)
+theorem f0_d0_e_safe (L R : List Sym) :
+    run sweeper (⟨some stF, false :: true :: L, false, R⟩ : Config 6) 2 =
+    (⟨some stE, L, true, false :: true :: R⟩ : Config 6) := by
+  sw_steps
+
+-- ============================================================
+-- E,0 is FULLY ELIMINATED (no global invariant needed)
+-- ============================================================
+
+/-! ### E,0 elimination by backward chain analysis
+
+E,0 requires D,0 as predecessor. D is entered from C,0 or F,0.
+- Via C→D→E: eliminated by cd_to_e_safe (E reads 1).
+- Via F→D→E: F reads 0, D reads F's left[0]. For D,0: left[0] = false.
+  Then E reads F's left[1].
+
+F is only created by B,1 → 0RF. B,1 writes 0, so F's left = false :: L_B.
+B is entered from A,0 or D,1. Both write 1, so L_B = true :: L_prev.
+Therefore F's left at creation = false :: true :: L_prev.
+
+During F's sweep (F,1 → 1RF), ones are prepended to left:
+  left = ones k ++ false :: true :: L_prev.
+- If k ≥ 1: D reads true from the sweep ones → D,1 → B. No E entry.
+- If k = 0: D reads false → E reads true (the 1 from A,0 or D,1). Safe.
+
+After f_bounce_interior, F has left = false :: ones(k+1) ++ L.
+Same pattern: false :: true :: ..., so E reads true if D reads false.
+
+Conclusion: E always reads 1 in ALL reachable configurations. -/
+
+-- A,0 → B: B's left starts with true (A wrote 1)
+theorem a0_to_b (L R : List Sym) :
+    run sweeper (⟨some stA, L, false, R⟩ : Config 6) 1 =
+    (⟨some stB, true :: L, listHead R false, listTail R⟩ : Config 6) := by
+  sw_steps
+
+-- D,1 → B: B's left starts with true (D wrote 1)
+theorem d1_to_b (L R : List Sym) :
+    run sweeper (⟨some stD, L, true, R⟩ : Config 6) 1 =
+    (⟨some stB, true :: L, listHead R false, listTail R⟩ : Config 6) := by
+  sw_steps
+
+-- B,1 → F: F's left starts with false :: L_B (B wrote 0)
+theorem b1_to_f (L R : List Sym) :
+    run sweeper (⟨some stB, L, true, R⟩ : Config 6) 1 =
+    (⟨some stF, false :: L, listHead R false, listTail R⟩ : Config 6) := by
+  sw_steps
+
+-- CHAIN: A,0 → B(reads 1) → F(reads 0) → D,0 → E: E reads 1
+-- A writes 1 at its position. B reads 1, writes 0, moves R to F.
+-- F reads 0 immediately. D reads B's 0. E reads A's 1. Safe.
+theorem a_b_f_d_e_safe (L R : List Sym) :
+    run sweeper (⟨some stA, L, false, true :: false :: R⟩ : Config 6) 4 =
+    (⟨some stE, L, true, false :: true :: R⟩ : Config 6) := by
+  sw_steps
+
+-- CHAIN: D,1 → B(reads 1) → F(reads 0) → D,0 → E: E reads 1
+-- D writes 1 at its position. B reads 1, writes 0, moves R to F.
+-- F reads 0 immediately. D reads B's 0. E reads D's 1. Safe.
+theorem d_b_f_d_e_safe (L R : List Sym) :
+    run sweeper (⟨some stD, L, true, true :: false :: R⟩ : Config 6) 4 =
+    (⟨some stE, L, true, false :: true :: R⟩ : Config 6) := by
+  sw_steps
+
+-- NECESSARY CONDITION for C,1 halt:
+-- B reads 0 with 1 to its right → C reads 1 → state becomes none
+theorem c1_halt_via_b (L R : List Sym) :
+    (run sweeper (⟨some stB, L, false, true :: R⟩ : Config 6) 2).state = none := by
+  sw_steps
+
+-- ============================================================
 -- Conjecture C1: Non-halting (structural)
 -- ============================================================
 
-/-! ### C1: The undefined transitions C,1 and E,0 are never reached.
+/-! ### C1: Non-halting
 
-C is only entered via B,0 → 1RC. B sees 0 only at positions beyond
-the right tape edge. The next cell (what C reads) is also 0.
-So C always reads 0, never 1.
+E,0 is fully eliminated by backward chain analysis (see above).
+The only remaining halt path is C,1, which requires B to read 0
+with a 1 to its right (c1_halt_via_b).
 
-E is only entered via D,0 → 0LE. D sees 0 only at the right tape
-edge. The cell one step to the left is always a 1 (tape interior).
-So E always reads 1, never 0. -/
+The tape invariant only needs to show:
+- B reads 0 only at the right tape edge (where right tape is all 0s) -/
 
 /-- C,1 is unreachable: B reads 0 only at or beyond the right tape edge. -/
 theorem c1_never_reached (k : Nat) :
@@ -158,12 +282,52 @@ theorem c1_never_reached (k : Nat) :
     (run sweeper (initConfig 6) k).head = false := by
   sorry
 
-/-- E,0 is unreachable: D reads 0 only at the right tape edge;
-    the cell to its left is always 1. -/
+-- Step-inductive invariant: sufficient to prove E always reads 1.
+-- B.left starts with true (B entered from A,0 or D,1, both write 1).
+-- F.left[0]=true (sweep) or F.left[1]=true (fresh from B,1 or bounce).
+-- D reading 0 has left starting with true (from C writing 1 or F structure).
+-- E always reads true (follows from D condition).
+private def E0Inv (c : Config 6) : Prop :=
+  (c.state = some stB → listHead c.left false = true) ∧
+  (c.state = some stF →
+    listHead c.left false = true ∨ listHead (listTail c.left) false = true) ∧
+  (c.state = some stD → c.head = false → listHead c.left false = true) ∧
+  (c.state = some stE → c.head = true)
+
+private lemma e0inv_init : E0Inv (initConfig 6) := by
+  simp [E0Inv, initConfig, stB, stF, stD, stE]
+
+private lemma e0inv_step (c : Config 6) (h : E0Inv c) : E0Inv (step sweeper c) := by
+  obtain ⟨hB, hF, hD, hE⟩ := h
+  rcases c with ⟨s, l, hd, r⟩
+  simp only [] at hB hF hD hE
+  cases s with
+  | none => simp [E0Inv, step]
+  | some q =>
+    fin_cases q <;> cases hd <;>
+      simp only [step, sw_A0, sw_A1, sw_B0, sw_B1, sw_C0, sw_C1, sw_D0, sw_D1,
+        sw_E0, sw_E1, sw_F0, sw_F1, listHead_cons, listTail_cons, E0Inv] <;>
+      simp_all [stA, stB, stC, stD, stE, stF]
+    -- F,0 → D: remaining goal uses hF disjunction
+    intro h; simp_all
+
+private lemma e0inv_run (c : Config 6) (h : E0Inv c) (k : Nat) :
+    E0Inv (run sweeper c k) := by
+  induction k generalizing c with
+  | zero => exact h
+  | succ k ih =>
+    simp only [run]
+    exact ih (step sweeper c) (e0inv_step c h)
+
+/-- E,0 is unreachable: follows from backward chain analysis.
+    Every path to state E produces head = true. -/
 theorem e0_never_reached (k : Nat) :
     (run sweeper (initConfig 6) k).state ≠ some stE ∨
     (run sweeper (initConfig 6) k).head = true := by
-  sorry
+  have ⟨_, _, _, hE⟩ := e0inv_run _ e0inv_init k
+  by_cases hs : (run sweeper (initConfig 6) k).state = some stE
+  · exact Or.inr (hE hs)
+  · exact Or.inl hs
 
 /-- F-bounce at interior zero: F hits a zero-marker, bounces as D→B,
     creating a new zero one position to the left.

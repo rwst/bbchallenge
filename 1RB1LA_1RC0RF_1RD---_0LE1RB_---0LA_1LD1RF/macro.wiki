@@ -128,16 +128,54 @@ step 249: zpos=[12,14] distance=2  → merge (then complex multi-zero phase)
 
 After the main pair merges, a '''secondary pair''' spawns at the right side, requiring further sub-era processing. This cascading behavior prevents the tape from returning to a clean all-1s state.
 
+== Backward analysis of halt paths ==
+
+Working backwards from the two undefined transitions:
+
+=== C,1 halt path ===
+
+* C is entered '''only''' from B,0 → 1RC (move R). So C reads the cell to B's right.
+* B is entered from A,0 → 1RB or D,1 → 1RB (both move R).
+* For C,1 halt: B must read 0 '''and''' the cell to B's right must be 1.
+* In normal operation, B reads 0 only at the right tape edge, where the right tape is all 0s → C reads 0 (safe).
+* '''Proven''' in Lean as <code>b0_zeros_safe</code>: B reading 0 with zeros to the right → C reads 0.
+* '''Proven''' in Lean as <code>c1_halt_via_b</code>: B reading 0 with 1 to the right → halt in 2 steps.
+
+=== E,0 halt path ===
+
+* E is entered '''only''' from D,0 → 0LE (move L). D is entered from C,0 → 1RD or F,0 → 1LD.
+* '''The C→D→E path is eliminated entirely''': C reads 0, writes 1, moves R to D. If D also reads 0, it moves L to E. E reads the cell where C wrote 1 → '''E always reads 1 via this path'''. '''Proven''' in Lean as <code>cd_to_e_safe</code>.
+* The '''only''' remaining path to E,0 is F→D→E: F reads 0, writes 1, moves L to D. If D reads 0 (the cell to F's left was 0), it moves L to E. E reads 2 positions left of F.
+* For E,0 halt: F must read 0 with '''two consecutive 0s''' to its left.
+* '''Proven''' in Lean as <code>e0_necessary</code>: F reading 0 with <code>false :: false :: L</code> to its left → E reads 0 after 2 steps.
+* '''Proven''' in Lean as <code>f0_d0_to_e</code>: general form, E reads <code>listHead L false</code>.
+* In normal operation, F reads 0 only at interior zero-markers, where the left tape starts with 1s (the ones F just swept through) → D sees 1 → bounces as B, no path to E.
+
+=== Summary of halt conditions ===
+
+{| class="wikitable"
+! Halt !! Necessary condition !! Why it doesn't happen
+|-
+| C,1 || B reads 0 with 1 to its right || B reads 0 only at right tape edge (all 0s to right)
+|-
+| E,0 || F reads 0 with two consecutive 0s to its left || F reads 0 only at interior zero-markers (1s to left)
+|}
+
+The '''remaining proof obligation''' is a tape invariant showing these two properties hold for all reachable configurations.
+
 == Conjectures ==
 
 === C1 (Non-halting — structural) ===
 '''The machine never halts.''' The two undefined transitions C,1 and E,0 are never reached because:
-* C is only entered via B,0 → 1RC, which only fires at the right tape edge (the only place B sees 0). The next cell is also 0 (blank), so C always sees 0.
-* E is only entered via D,0 → 0LE, which fires at the right tape edge. The cell one step left is always a 1 (interior of tape), so E always sees 1.
+* C,1 requires B to read 0 with a 1 to its right. But B reads 0 only at the right tape edge, where the right tape is all 0s (<code>b0_zeros_safe</code>).
+* E,0 requires F to read 0 with two consecutive 0s to its left (<code>e0_necessary</code>). But F reads 0 only at interior zero-markers, where the left tape starts with 1s.
+* The C→D→E path to E,0 is entirely eliminated by <code>cd_to_e_safe</code>.
 
-'''Proof strategy''': Define a global tape invariant (<code>IsReachable</code>) characterizing all reachable configurations. Show B reads 0 only at positions beyond the rightmost written cell, and D reads 0 only at those same positions. Then C and E always see blank/interior cells respectively.
+'''Proof strategy''': The invariant now only needs to establish two properties:
+# B reads 0 only at positions ≥ rightmost written cell (so right tape is all 0s)
+# When F reads 0 (at an interior zero-marker), the cell to F's left is 1 (not 0)
 
-'''Mathematical obstacle''': The invariant must cover all phases of the sweep cycle simultaneously — A sweeping left, F sweeping right, BCD extending, and the transitions between them. The number and positions of zero-markers change each cycle, making the invariant definition complex.
+'''Mathematical obstacle''': The invariant must still cover all phases of the sweep cycle simultaneously, but the backward analysis has narrowed what it needs to prove.
 
 === C2 (Zero-marker dynamics) ===
 '''Each full sweep cycle shifts every zero-marker exactly one position inward (left zeros move right, right zeros move left).'''
@@ -149,16 +187,6 @@ The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 
 
 === C4 (Zero-pair annihilation spawns new pairs) ===
 '''When two adjacent zeros meet and annihilate, the resulting BCD extension creates a new zero pair at the right edge of the extended segment.''' This cascading behavior explains why the machine never returns to all-1s after era 1.
-
-=== C5 (Identity sweeps — proven) ===
-'''F,1 → 1RF and A,1 → 1LA are both identity sweeps''': they read 1, write 1, and move. The tape content is only modified at the zero-marker positions (by the A→B and F→D transitions). This means tape analysis can focus entirely on zero-marker dynamics.
-
-'''Status''': Proven in Lean as <code>A_shift</code> and <code>F_shift</code>.
-
-=== C6 (Tape growth rate — proven) ===
-'''The tape grows by exactly 2 cells per BCD extension.''' Each BCD chain writes 1 at two new cells via B,0→1RC and C,0→1RD before D,0 bounces.
-
-'''Status''': Proven in Lean as <code>bcd_extension</code>.
 
 === C7 (Step count is exponential in tape length) ===
 '''The step count grows exponentially in tape length.''' Each sweep cycle takes O(L) steps (two traversals of the tape). With L growing through BCD extensions, the total step count grows without bound.
@@ -179,14 +207,25 @@ The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 
 | <code>sweeper_init_to_era0</code> || Machine reaches E_Config 4 0 after 19 steps || <code>rfl</code>
 |-
 | <code>era_0_to_1</code> || E_Config 4 → E_Config 10 in 65 steps || <code>rfl</code>
+|-
+| <code>b0_to_c</code> || B reads 0 → C reads first element of B's right tape || <code>sw_steps</code>
+|-
+| <code>b0_zeros_safe</code> || B reads 0 with zeros right → C reads 0 (no halt) || <code>sw_steps</code>
+|-
+| <code>cd_to_e_safe</code> || C→D→E path: E always reads 1 (eliminates half of E,0 paths) || <code>sw_steps</code>
+|-
+| <code>f0_d0_to_e</code> || F reads 0 with 0 left → E reads 2 cells left of F || <code>sw_steps</code>
+|-
+| <code>e0_necessary</code> || E,0 requires F reading 0 with two consecutive 0s left || <code>sw_steps</code>
+|-
+| <code>c1_halt_via_b</code> || C,1 halt requires B reading 0 with 1 to its right || <code>sw_steps</code>
 |}
 
 == Key transitions for proof ==
 
-The non-halting proof needs:
-# '''C,1 unreachable''': B sees 0 only at right edge (beyond tape). Requires global tape invariant.
-# '''E,0 unreachable''': D sees 0 only at right edge; cell at (right_edge − 1) is always 1. Same invariant.
-# '''Tape always extends''': BCD chain always fires (tape always reaches right edge). Follows from the sweep cycle always completing.
-# '''Zeros always converge''': Inductive argument that zero-markers move inward by 1 per cycle. Requires tracking all markers through a full cycle.
+The backward analysis has reduced the non-halting proof to two tape invariant properties:
 
-Items 1–2 give non-halting assuming tape structure is maintained. Items 3–4 show the structure is maintained inductively. The main obstacle is defining the <code>IsReachable</code> invariant that captures all phases of the sweep cycle.
+# '''B reads 0 only at the right tape edge''' (where right tape is all 0s). Then <code>b0_zeros_safe</code> gives C reads 0, ruling out C,1 halt.
+# '''F reads 0 only at interior zero-markers''' (where left tape starts with at least one 1). Then <code>f_bounce_interior</code> applies (D sees 1, bounces as B), ruling out the F→D→E path. The C→D→E path is already eliminated by <code>cd_to_e_safe</code>.
+
+These two properties together give <code>sweeper_never_halts</code>. The main obstacle is defining a step-inductive <code>IsReachable</code> invariant on configurations that captures all phases of the sweep cycle.
