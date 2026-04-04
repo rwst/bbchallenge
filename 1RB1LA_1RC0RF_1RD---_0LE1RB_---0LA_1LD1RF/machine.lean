@@ -1095,6 +1095,53 @@ theorem macro_multi_bounce_2 (a r rₙ : Nat) (L : List Nat) :
   rw [← List.append_assoc]
   exact (runs_cons₂ (r + 1) (a + 4) L).symm
 
+/-- Right-edge bounce with a single one: F sweeps through 1 one at the
+    right edge, bounces F→D→B→F→D→E→A. The output is M0_Config shape
+    (state A, head false). Requires k ≥ 0 (ones(k+1) in left). -/
+theorem F_bounce_single_one (k : Nat) (L : List Sym) :
+    run sweeper (⟨some stF, false :: ones (k + 1) ++ L, true, []⟩ : Config 6) 7 =
+    (⟨some stA, ones (k + 1) ++ L, false, [false, false, true]⟩ : Config 6) := by
+  sw_steps
+
+/-- Multi-run bounce to zero: 2-run case with second run = 1.
+    M0_Config (a::L) [r+3, 1] → M0_Config ((r+1)::(a+4)::L) [1] in r+16 steps. -/
+theorem macro_multi_bounce_2_to_zero (a r : Nat) (L : List Nat) :
+    run sweeper (M0_Config (a :: L) [r + 3, 1]) (r + 16) =
+    M0_Config ((r + 1) :: (a + 4) :: L) [1] := by
+  -- Unfold M0_Config and runs to raw tape
+  simp only [M0_Config_cons, runs_cons₂, runs_singleton]
+  rw [List.append_assoc, show [false] ++ ones 1 = [false, true] from rfl]
+  -- Phase 0: M0_to_F (5 steps: A→B→C→D→B→F)
+  rw [show r + 16 = 5 + (r + 11) from by omega,
+    run_add, M0_to_F r (runs (a :: L)) [false, true]]
+  -- Phase 1: F_shift through r ones (r+1 steps)
+  rw [show r + 11 = (r + 1) + (3 + 7) from by omega,
+    run_add, F_shift r (false :: true :: true :: true :: true :: runs (a :: L))
+                       [false, true]]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 2: f_bounce_interior at inter-run zero (3 steps)
+  rw [run_add, f_bounce_interior r
+    (false :: true :: true :: true :: true :: runs (a :: L)) [true]]
+  simp only [listHead_cons, listTail_cons, List.cons_append, List.nil_append]
+  -- Phase 3: F_bounce_single_one (7 steps)
+  -- Rewrite left to match F_bounce_single_one pattern
+  rw [show false :: (ones (r + 1) ++ false :: true :: true :: true :: true :: runs (a :: L)) =
+    false :: ones (r + 1) ++ (false :: true :: true :: true :: true :: runs (a :: L)) from by
+    rw [List.cons_append]]
+  rw [F_bounce_single_one r
+    (false :: true :: true :: true :: true :: runs (a :: L))]
+  -- Match M0_Config target
+  -- RHS right: false :: false :: ones 1 = [false, false, true]
+  simp only [ones_succ, ones_zero]
+  -- LHS/RHS left: rewrite tttt :: runs(a::L) = ones 4 ++ runs(a::L) = runs((a+4)::L)
+  congr 1
+  rw [show (true :: true :: true :: true :: runs (a :: L) : List Sym) =
+    ones 4 ++ runs (a :: L) from rfl]
+  rw [ones_append_runs, show 4 + a = a + 4 from by omega]
+  rw [show (false :: runs ((a + 4) :: L) : List Sym) =
+    [false] ++ runs ((a + 4) :: L) from rfl]
+  rw [← List.append_assoc]
+
 -- ============================================================
 -- Conjecture C3/C4: Era structure and growth
 -- ============================================================
@@ -1303,6 +1350,24 @@ theorem invariant_zero_two {a d : Nat} {L R : List Nat}
   obtain ⟨_, hR2⟩ := hR
   rw [AllGe1_cons] at hR2
   exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR2.2⟩⟩
+
+/-- Multi-run bounce (2-run, rₙ ≥ 2) preserves invariant. -/
+theorem invariant_multi_bounce_2 {a r rₙ : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [r + 3, rₙ + 2])) :
+    MacroInvariant (.M ((r + 1) :: (a + 4) :: L) (rₙ + 1) [1]) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL.2⟩⟩,
+         by omega, AllGe1_singleton (by omega)⟩
+
+/-- Multi-run bounce to zero (2-run, rₙ = 1) preserves invariant. -/
+theorem invariant_multi_bounce_2_to_zero {a r : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [r + 3, 1])) :
+    MacroInvariant (.M0 ((r + 1) :: (a + 4) :: L) [1]) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL.2⟩⟩,
+         AllGe1_singleton (by omega)⟩
 
 -- ============================================================
 -- Invariant prevents halting
