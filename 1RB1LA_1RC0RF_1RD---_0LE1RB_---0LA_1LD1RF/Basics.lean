@@ -224,4 +224,446 @@ The Lean formalization challenge is:
   1. Proving the multi-run bounce rule (B6) — needs induction on |R|
   2. Connecting macro-level invariant to TM-level non-halting
   3. The individual rule proofs (S1–S8, B1–B5) are DONE in machine.lean
+
+## 9. Multi-Run Bounce Rule (B6) — Detailed Proof Plan
+
+### 9a. What needs to be proved
+
+  M₀(a∷L, r₁∷r₂∷⋯∷rₙ)  with r₁ ≥ 3, n ≥ 2
+  ──────────────────────────────────────────────
+  ⟹ M(rev[rₙ₋₁,…,r₂, r₁−2, a+4] ++ L,  rₙ−1,  [1])     if rₙ ≥ 2
+  ⟹ M₀(rev[rₙ₋₁,…,r₂, r₁−2, a+4] ++ L,  [1])            if rₙ = 1
+
+### 9b. Available building blocks (all proven in machine.lean)
+
+  (i)   a0_to_b :  A,0 → B  (1 step)
+  (ii)  b1_to_f :  B,1 → F  (1 step)
+  (iii) d1_to_b :  D,1 → B  (1 step)
+  (iv)  F_shift(k, L, R) :  F sweeps right through k ones  (k+1 steps)
+  (v)   f_bounce_interior(k, L, R) :  F hits interior zero, bounces  (3 steps)
+        Input:  F, head=false, left = ones(k+1) ++ L, right = R
+        Output: F, head=listHead R, left = [false] ++ ones(k+1) ++ L,
+                right = listTail R
+  (vi)  f0_d0_to_e(L, R) :  F,0 → D,0 → E  (2 steps)
+  (vii) bcd_extension(k, L, p) :  B at right edge extends tape  (5 steps)
+
+### 9c. What happens at the TM level during multi-run bounce
+
+Starting from M₀(a∷L, [r₁, r₂, …, rₙ]) with r₁ ≥ 3:
+
+The raw TM config (via M0_Config_cons) is:
+  state = A,  head = false,
+  left  = runs(a∷L),
+  right = false :: false :: runs(r₁ ∷ r₂ ∷ ⋯ ∷ rₙ)
+
+#### Phase 0: Initial BCD (5 steps)
+  A,0 → B (1 step)       — a0_to_b
+  B reads first element of right tape.
+  Right tape = false :: false :: ones(r₁) ++ [false] ++ runs(r₂∷⋯)
+  B reads false → C,0 → D,0 → E,1 → A,1 → ...
+
+  Wait — this isn't right.  Let me re-derive.
+
+  Actually, looking at the existing macro_zero_bounce proof (line 862):
+  The sequence for M₀(a∷L, [z+4]) is:
+    A,0 → B          (a0_to_b, 1 step)
+    B,0 → C          (1 step, simp)
+    C,0 → D          (1 step, simp)
+    D,1 → B          (d1_to_b, 1 step)
+    B,1 → F          (b1_to_f, 1 step)
+    F_shift(z+1, ...)  (z+2 steps)
+    f_bounce_interior  (3 steps)
+    f0_d0_to_e         (2 steps)
+    E,1 → A           (1 step)
+
+  Total: 5 + (z+2) + 3 + 2 + 1 = z + 13 steps for R = [z+4].
+
+  For multi-run R = [r₁, r₂, …, rₙ]:
+  The first 5 steps are the SAME (A→B→C→D→B→F) since they only
+  depend on r₁ ≥ 3.  After these 5 steps:
+
+    state = F,  head = listHead(ones(r₁−3) ++ ...),
+    left  = ones(2) ++ false :: true :: runs(a∷L)
+          = [true, true, false, true] ++ runs(a∷L),
+    right = ones(r₁−3) ++ [false] ++ runs(r₂∷⋯∷rₙ)
+
+  Wait, I need to be more precise.  Let me trace carefully.
+
+  Starting config:
+    A, head=false, left=runs(a∷L), right=false::false::runs(r₁∷r₂∷⋯∷rₙ)
+
+  Since r₁ ≥ 3 and n ≥ 2:
+    runs(r₁∷r₂∷⋯∷rₙ) = ones(r₁) ++ [false] ++ runs(r₂∷⋯∷rₙ)
+
+  So right = false :: false :: ones(r₁) ++ [false] ++ runs(r₂∷⋯∷rₙ)
+
+  Step 1 (a0_to_b): B, head=false, left=true::runs(a∷L),
+                     right = false :: ones(r₁) ++ [false] ++ runs(r₂∷⋯)
+
+  Step 2 (B,0→C): C, head=false, left=true::true::runs(a∷L),
+                   right = ones(r₁) ++ [false] ++ runs(r₂∷⋯)
+
+  Step 3 (C,0→D): D, head=true, left=true::true::true::runs(a∷L),
+                   right = ones(r₁−1) ++ [false] ++ runs(r₂∷⋯)
+    (C reads 0, writes 1, moves R. D reads first of ones(r₁).)
+    Wait — ones(r₁) starts with true (since r₁ ≥ 3, ones(r₁) = true :: ones(r₁−1)).
+    So: C, head = true(!!), ...  C reads 1??
+
+  Hmm, that would be C,1 = HALT!  That can't be right.
+
+  Let me re-check.  The right tape after B,0→C is:
+    right = ones(r₁) ++ [false] ++ runs(r₂∷⋯)
+
+  No wait.  After step 1 (a0_to_b):
+    B, head = listHead(right₀) where right₀ = false :: false :: runs(...)
+    So B reads false (head of right₀).
+
+  Actually a0_to_b says:
+    run sweeper ⟨A, L, false, R⟩ 1 = ⟨B, true::L, listHead R false, listTail R⟩
+
+  Starting: A, left=runs(a∷L), head=false, right=false::false::runs(r₁∷⋯)
+  After a0_to_b: B, left=true::runs(a∷L), head=false, right=false::runs(r₁∷⋯)
+
+  B reads false → sw_B0 = 1RC.  B writes 1, moves R to C.
+  After B,0→C: C, left=true::true::runs(a∷L), head=listHead(false::runs(r₁∷⋯)),
+               right=listTail(false::runs(r₁∷⋯))
+  head = false (the first false before runs).
+  right = runs(r₁∷⋯) = ones(r₁) ++ [false] ++ runs(r₂∷⋯)
+
+  C reads false → sw_C0 = 1RD.  C writes 1, moves R to D.
+  After C,0→D: D, left=true::true::true::runs(a∷L),
+               head=listHead(ones(r₁) ++ ...),
+               right=listTail(ones(r₁) ++ ...)
+  head = true (first of ones(r₁) since r₁ ≥ 3, ones(r₁) starts with true)
+  right = ones(r₁−1) ++ [false] ++ runs(r₂∷⋯)
+
+  D reads true → sw_D1 = 1RB.  D writes 1, moves R to B.
+  After D,1→B: B, left=true::true::true::true::runs(a∷L),
+               head = listHead(ones(r₁−1) ++ [false] ++ ...),
+               right = listTail(ones(r₁−1) ++ ...)
+  Since r₁ ≥ 3, r₁−1 ≥ 2, so ones(r₁−1) starts with true.
+  head = true, right = ones(r₁−2) ++ [false] ++ runs(r₂∷⋯)
+
+  B reads true → sw_B1 = 0RF.  B writes 0, moves R to F.
+  After B,1→F: F, left=false::true::true::true::true::runs(a∷L),
+               head = listHead(ones(r₁−2) ++ [false] ++ ...),
+               right = listTail(ones(r₁−2) ++ ...)
+  Since r₁ ≥ 3, r₁−2 ≥ 1, ones(r₁−2) starts with true.
+  head = true, right = ones(r₁−3) ++ [false] ++ runs(r₂∷⋯)
+
+  So after 5 steps:
+    F, head=true,
+    left = false :: ones(4) ++ runs(a∷L)
+         = false :: true :: true :: true :: true :: runs(a∷L)
+    right = ones(r₁−3) ++ [false] ++ runs(r₂∷⋯∷rₙ)
+
+  This matches the macro_zero_bounce pattern! The first 5 steps
+  produce F sweeping right through ones(r₁−3).
+
+#### Phase 1: F_shift through first run (r₁−3 steps + 1)
+
+  F_shift(r₁−3, left, [false] ++ runs(r₂∷⋯)):
+    F sweeps through r₁−3 ones. After r₁−3+1 = r₁−2 steps:
+
+    F, head=false,
+    left = ones(r₁−2) ++ false :: true :: true :: true :: true :: runs(a∷L),
+    right = runs(r₂∷⋯∷rₙ)
+
+  F reads false — this is the zero-marker between run r₁ and run r₂.
+
+#### Phase 2: f_bounce_interior (3 steps)
+
+  f_bounce_interior(r₁−2, ..., runs(r₂∷⋯)):
+    F,0 → D,1 → B,1 → F.  After 3 steps:
+
+    F, head = listHead(runs(r₂∷⋯)),
+    left = false :: ones(r₁−1) ++ false :: true :: true :: true :: true :: runs(a∷L),
+    right = listTail(runs(r₂∷⋯))
+
+  Now runs(r₂∷⋯) = ones(r₂) ++ ... so head = true (since r₂ ≥ 1 under invariant).
+
+  Wait, but we're proving the RULE, not using the invariant.  The head is
+  listHead(runs(r₂∷⋯)) which is true when r₂ ≥ 1.
+
+  Actually, for the rule statement we don't need r₂ ≥ 1 — the rule holds
+  for ANY values.  The head will be whatever it is, and F will continue.
+
+  If r₂ ≥ 1: head = true, F sweeps right through ones(r₂−1) next.
+  If r₂ = 0: head = false, we'd get another f_bounce immediately
+    (but this case can't arise under the invariant).
+
+  For the GENERAL rule statement, we can handle both cases.  But for
+  simplicity, let's first assume all runs ≥ 1 (which is the invariant).
+
+  After this phase:
+    F, head=true (assuming r₂ ≥ 1),
+    left = false :: ones(r₁−1) ++ [false, true, true, true, true] ++ runs(a∷L)
+
+  The left tape now encodes: [r₁−2, a+4] (reversed from the output formula).
+  Specifically:
+    false :: ones(r₁−1) = false :: ones(r₁ - 2 + 1) = encoding of run r₁−2
+    then false (separator)
+    then ones(4) ++ runs(a∷L) = encoding of run a+4 followed by original L
+
+  Wait, let me be more careful about the left tape structure.
+
+  Left after phase 2:
+    false :: ones(r₁−1) ++ false :: true :: true :: true :: true :: runs(a∷L)
+  = false :: ones(r₁−2+1) ++ false :: ones(4) ++ runs(a∷L)
+
+  Hmm, ones(r₁−1) = ones(r₁−2) ++ [true] (since r₁ ≥ 3, r₁−1 ≥ 2).
+  No, ones(r₁−1) is just r₁−1 copies of true.
+
+  The left tape reads (from head outward):
+    [false, true^{r₁−1}, false, true^4] ++ runs(a∷L)
+
+  This is runs([r₁−2, a+4] ++ ...) when read as a run-length encoding?
+  No — the left tape in M_Config format includes the cursor ones.
+
+  Actually, the left tape will eventually become the LEFT of the output
+  M_Config.  But we need to trace through all the bounces first.
+
+#### Phase 3: Repeat for remaining runs (INDUCTION)
+
+  After processing run r₁, F is now sweeping through run r₂.
+  The pattern repeats:
+
+    F_shift through r₂−1 ones → F hits next zero →
+    f_bounce_interior → F starts on run r₃ → ...
+
+  After processing run rₖ (for k = 2, …, n−1):
+    F, head = true (start of run rₖ₊₁),
+    left = [false, ones(rₖ−1), false, ones(rₖ₋₁−1), …,
+            false, ones(r₁−1), false, ones(4)] ++ runs(a∷L),
+    right = listTail(runs(rₖ₊₁∷⋯∷rₙ))
+
+  Wait, this isn't quite right.  Let me think about it inductively.
+
+  **Key inductive hypothesis:**  After processing runs r₁ through rₖ,
+  the config is:
+
+    F, head = listHead(runs(rₖ₊₁∷⋯∷rₙ)),
+    left = runs_rev([rₖ−1, rₖ₋₁, …, r₂, r₁−2, a+4] ++ L)
+         ??? (need to work out the exact left tape encoding)
+    right = listTail(runs(rₖ₊₁∷⋯∷rₙ))
+
+  This is where the proof gets subtle.  The left tape accumulates
+  reversed runs.  Since runs are read nearest-to-head first, and
+  we're building the left tape by prepending, the runs naturally
+  reverse.
+
+#### Phase 4: Final run rₙ
+
+  After processing all interior runs, F sweeps through run rₙ.
+
+  If rₙ ≥ 2:  F_shift through rₙ−1 ones.  F hits the end of the tape
+  (right = []).  Then f_bounce_interior with R=[], followed by
+  f0_d0_to_e, then E,1→A.  Result: M_Config with cursor = rₙ−1.
+
+  If rₙ = 1:  F reads the single true, then immediately hits end.
+  f_bounce with R=[] → f0_d0_to_e → E,1→A.  But cursor would be
+  rₙ−1 = 0, giving M₀ config.
+
+### 9d. Proof structure: induction on number of runs
+
+The cleanest approach is to prove a LEMMA about what happens when F
+encounters a sequence of runs:
+
+  **Lemma (F_process_runs):**  For runs R = [r₁, r₂, …, rₙ] with
+  all rᵢ ≥ 1:
+
+    F, head=true, left=L, right=ones(r₁−1)++[false]++runs(r₂∷⋯∷rₙ)
+
+  evolves (after some steps) to:
+
+    Case n = 1, r₁ ≥ 2:
+      F, head=false, left=ones(r₁) ++ L, right=[]
+      (ready for f0_d0_to_e ending)
+
+    Case n ≥ 2:
+      F, head=true,
+      left = ones(rₙ₋₁) ++ [false] ++ ⋯ ++ ones(r₁) ++ L,
+      right = ones(rₙ−1) ++ ...
+      (recurse on remaining runs, accumulating reversed runs in left)
+
+  Actually, the cleanest decomposition is:
+
+  **Step lemma (F_sweep_and_bounce):**
+  F in the middle of a run, with more runs to the right:
+
+    F, head=true,
+    left = ones(k) ++ L,   (k ones accumulated so far)
+    right = ones(m) ++ [false] ++ R_rest
+
+  After m+1 (F_shift) + 3 (f_bounce_interior) = m+4 steps:
+
+    F, head = listHead(R_rest),
+    left = false :: ones(m+k+1) ++ L,
+    right = listTail(R_rest)
+
+  This is just F_shift composed with f_bounce_interior.
+  It's already essentially provable from existing lemmas:
+    1. F_shift(m, ones(k) ++ L, false :: R_rest)
+    2. f_bounce_interior(m+k, ..., R_rest)
+
+  **Then the multi-run bounce is:**
+
+  Phase 0:  5 initial steps (A→B→C→D→B→F), producing:
+    F, head=true,
+    left = false :: ones(4) ++ runs(a∷L),
+    right = ones(r₁−3) ++ [false] ++ runs(r₂∷⋯∷rₙ)
+
+  Phase 1..n−1:  Apply F_sweep_and_bounce (n−1) times.
+    After iteration k (processing run rₖ₊₁):
+      left accumulates: false :: ones(rₖ₊₁ − 1 + prev) ++ ...
+      right consumes one run
+
+  Phase n:  F reaches end of tape (right = []).
+    f_bounce_interior(k, L, [])
+    f0_d0_to_e
+    E,1 → A
+
+### 9e. Concrete proof plan for Lean
+
+**Step 1: Prove F_sweep_and_bounce lemma**
+
+  theorem F_sweep_and_bounce (m k : Nat) (L R : List Sym) :
+      run sweeper ⟨some stF, ones (k + 1) ++ L, true,
+                   ones m ++ [false] ++ R⟩ (m + 4) =
+      ⟨some stF, false :: ones (m + k + 2) ++ L,
+       listHead R false, listTail R⟩
+
+  Proof: compose F_shift(m, ones(k+1) ++ L, false :: R)
+         then f_bounce_interior(m + k + 1, ..., R)
+
+  The tricky part: after F_shift, the left tape is
+    ones(m + 1) ++ ones(k + 1) ++ L = ones(m + k + 2) ++ L
+  which needs ones_append: ones a ++ ones b = ones (a + b).
+
+**Step 2: Prove multi-run bounce by induction**
+
+  The induction is on the number of remaining runs.
+
+  Base case (n = 1, single run):  Already proven as macro_zero_bounce.
+
+  Inductive case:  Given M₀(a∷L, r₁∷r₂∷⋯∷rₙ) with n ≥ 2:
+
+    Phase 0: 5 initial steps → F sweeping through first run
+    Phase 1: F_sweep_and_bounce processes r₁ → F starts on r₂
+    Remaining: F sweeping through r₂∷⋯∷rₙ with accumulated left
+
+    This is now the SAME problem but with:
+      - One fewer run to process
+      - Updated left tape (r₁ absorbed)
+      - F already in motion (no Phase 0 needed)
+
+  So we need a SECONDARY induction lemma:
+
+  **Lemma (F_process_remaining_runs):**
+
+  For runs R = [r₁, …, rₙ] with n ≥ 1, starting from:
+    F, head=true,
+    left = ones(k) ++ L_acc,
+    right = ones(r₁−1) ++ match R_tail with
+                           | [] => []
+                           | _ => false :: runs(R_tail)
+    where R_tail = [r₂, …, rₙ]
+
+  Result (after some steps):
+    If rₙ ≥ 2:
+      ⟨some stA, ones(rₙ−1) ++ L_final, true, false :: false :: [true]⟩
+      = M_Config (output_L) (rₙ−1) [1]
+    If rₙ = 1:
+      ⟨some stA, L_final, false, false :: false :: [true]⟩
+      = M₀_Config (output_L) [1]
+
+    where L_final encodes the reversed processed runs.
+
+  Proof by induction on n (number of remaining runs):
+
+    Base (n = 1):
+      F sweeps through r₁−1 ones → hits end → f_bounce → f0_d0_to_e → E→A.
+      Uses F_shift + f_bounce_interior + f0_d0_to_e + E,1 step.
+
+    Step (n ≥ 2):
+      F sweeps through r₁−1 ones → F_sweep_and_bounce →
+      now in the same situation with n−1 runs remaining.
+      Apply induction hypothesis.
+
+**Step 3: Combine Phase 0 with F_process_remaining_runs**
+
+  theorem macro_multi_bounce (a : Nat) (L : List Nat)
+      (r₁ : Nat) (R_inner : List Nat) (rₙ : Nat)
+      (hr1 : r₁ ≥ 3) :
+      run sweeper (M0_Config (a :: L) (r₁ :: R_inner ++ [rₙ])) steps =
+      if rₙ ≥ 2 then
+        M_Config (R_inner.reverse ++ [r₁ - 2, a + 4] ++ L) (rₙ - 1) [1]
+      else
+        M0_Config (R_inner.reverse ++ [r₁ - 2, a + 4] ++ L) [1]
+
+  Proof:
+    1. Unfold M0_Config, apply the 5 initial steps
+    2. Apply F_process_remaining_runs with the full run list
+    3. Match output
+
+### 9f. Key auxiliary lemmas needed
+
+  1. ones_append : ones a ++ ones b = ones (a + b)
+     — Needed to merge ones during F_shift accumulation
+
+  2. runs encoding/decoding lemmas for the left tape
+     — The left tape accumulates runs in reverse order
+     — Need: false :: ones(r) ++ false :: ones(r') ++ ... = runs_reversed(...)
+
+  3. List.reverse properties for the output L
+
+  4. Step count arithmetic
+     — Total steps = 5 + Σᵢ (rᵢ−1+4) + final_phase
+     — Messy but straightforward with omega
+
+### 9g. Difficulty assessment
+
+  • F_sweep_and_bounce: EASY (compose two existing lemmas + ones_append)
+  • F_process_remaining_runs base case: MEDIUM (similar to macro_zero_bounce)
+  • F_process_remaining_runs inductive step: MEDIUM (compose F_sweep_and_bounce
+    with induction hypothesis, need careful left tape bookkeeping)
+  • Phase 0 combination: MEDIUM (5 explicit steps, similar to macro_zero_bounce)
+  • Left tape encoding: HARD (matching reversed runs to M_Config format)
+
+  The HARDEST part is getting the left tape to match M_Config's expected
+  format.  M_Config(L, c, R) has left = ones(c−1) ++ false :: runs(L).
+  The accumulated left tape from F processing has a different structure
+  that needs to be shown equal.
+
+### 9h. Alternative: prove only invariant preservation, not full rule
+
+  Instead of proving the EXACT output of multi-run bounce, we could prove:
+
+  theorem multi_bounce_invariant (a : Nat) (L : List Nat) (R : List Nat)
+      (hL : AllGe1 (a :: L)) (hR : AllGe1 R) (hR1 : R.head? = some r₁)
+      (hr1 : r₁ ≥ 3) (hlen : R.length ≥ 2) :
+      ∃ L' c R', run sweeper (M0_Config (a :: L) R) steps =
+                  (M_Config L' c R' ∨ M0_Config L' R') ∧
+                  AllGe1 L' ∧ (c ≥ 1) ∧ AllGe1 R'
+
+  This is WEAKER but SUFFICIENT for the non-halting proof.
+  It avoids computing the exact output (the hard part) and just shows
+  the invariant is preserved.
+
+  Proof sketch:  By the rule analysis in §4, multi-run bounce outputs
+  have: L' contains r₁−2 ≥ 1, a+4 ≥ 4, and unchanged interior runs
+  (≥ 1 by hypothesis).  R' = [1].  Cursor = rₙ−1.
+
+  This might be provable WITHOUT full induction — just by arguing about
+  the STRUCTURE of the rule's arithmetic.
+
+### 9i. Recommended approach
+
+  1. First prove ones_append and F_sweep_and_bounce (easy wins)
+  2. Then prove F_process_remaining_runs by induction (the core)
+  3. Wrap with Phase 0 to get the full multi-run bounce
+  4. If step 2 stalls on left tape encoding, fall back to 9h
+     (invariant-only approach)
+
+  Estimated effort: 150–300 lines of Lean, 2–4 proof sessions.
 -/
