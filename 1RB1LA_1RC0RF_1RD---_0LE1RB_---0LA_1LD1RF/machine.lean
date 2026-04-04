@@ -557,6 +557,306 @@ theorem f_bounce_interior (k : Nat) (L R : List Sym) :
   sw_steps
 
 -- ============================================================
+-- Macro rules (from equivalent TM analysis by dyuan01)
+-- ============================================================
+
+/-! ### Macro-level representation
+
+The equivalent TM `1RB0LE_1RC0RF_1RD---_0LA1RB_1RB1LE_1LD1RF` (same
+equivalence class) has known macro rules operating on run-length
+encoded tape [a₁, a₂, ..., aₖ] where each aᵢ counts consecutive 1s
+between zero-markers.
+
+Seven rules govern the dynamics:
+1. `[a, (b+2), c] → [a+1, (b), c+1]`  — main sweep cycle
+2. `[a, (1), R...] → [(a), 1, R...]`   — cursor shift left
+3. `[a, (0), b+3, ..., z+1] → [a+4, b+1, ..., (z), 1]`  — zero bounce (multi)
+4. `[a, (0), z+3] → [a+4, (z), 1]`     — zero bounce (single right run)
+5. `[a, (0), 2, b, R...] → [(a+3), b+1, R...]`  — zero with right run = 2
+6. `[(0), 1, z+1, R...] → Halt`        — C reads 1
+7. `[a, (0), 1] → [(a+5)]`             — era completion
+-/
+
+/-- Build tape segment from run lengths.
+    `runs [a, b, c] = ones a ++ [false] ++ ones b ++ [false] ++ ones c` -/
+def runs : List Nat → List Sym
+  | [] => []
+  | [n] => ones n
+  | n :: rest => ones n ++ [false] ++ runs rest
+
+@[simp] lemma runs_nil : runs [] = [] := rfl
+@[simp] lemma runs_singleton (n : Nat) : runs [n] = ones n := rfl
+@[simp] lemma runs_cons₂ (n m : Nat) (rest : List Nat) :
+    runs (n :: m :: rest) = ones n ++ [false] ++ runs (m :: rest) := rfl
+
+/-- The first element of a nonempty run list is always true (a 1). -/
+@[simp] lemma listHead_runs_pos (n : Nat) (R : List Nat) :
+    listHead (runs ((n + 1) :: R)) false = true := by
+  cases R with
+  | nil => simp [runs]
+  | cons m R' => simp [runs]
+
+@[simp] lemma runs_succ (n : Nat) (R : List Nat) :
+    runs ((n + 1) :: R) = true :: runs (n :: R) := by
+  cases R with
+  | nil => simp [runs, ones_succ]
+  | cons m R' => simp [runs, ones_succ]
+
+lemma runs_eq_ones_append (a : Nat) (L : List Nat) :
+    runs (a :: L) = ones a ++ match L with | [] => [] | _ => false :: runs L := by
+  cases L with
+  | nil => simp [runs]
+  | cons m L' => simp [runs]
+
+/-- Macro configuration: state A, head on rightmost 1 of cursor run.
+    `M_Config L c R` = state A, head=true, cursor run has c ones.
+    L = left runs (nearest first), R = right runs (nearest first).
+    Two boundary zeros separate cursor from right runs. -/
+def M_Config (L : List Nat) (c : Nat) (R : List Nat) : Config 6 :=
+  { state := some stA,
+    left := ones (c - 1) ++ match L with | [] => [] | _ => false :: runs L,
+    head := true,
+    right := false :: false :: runs R }
+
+/-- Macro configuration: state A reading 0 (cursor at zero between runs).
+    `M0_Config L R` = state A, head=false, cursor between left and right runs. -/
+def M0_Config (L : List Nat) (R : List Nat) : Config 6 :=
+  { state := some stA,
+    left := runs L,
+    head := false,
+    right := false :: false :: runs R }
+
+@[simp] lemma M_Config_nil (c : Nat) (R : List Nat) :
+    M_Config [] c R = ⟨some stA, ones (c - 1), true, false :: false :: runs R⟩ := by
+  simp [M_Config]
+
+@[simp] lemma M_Config_cons (a : Nat) (L : List Nat) (c : Nat) (R : List Nat) :
+    M_Config (a :: L) c R =
+    ⟨some stA, ones (c - 1) ++ false :: runs (a :: L), true, false :: false :: runs R⟩ := by
+  simp [M_Config]
+
+@[simp] lemma M0_Config_nil (R : List Nat) :
+    M0_Config [] R = ⟨some stA, [], false, false :: false :: runs R⟩ := by
+  simp [M0_Config]
+
+@[simp] lemma M0_Config_cons (a : Nat) (L : List Nat) (R : List Nat) :
+    M0_Config (a :: L) R =
+    ⟨some stA, runs (a :: L), false, false :: false :: runs R⟩ := by
+  simp [M0_Config]
+
+/-- Era start to first macro configuration.
+    E_Config n 0 (D at rightmost 1 of all-1s tape) evolves to M_Config in 5 steps. -/
+theorem era_to_macro (n : Nat) :
+    run sweeper (E_Config n 0) 5 = M_Config [] (n + 2) [] := by
+  simp only [E_Config, M_Config, runs_nil, zeros_zero, run, step, sw_D1, sw_B0, sw_C0, sw_D0,
+    sw_E1, listHead_cons, listTail_cons, listHead_nil, listTail_nil,
+    show n + 2 - 1 = n + 1 from by omega, ones_succ, List.append_nil]
+
+/-- Rule 1: Main sweep cycle, cursor ≥ 3 with neighbors.
+    Step count = 2c+7 where c is cursor run size.
+    [a, (c+3), d, R...] → [a+1, (c+1), d+1, R...] -/
+theorem macro_sweep (a c d : Nat) (L R : List Nat) :
+    run sweeper (M_Config (a :: L) (c + 3) (d :: R)) (2 * (c + 3) + 7) =
+    M_Config ((a + 1) :: L) (c + 1) ((d + 1) :: R) := by
+  -- Unfold M_Config to raw config
+  conv_lhs => rw [M_Config_cons, show c + 3 - 1 = c + 2 from by omega]
+  -- Decompose step count: (c+3) + 1 + 1 + (c+2) + 3 + 2 + 1 = 2c+13
+  rw [show 2 * (c + 3) + 7 = (c + 2 + 1) + (1 + (1 + ((c + 1 + 1) + (3 + (2 + 1))))) from by omega]
+  -- Phase 1: A_shift (c+3 steps)
+  rw [run_add, A_shift (c + 2) (false :: runs (a :: L)) (false :: false :: runs (d :: R))]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 2: a0_to_b (1 step)
+  rw [run_add, a0_to_b]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 3: b1_to_f (1 step)
+  rw [run_add, b1_to_f]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 4: F_shift (c+2 steps)
+  rw [run_add, F_shift (c + 1) (false :: true :: runs (a :: L)) (false :: false :: runs (d :: R))]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 5: f_bounce_interior (3 steps)
+  rw [run_add, f_bounce_interior (c + 1) (false :: true :: runs (a :: L)) (false :: runs (d :: R))]
+  simp only [listHead_cons, listTail_cons, List.cons_append,
+    List.nil_append, show c + 1 + 1 = c + 2 from by omega]
+  -- Phase 6: f0_d0_to_e (2 steps)
+  rw [run_add, f0_d0_to_e (ones (c + 2) ++ false :: true :: runs (a :: L)) (runs (d :: R))]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 7: E,1→A (1 step)
+  simp only [run, step, sw_E1, listHead_ones_succ, listTail_ones_succ]
+  -- Match target
+  conv_rhs => rw [M_Config_cons, show c + 1 - 1 = c from by omega, runs_succ, runs_succ]
+
+/-- Rule 1 (terminal): Sweep reducing cursor from 2 to 0.
+    [a, (2), d, R...] → M0[a+1, d+1, R...] -/
+theorem macro_sweep_to_zero (a d : Nat) (L R : List Nat) :
+    run sweeper (M_Config (a :: L) 2 (d :: R)) 11 =
+    M0_Config ((a + 1) :: L) ((d + 1) :: R) := by
+  simp only [M_Config, M0_Config, ones_succ, ones_zero, List.nil_append, List.cons_append, run,
+    step, sw_A0, sw_A1, sw_B1, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1, listHead_cons, listTail_cons,
+    show 2 - 1 = 1 from rfl, runs_succ]
+
+/-- Rule 1': Sweep with no neighbors (single-run config).
+    [(c+3)] → [1, (c+1), 1] -/
+theorem macro_sweep_solo (c : Nat) :
+    run sweeper (M_Config [] (c + 3) []) (2 * (c + 3) + 7) =
+    M_Config [1] (c + 1) [1] := by
+  -- Unfold M_Config to raw config
+  conv_lhs => rw [M_Config_nil, show c + 3 - 1 = c + 2 from by omega, runs_nil,
+    show ones (c + 2) = ones (c + 2) ++ ([] : List Sym) from (List.append_nil _).symm]
+  -- Decompose step count: (c+3) + 1 + 1 + (c+2) + 3 + 2 + 1 = 2c+13
+  rw [show 2 * (c + 3) + 7 = (c + 2 + 1) + (1 + (1 + ((c + 1 + 1) + (3 + (2 + 1))))) from by omega]
+  -- Phase 1: A_shift (c+3 steps)
+  rw [run_add, A_shift (c + 2) [] [false, false]]
+  simp only [listHead_nil, listTail_nil]
+  -- Phase 2: a0_to_b (1 step)
+  rw [run_add, a0_to_b]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 3: b1_to_f (1 step)
+  rw [run_add, b1_to_f]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 4: F_shift (c+2 steps)
+  rw [run_add, F_shift (c + 1) [false, true] [false, false]]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 5: f_bounce_interior (3 steps)
+  rw [run_add, f_bounce_interior (c + 1) [false, true] [false]]
+  simp only [listHead_cons, listTail_cons, List.cons_append,
+    List.nil_append, show c + 1 + 1 = c + 2 from by omega]
+  -- Phase 6: f0_d0_to_e (2 steps)
+  rw [run_add, f0_d0_to_e (ones (c + 2) ++ [false, true]) []]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 7: E,1→A (1 step)
+  simp only [run, step, sw_E1, listHead_ones_succ, listTail_ones_succ]
+  -- Match target
+  simp only [M_Config_cons, show c + 1 - 1 = c from by omega, runs_singleton,
+    ones_succ, ones_zero]
+
+/-- Rule 1' (terminal): Single-run sweep from cursor = 2.
+    [(2)] → M0[1, 1] -/
+theorem macro_sweep_solo_to_zero :
+    run sweeper (M_Config [] 2 []) 11 = M0_Config [1] [1] := by
+  rfl
+
+/-- Rule 2: Cursor shift left (cursor = 1).
+    [a+1, (1), d, R...] → [(a+1), 1, d, R...] -/
+theorem macro_shift (a d : Nat) (L R : List Nat) :
+    run sweeper (M_Config ((a + 1) :: L) 1 (d :: R)) 6 =
+    M_Config L (a + 1) (1 :: d :: R) := by
+  cases L with
+  | nil =>
+    simp only [M_Config_cons, M_Config_nil, ones_zero, List.nil_append, run, step,
+      sw_A0, sw_A1, sw_B1, sw_D0, sw_E1, sw_F0, listHead_cons, listTail_cons,
+      show (1 : Nat) - 1 = 0 from rfl, show a + 1 - 1 = a from by omega,
+      runs_succ, runs_singleton, runs_cons₂,
+      List.singleton_append]
+  | cons b L' =>
+    simp only [M_Config_cons, ones_zero, List.nil_append, run, step,
+      sw_A0, sw_A1, sw_B1, sw_D0, sw_E1, sw_F0, listHead_cons, listTail_cons,
+      show (1 : Nat) - 1 = 0 from rfl, show a + 1 - 1 = a from by omega,
+      runs_succ, runs_cons₂, List.singleton_append, List.append_assoc]
+
+/-- Rule 7: Era completion.
+    [a+1, (0), 1] → [(a+6)] -/
+theorem macro_era_complete (a : Nat) (L : List Nat) :
+    run sweeper (M0_Config ((a + 1) :: L) [1]) 8 =
+    M_Config L (a + 6) [] := by
+  cases L with
+  | nil =>
+    simp only [M0_Config_cons, M_Config_nil, runs_nil, runs_singleton, ones_zero, ones_succ,
+      run, step, sw_A0, sw_B0, sw_C0, sw_D0, sw_D1, sw_E1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil,
+      show a + 6 - 1 = a + 5 from by omega]
+  | cons b L' =>
+    simp only [M0_Config_cons, M_Config_cons, runs_cons₂, runs_singleton, runs_nil, ones_zero,
+      ones_succ, List.nil_append, List.cons_append, List.append_assoc, run, step, sw_A0, sw_B0,
+      sw_C0, sw_D0, sw_D1, sw_E1, listHead_cons, listTail_cons, listHead_nil, listTail_nil,
+      show a + 6 - 1 = a + 5 from by omega, runs_succ]
+
+/-- Rule 4: Cursor at 0, single right run ≥ 4, result cursor ≥ 1.
+    [a, (0), z+4] → [a+4, (z+1), 1] -/
+theorem macro_zero_bounce (a z : Nat) (L : List Nat) :
+    run sweeper (M0_Config (a :: L) [z + 4]) (z + 13) =
+    M_Config ((a + 4) :: L) (z + 1) [1] := by
+  -- Unfold M0_Config
+  simp only [M0_Config_cons, runs_singleton]
+  -- Decompose: 1 + 1 + 1 + 1 + 1 + (z+2) + 3 + 2 + 1
+  rw [show z + 13 = 1 + (1 + (1 + (1 + (1 + ((z + 1 + 1) + (3 + (2 + 1))))))) from by omega]
+  -- Phase 1a: A,0→B (1 step)
+  rw [run_add, a0_to_b]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 1b: B,0→C (1 step via simp)
+  rw [run_add]
+  simp only [run, step, sw_B0, listHead_cons, listTail_cons]
+  -- Phase 1c: C,0→D (1 step via simp)
+  rw [run_add]
+  simp only [run, step, sw_C0, listHead_cons, listTail_cons, listHead_ones_succ]
+  -- Phase 1d: D,1→B (1 step)
+  rw [run_add, d1_to_b]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 1e: B,1→F (1 step)
+  rw [run_add, b1_to_f]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 2: F_shift (z+2 steps) — right tape is ones(z+1), append []
+  rw [show ones (z + 1) = ones (z + 1) ++ ([] : List Sym) from (List.append_nil _).symm]
+  rw [run_add, F_shift (z + 1) (false :: true :: true :: true :: true :: runs (a :: L)) []]
+  simp only [listHead_nil, listTail_nil]
+  -- Phase 3: f_bounce_interior (3 steps)
+  rw [run_add, f_bounce_interior (z + 1) (false :: true :: true :: true :: true :: runs (a :: L)) []]
+  simp only [listHead_nil, listTail_nil, List.singleton_append, List.cons_append,
+    List.nil_append, show z + 1 + 1 = z + 2 from by omega]
+  -- Phase 4: f0_d0_to_e (2 steps)
+  rw [run_add, f0_d0_to_e (ones (z + 2) ++ false :: true :: true :: true :: true :: runs (a :: L)) []]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 5: E,1→A (1 step)
+  simp only [run, step, sw_E1, listHead_ones_succ, listTail_ones_succ]
+  -- Match target
+  simp only [M_Config_cons, show z + 1 - 1 = z from by omega, runs_singleton, runs_succ,
+    ones_succ, ones_zero, List.nil_append]
+
+/-- Rule 4 (terminal): Cursor at 0, right run = 3.
+    [a, (0), 3] → M0[a+4, 1] -/
+theorem macro_zero_bounce_to_zero (a : Nat) (L : List Nat) :
+    run sweeper (M0_Config (a :: L) [3]) 12 =
+    M0_Config ((a + 4) :: L) [1] := by
+  cases L with
+  | nil =>
+    simp only [M0_Config_cons, M0_Config_nil, runs_singleton, runs_nil, ones_zero, ones_succ,
+      List.nil_append, run, step, sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil]
+  | cons b L' =>
+    simp only [M0_Config_cons, runs_cons₂, runs_singleton, runs_nil, ones_zero, ones_succ,
+      List.nil_append, List.cons_append, List.append_assoc, run, step,
+      sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil, runs_succ]
+
+/-- Rule 5: Cursor at 0, right run = 2.
+    [a, (0), 2, d, R...] → [(a+3), d+1, R...] -/
+theorem macro_zero_two (a d : Nat) (L R : List Nat) :
+    run sweeper (M0_Config (a :: L) (2 :: d :: R)) 8 =
+    M_Config L (a + 3) ((d + 1) :: R) := by
+  cases L with
+  | nil =>
+    simp only [M0_Config_cons, M_Config_nil, runs_cons₂, runs_singleton, runs_nil, ones_zero,
+      ones_succ, List.nil_append, List.singleton_append, List.append_assoc, run, step,
+      sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil, runs_succ,
+      show a + 3 - 1 = a + 2 from by omega]
+  | cons b L' =>
+    simp only [M0_Config_cons, M_Config_cons, runs_cons₂, runs_singleton, runs_nil, ones_zero,
+      ones_succ, List.nil_append, List.cons_append, List.singleton_append, List.append_assoc,
+      run, step, sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil, runs_succ,
+      show a + 3 - 1 = a + 2 from by omega]
+
+/-- Rule 6: Halt condition. Cursor at 0, run of 1 followed by positive run.
+    C reads 1 from the run after the 1 → undefined transition.
+    [..., (0), 1, z+1, R...] → halts -/
+theorem macro_halt (z : Nat) (L R : List Nat) :
+    (run sweeper (M0_Config L (1 :: (z + 1) :: R)) 6).state = none := by
+  simp only [M0_Config, runs_cons₂, ones_succ, ones_zero, List.nil_append, List.cons_append,
+    run, step, sw_A0, sw_B0, sw_C0, sw_D1, sw_C1, listHead_cons, listTail_cons,
+    listHead_runs_pos]
+
+-- ============================================================
 -- Conjecture C3/C4: Era structure and growth
 -- ============================================================
 
