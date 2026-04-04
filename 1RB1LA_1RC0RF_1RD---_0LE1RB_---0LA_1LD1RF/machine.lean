@@ -736,6 +736,92 @@ theorem macro_sweep_solo_to_zero :
     run sweeper (M_Config [] 2 []) 11 = M0_Config [1] [1] := by
   rfl
 
+/-- Rule 1a: Sweep with left empty, right nonempty.
+    [(c+3), d, R...] → [1, (c+1), d+1, R...] -/
+theorem macro_sweep_left_empty (c d : Nat) (R : List Nat) :
+    run sweeper (M_Config [] (c + 3) (d :: R)) (2 * (c + 3) + 7) =
+    M_Config [1] (c + 1) ((d + 1) :: R) := by
+  conv_lhs => rw [M_Config_nil, show c + 3 - 1 = c + 2 from by omega,
+    show ones (c + 2) = ones (c + 2) ++ ([] : List Sym) from (List.append_nil _).symm]
+  rw [show 2 * (c + 3) + 7 = (c + 2 + 1) + (1 + (1 + ((c + 1 + 1) + (3 + (2 + 1))))) from by omega]
+  -- Phase 1: A_shift
+  rw [run_add, A_shift (c + 2) [] (false :: false :: runs (d :: R))]
+  simp only [listHead_nil, listTail_nil]
+  -- Phase 2: a0_to_b
+  rw [run_add, a0_to_b]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 3: b1_to_f
+  rw [run_add, b1_to_f]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 4: F_shift
+  rw [run_add, F_shift (c + 1) [false, true] (false :: false :: runs (d :: R))]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 5: f_bounce_interior
+  rw [run_add, f_bounce_interior (c + 1) [false, true] (false :: runs (d :: R))]
+  simp only [listHead_cons, listTail_cons, List.cons_append,
+    List.nil_append, show c + 1 + 1 = c + 2 from by omega]
+  -- Phase 6: f0_d0_to_e
+  rw [run_add, f0_d0_to_e (ones (c + 2) ++ [false, true]) (runs (d :: R))]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 7: E,1→A
+  simp only [run, step, sw_E1, listHead_ones_succ, listTail_ones_succ]
+  -- Match target
+  conv_rhs => rw [M_Config_cons, show c + 1 - 1 = c from by omega, runs_succ, runs_succ]
+  simp only [runs_singleton, ones_zero]
+
+/-- Rule 1a (terminal): Sweep with left empty, cursor = 2.
+    [(2), d, R...] → M0[1, d+1, R...] -/
+theorem macro_sweep_to_zero_left_empty (d : Nat) (R : List Nat) :
+    run sweeper (M_Config [] 2 (d :: R)) 11 =
+    M0_Config [1] ((d + 1) :: R) := by
+  simp only [M_Config, M0_Config, ones_succ, ones_zero, List.nil_append, List.cons_append, run,
+    step, sw_A0, sw_A1, sw_B1, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+    listHead_cons, listTail_cons, listHead_nil, listTail_nil,
+    show 2 - 1 = 1 from rfl, runs_succ, runs_singleton]
+
+/-- Rule 1b: Sweep with right empty, left nonempty.
+    [a, (c+3)] → [a+1, (c+1), 1] -/
+theorem macro_sweep_right_empty (a c : Nat) (L : List Nat) :
+    run sweeper (M_Config (a :: L) (c + 3) []) (2 * (c + 3) + 7) =
+    M_Config ((a + 1) :: L) (c + 1) [1] := by
+  conv_lhs => rw [M_Config_cons, show c + 3 - 1 = c + 2 from by omega, runs_nil]
+  rw [show 2 * (c + 3) + 7 = (c + 2 + 1) + (1 + (1 + ((c + 1 + 1) + (3 + (2 + 1))))) from by omega]
+  -- Phase 1: A_shift
+  rw [run_add, A_shift (c + 2) (false :: runs (a :: L)) [false, false]]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 2: a0_to_b
+  rw [run_add, a0_to_b]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 3: b1_to_f
+  rw [run_add, b1_to_f]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 4: F_shift
+  rw [run_add, F_shift (c + 1) (false :: true :: runs (a :: L)) [false, false]]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 5: f_bounce_interior
+  rw [run_add, f_bounce_interior (c + 1) (false :: true :: runs (a :: L)) [false]]
+  simp only [listHead_cons, listTail_cons, List.cons_append,
+    List.nil_append, show c + 1 + 1 = c + 2 from by omega]
+  -- Phase 6: f0_d0_to_e
+  rw [run_add, f0_d0_to_e (ones (c + 2) ++ false :: true :: runs (a :: L)) []]
+  simp only [listHead_ones_succ, listTail_ones_succ]
+  -- Phase 7: E,1→A
+  simp only [run, step, sw_E1, listHead_ones_succ, listTail_ones_succ]
+  -- Match target
+  conv_rhs => rw [M_Config_cons, show c + 1 - 1 = c from by omega, runs_succ]
+  simp only [runs_singleton, ones_succ, ones_zero]
+
+/-- Rule 1b (terminal): Sweep with right empty, cursor = 2.
+    [a, (2)] → M0[a+1, 1] -/
+theorem macro_sweep_to_zero_right_empty (a : Nat) (L : List Nat) :
+    run sweeper (M_Config (a :: L) 2 []) 11 =
+    M0_Config ((a + 1) :: L) [1] := by
+  simp only [M_Config_cons, M0_Config_cons, ones_succ, ones_zero, List.nil_append, List.cons_append,
+    run, step, sw_A0, sw_A1, sw_B1, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+    listHead_cons, listTail_cons,
+    show 2 - 1 = 1 from rfl,
+    runs_succ, runs_singleton, runs_nil]
+
 /-- Rule 2: Cursor shift left (cursor = 1).
     [a+1, (1), d, R...] → [(a+1), 1, d, R...] -/
 theorem macro_shift (a d : Nat) (L R : List Nat) :
@@ -847,6 +933,24 @@ theorem macro_zero_two (a d : Nat) (L R : List Nat) :
       listHead_cons, listTail_cons, listHead_nil, listTail_nil, runs_succ,
       show a + 3 - 1 = a + 2 from by omega]
 
+/-- Rule 5 (terminal): Cursor at 0, single right run = 2.
+    [a, (0), 2] → [(a+3), 1] -/
+theorem macro_zero_two_solo (a : Nat) (L : List Nat) :
+    run sweeper (M0_Config (a :: L) [2]) 8 =
+    M_Config L (a + 3) [1] := by
+  cases L with
+  | nil =>
+    simp only [M0_Config_cons, M_Config_nil, runs_singleton, ones_zero, ones_succ,
+      List.nil_append, run, step, sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil,
+      show a + 3 - 1 = a + 2 from by omega]
+  | cons b L' =>
+    simp only [M0_Config_cons, M_Config_cons, runs_cons₂, runs_singleton, ones_zero, ones_succ,
+      List.nil_append, List.cons_append, List.append_assoc, run, step,
+      sw_A0, sw_B0, sw_B1, sw_C0, sw_D0, sw_D1, sw_E1, sw_F0, sw_F1,
+      listHead_cons, listTail_cons, listHead_nil, listTail_nil, runs_succ,
+      show a + 3 - 1 = a + 2 from by omega]
+
 /-- Rule 6: Halt condition. Cursor at 0, run of 1 followed by positive run.
     C reads 1 from the run after the 1 → undefined transition.
     [..., (0), 1, z+1, R...] → halts -/
@@ -917,6 +1021,179 @@ Total per era: O(L²). With L growing geometrically, cumulative
 step count grows exponentially. -/
 
 -- (No formal statement needed — this is a complexity observation.)
+
+-- ============================================================
+-- Macro configuration type and invariant
+-- ============================================================
+
+/-- Abstract macro configuration type. -/
+inductive MacroConfig where
+  | M : List Nat → Nat → List Nat → MacroConfig   -- M_Config L c R
+  | M0 : List Nat → List Nat → MacroConfig         -- M0_Config L R
+
+/-- Embed a MacroConfig into a TM Config. -/
+def MacroConfig.toConfig : MacroConfig → Config 6
+  | .M L c R => M_Config L c R
+  | .M0 L R => M0_Config L R
+
+/-- All elements of a list are ≥ 1. -/
+def AllGe1 : List Nat → Prop
+  | [] => True
+  | n :: L => n ≥ 1 ∧ AllGe1 L
+
+lemma AllGe1_nil : AllGe1 [] := trivial
+
+lemma AllGe1_cons {n : Nat} {L : List Nat} :
+    AllGe1 (n :: L) ↔ n ≥ 1 ∧ AllGe1 L := Iff.rfl
+
+lemma AllGe1_singleton {n : Nat} (h : n ≥ 1) : AllGe1 [n] :=
+  ⟨h, trivial⟩
+
+/-- The macro invariant: all run-length values ≥ 1, cursor ≥ 1. -/
+def MacroInvariant : MacroConfig → Prop
+  | .M L c R => AllGe1 L ∧ c ≥ 1 ∧ AllGe1 R
+  | .M0 L R => AllGe1 L ∧ AllGe1 R
+
+-- ============================================================
+-- Invariant preservation by macro rules
+-- ============================================================
+
+/-- Sweep preserves invariant. -/
+theorem invariant_sweep {a c d : Nat} {L R : List Nat}
+    (h : MacroInvariant (.M (a :: L) (c + 3) (d :: R))) :
+    MacroInvariant (.M ((a + 1) :: L) (c + 1) ((d + 1) :: R)) := by
+  obtain ⟨hL, _, hR⟩ := h
+  rw [AllGe1_cons] at hL hR ⊢
+  exact ⟨⟨by omega, hL.2⟩, by omega, by omega, hR.2⟩
+
+/-- Sweep to zero preserves invariant. -/
+theorem invariant_sweep_to_zero {a d : Nat} {L R : List Nat}
+    (h : MacroInvariant (.M (a :: L) 2 (d :: R))) :
+    MacroInvariant (.M0 ((a + 1) :: L) ((d + 1) :: R)) := by
+  obtain ⟨hL, _, hR⟩ := h
+  rw [AllGe1_cons] at hL hR ⊢
+  exact ⟨⟨by omega, hL.2⟩, by omega, hR.2⟩
+
+/-- Solo sweep preserves invariant. -/
+theorem invariant_sweep_solo {c : Nat}
+    (h : MacroInvariant (.M [] (c + 3) [])) :
+    MacroInvariant (.M [1] (c + 1) [1]) := by
+  exact ⟨AllGe1_singleton (by omega), by omega, AllGe1_singleton (by omega)⟩
+
+/-- Solo sweep to zero preserves invariant. -/
+theorem invariant_sweep_solo_to_zero
+    (h : MacroInvariant (.M [] 2 [])) :
+    MacroInvariant (.M0 [1] [1]) := by
+  exact ⟨AllGe1_singleton (by omega), AllGe1_singleton (by omega)⟩
+
+/-- Left-empty sweep preserves invariant. -/
+theorem invariant_sweep_left_empty {c d : Nat} {R : List Nat}
+    (h : MacroInvariant (.M [] (c + 3) (d :: R))) :
+    MacroInvariant (.M [1] (c + 1) ((d + 1) :: R)) := by
+  obtain ⟨_, _, hR⟩ := h
+  rw [AllGe1_cons] at hR ⊢
+  exact ⟨AllGe1_singleton (by omega), by omega, by omega, hR.2⟩
+
+/-- Left-empty sweep to zero preserves invariant. -/
+theorem invariant_sweep_to_zero_left_empty {d : Nat} {R : List Nat}
+    (h : MacroInvariant (.M [] 2 (d :: R))) :
+    MacroInvariant (.M0 [1] ((d + 1) :: R)) := by
+  obtain ⟨_, _, hR⟩ := h
+  rw [AllGe1_cons] at hR ⊢
+  exact ⟨AllGe1_singleton (by omega), by omega, hR.2⟩
+
+/-- Right-empty sweep preserves invariant. -/
+theorem invariant_sweep_right_empty {a c : Nat} {L : List Nat}
+    (h : MacroInvariant (.M (a :: L) (c + 3) [])) :
+    MacroInvariant (.M ((a + 1) :: L) (c + 1) [1]) := by
+  obtain ⟨hL, _, _⟩ := h
+  rw [AllGe1_cons] at hL ⊢
+  exact ⟨⟨by omega, hL.2⟩, by omega, AllGe1_singleton (by omega)⟩
+
+/-- Right-empty sweep to zero preserves invariant. -/
+theorem invariant_sweep_to_zero_right_empty {a : Nat} {L : List Nat}
+    (h : MacroInvariant (.M (a :: L) 2 [])) :
+    MacroInvariant (.M0 ((a + 1) :: L) [1]) := by
+  obtain ⟨hL, _, _⟩ := h
+  rw [AllGe1_cons] at hL ⊢
+  exact ⟨⟨by omega, hL.2⟩, AllGe1_singleton (by omega)⟩
+
+/-- Shift preserves invariant. -/
+theorem invariant_shift {a d : Nat} {L R : List Nat}
+    (h : MacroInvariant (.M ((a + 1) :: L) 1 (d :: R))) :
+    MacroInvariant (.M L (a + 1) (1 :: d :: R)) := by
+  obtain ⟨hL, _, hR⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR⟩⟩
+
+/-- Era complete preserves invariant. -/
+theorem invariant_era_complete {a : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [1])) :
+    MacroInvariant (.M L (a + 6) []) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨hL.2, by omega, AllGe1_nil⟩
+
+/-- Zero two solo preserves invariant. -/
+theorem invariant_zero_two_solo {a : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [2])) :
+    MacroInvariant (.M L (a + 3) [1]) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨hL.2, by omega, AllGe1_singleton (by omega)⟩
+
+/-- Zero bounce preserves invariant (R = [z+4]). -/
+theorem invariant_zero_bounce {a z : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [z + 4])) :
+    MacroInvariant (.M ((a + 4) :: L) (z + 1) [1]) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_singleton (by omega)⟩
+
+/-- Zero bounce to zero preserves invariant (R = [3]). -/
+theorem invariant_zero_bounce_to_zero {a : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) [3])) :
+    MacroInvariant (.M0 ((a + 4) :: L) [1]) := by
+  obtain ⟨hL, _⟩ := h
+  rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_singleton (by omega)⟩
+
+/-- Zero two (multi-run) preserves invariant. -/
+theorem invariant_zero_two {a d : Nat} {L R : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) (2 :: d :: R))) :
+    MacroInvariant (.M L (a + 3) ((d + 1) :: R)) := by
+  obtain ⟨hL, hR⟩ := h
+  rw [AllGe1_cons] at hL
+  rw [AllGe1_cons] at hR
+  obtain ⟨_, hR2⟩ := hR
+  rw [AllGe1_cons] at hR2
+  exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR2.2⟩⟩
+
+-- ============================================================
+-- Invariant prevents halting
+-- ============================================================
+
+/-- The only source of M0 with |R| ≥ 2 is sweep_to_zero, producing (d+1)::R'.
+    Under AllGe1, d ≥ 1 so d+1 ≥ 2.  HALT needs R[0] = 1, contradiction.
+    This lemma captures the key step: if first element ≥ 2, halt pattern impossible. -/
+theorem halt_pattern_impossible {r : Nat} {R : List Nat} (hr : r ≥ 2) :
+    ∀ z R', r :: R = 1 :: (z + 1) :: R' → False := by
+  intro z R' heq
+  injection heq with h1 _
+  omega
+
+/-- sweep_to_zero outputs have first R element ≥ 2 when invariant holds. -/
+theorem sweep_to_zero_first_ge2 {d : Nat} (hd : d ≥ 1) :
+    d + 1 ≥ 2 := by omega
+
+-- ============================================================
+-- Initial configuration satisfies invariant
+-- ============================================================
+
+/-- The initial macro config M_Config [] 6 [] satisfies the invariant
+    (vacuously — no runs). -/
+theorem invariant_initial : MacroInvariant (.M [] 6 []) :=
+  ⟨AllGe1_nil, by omega, AllGe1_nil⟩
 
 -- ============================================================
 -- Initial configuration

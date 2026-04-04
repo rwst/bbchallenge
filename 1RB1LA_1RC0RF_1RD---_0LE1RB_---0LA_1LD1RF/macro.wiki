@@ -273,7 +273,76 @@ This holds trivially when F.right starts with true or is empty. The only dangero
 # '''A,0→B creates new B.right''': Comes from global tape structure at bounce point, not local transformation.
 # '''Unbounded F-bounce chain''': Joint condition at each bounce depends on previous bounce; correlation depends on inter-zero distances.
 
+== Macro-level representation ==
+
+=== Run-length encoding ===
+
+The tape is encoded as a list of run lengths <code>[a₁, a₂, ..., aₖ]</code> where each <code>aᵢ</code> counts consecutive 1s between zero-markers:
+
+<pre>
+runs [a, b, c] = ones a ++ [false] ++ ones b ++ [false] ++ ones c
+</pre>
+
+'''Proven''' in Lean: <code>runs</code> definition + <code>runs_succ</code>, <code>runs_cons₂</code>, <code>runs_singleton</code> simp lemmas.
+
+=== Macro configurations ===
+
+Two configuration types encode the cursor position:
+
+* '''M_Config L c R''': state A, head on rightmost 1 of cursor run. <code>c</code> = cursor run size, <code>L</code> = left runs (nearest first), <code>R</code> = right runs. Two boundary zeros separate cursor from right runs.
+* '''M0_Config L R''': state A reading 0 (cursor at zero between runs). <code>L</code> = left runs, <code>R</code> = right runs.
+
+<pre>
+M_Config L c R  = ⟨stA, ones(c-1) ++ [0] ++ runs(L), head=1, [0,0] ++ runs(R)⟩
+M0_Config L R   = ⟨stA, runs(L), head=0, [0,0] ++ runs(R)⟩
+</pre>
+
+'''Proven''' in Lean: <code>M_Config</code>, <code>M0_Config</code> definitions + <code>M_Config_nil</code>, <code>M_Config_cons</code>, <code>M0_Config_nil</code>, <code>M0_Config_cons</code> simp lemmas.
+
+=== Era entry ===
+
+* <code>era_to_macro</code>: <code>E_Config n 0</code> → <code>M_Config [] (n+2) []</code> in 5 steps. '''Proven.'''
+
+=== Macro rules (all proven in Lean) ===
+
+Seven rules govern the dynamics. Notation: <code>(c)</code> marks the cursor position, <code>M0[...]</code> denotes an <code>M0_Config</code>.
+
+{| class="wikitable"
+! # !! Rule !! Step count !! Lean theorem
+|-
+| 1 || <code>[a, (c+3), d, R...] → [a+1, (c+1), d+1, R...]</code> || 2c+13 || <code>macro_sweep</code>
+|-
+| 1t || <code>[a, (2), d, R...] → M0[a+1, d+1, R...]</code> || 11 || <code>macro_sweep_to_zero</code>
+|-
+| 1' || <code>[(c+3)] → [1, (c+1), 1]</code> || 2c+13 || <code>macro_sweep_solo</code>
+|-
+| 1't || <code>[(2)] → M0[1, 1]</code> || 11 || <code>macro_sweep_solo_to_zero</code>
+|-
+| 2 || <code>[a+1, (1), d, R...] → [(a+1), 1, d, R...]</code> || 6 || <code>macro_shift</code>
+|-
+| 3 || <code>[a+1, (0), 1] → [(a+6)]</code> || 8 || <code>macro_era_complete</code>
+|-
+| 4 || <code>[a, (0), z+4] → [a+4, (z+1), 1]</code> || z+13 || <code>macro_zero_bounce</code>
+|-
+| 4t || <code>[a, (0), 3] → M0[a+4, 1]</code> || 12 || <code>macro_zero_bounce_to_zero</code>
+|-
+| 5 || <code>[a, (0), 2, d, R...] → [(a+3), d+1, R...]</code> || 8 || <code>macro_zero_two</code>
+|-
+| 6 || <code>[..., (0), 1, z+1, R...] → Halt</code> || 6 || <code>macro_halt</code>
+|}
+
+'''Notes:'''
+* Rules 1/1' are the main sweep cycle (A sweeps left, bounces, F sweeps right, bounces at interior zero, E→A restarts). Step count is <code>2*(c+3)+7</code>.
+* Rules with suffix "t" are terminal variants where the cursor reaches 0 (transitions from <code>M_Config</code> to <code>M0_Config</code>).
+* Rule 2 shifts the cursor left when the cursor run = 1.
+* Rules 4/4t handle the zero-bounce: A reads 0 at left edge, BCD chain extends and F sweeps right across the entire right run.
+* Rule 5 handles the special case where the right run = 2.
+* Rule 3 completes an era when the right run = 1 (last zero-marker absorbed).
+* Rule 6 is the halt condition (C reads 1). '''Never reached''' in normal operation — proving this is the open problem.
+
 == Proven results (Lean) ==
+
+=== Single-step and chain lemmas ===
 
 {| class="wikitable"
 ! Theorem !! Statement !! Proof
@@ -286,35 +355,37 @@ This holds trivially when F.right starts with true or is empty. The only dangero
 |-
 | <code>f_bounce_interior</code> || F at interior zero bounces back as F in 3 steps || <code>sw_steps</code>
 |-
-| <code>sweeper_init_to_era0</code> || Machine reaches E_Config 4 0 after 19 steps || <code>rfl</code>
+| <code>a0_to_b</code> || A,0 → B: B's left starts with true || <code>sw_steps</code>
 |-
-| <code>era_0_to_1</code> || E_Config 4 → E_Config 10 in 65 steps || <code>rfl</code>
+| <code>d1_to_b</code> || D,1 → B: B's left starts with true || <code>sw_steps</code>
+|-
+| <code>b1_to_f</code> || B,1 → F: F's left starts with false || <code>sw_steps</code>
+|-
+| <code>f0_d0_to_e</code> || F reads 0 with 0 left → E reads 2 cells left of F || <code>sw_steps</code>
 |-
 | <code>b0_to_c</code> || B reads 0 → C reads first element of B's right tape || <code>sw_steps</code>
 |-
 | <code>b0_zeros_safe</code> || B reads 0 with zeros right → C reads 0 (no halt) || <code>sw_steps</code>
 |-
-| <code>cd_to_e_safe</code> || C→D→E path: E always reads 1 (eliminates half of E,0 paths) || <code>sw_steps</code>
+| <code>cd_to_e_safe</code> || C→D→E path: E always reads 1 || <code>sw_steps</code>
 |-
-| <code>f0_d0_to_e</code> || F reads 0 with 0 left → E reads 2 cells left of F || <code>sw_steps</code>
+| <code>f0_d0_e_safe</code> || F reads 0 with [0,1,...] left → E reads 1 (safe) || <code>sw_steps</code>
 |-
 | <code>e0_necessary</code> || E,0 requires F reading 0 with two consecutive 0s left || <code>sw_steps</code>
-|-
-| <code>f0_d0_e_safe</code> || F reads 0 with false :: true :: L left → E reads 1 (safe) || <code>sw_steps</code>
-|-
-| <code>a0_to_b</code> || A,0 → B: B's left starts with true (A wrote 1) || <code>sw_steps</code>
-|-
-| <code>d1_to_b</code> || D,1 → B: B's left starts with true (D wrote 1) || <code>sw_steps</code>
-|-
-| <code>b1_to_f</code> || B,1 → F: F's left starts with false (B wrote 0) || <code>sw_steps</code>
 |-
 | <code>a_b_f_d_e_safe</code> || A,0 → B,1 → F,0 → D,0 → E: E reads 1 || <code>sw_steps</code>
 |-
 | <code>d_b_f_d_e_safe</code> || D,1 → B,1 → F,0 → D,0 → E: E reads 1 || <code>sw_steps</code>
 |-
-| <code>c1_halt_via_b</code> || C,1 halt requires B reading 0 with 1 to its right || <code>sw_steps</code>
+| <code>c1_halt_via_b</code> || C,1 halt requires B reading 0 with 1 to right || <code>sw_steps</code>
+|}
+
+=== E,0 elimination (fully proven) ===
+
+{| class="wikitable"
+! Theorem !! Statement !! Proof
 |-
-| <code>E0Inv</code> || 4-condition step-inductive invariant for E,0 elimination || definition
+| <code>E0Inv</code> || 4-condition step-inductive invariant for E,0 || definition
 |-
 | <code>e0inv_init</code> || E0Inv holds for initConfig || <code>simp</code>
 |-
@@ -323,22 +394,86 @@ This holds trivially when F.right starts with true or is empty. The only dangero
 | <code>e0inv_run</code> || E0Inv preserved by k steps || induction
 |-
 | <code>e0_never_reached</code> || E always reads 1 (E,0 unreachable) || from <code>E0Inv</code>
+|}
+
+=== C,1 elimination (partially proven) ===
+
+{| class="wikitable"
+! Theorem !! Statement !! Proof
 |-
 | <code>SafeRight</code> || Period-3 recursive predicate on B.right tape || definition
 |-
 | <code>SafeRight_head</code> || SafeRight implies C reads 0 || cases
 |-
-| <code>C1Inv</code> || B + A conditions for C,1 elimination || definition
+| <code>SafeRight1</code>, <code>SafeRight2</code> || Shifted SafeRight for states C and D || definitions
+|-
+| <code>SafeRight_to_SafeRight1</code> || SafeRight → SafeRight1 (B→C shift) || cases
+|-
+| <code>SafeRight1_to_SafeRight2</code> || SafeRight1 → SafeRight2 (C→D shift) || cases
+|-
+| <code>SafeRight2_to_SafeRight</code> || SafeRight2 → SafeRight (D→B shift) || cases
+|-
+| <code>C1Inv</code> || B + A + C + D conditions for C,1 elimination || definition
 |-
 | <code>c1inv_init</code> || C1Inv holds for initConfig || <code>simp</code>
+|-
+| <code>c1inv_step</code> || C1Inv step-inductive ('''11/12 cases''') || <code>fin_cases</code> + <code>simp_all</code>, '''1 sorry''' (E,1→A)
+|-
+| <code>C1Inv_ext</code> || Extended invariant adding F/D/E conditions || definition
+|-
+| <code>c1inv_ext_init</code> || C1Inv_ext holds for initConfig || <code>simp</code>
+|-
+| <code>c1inv_ext_step</code> || C1Inv_ext step-inductive || '''1 sorry''' (B,1→F)
 |}
 
-== Remaining sorries (2) ==
+=== Macro rules (all proven) ===
+
+{| class="wikitable"
+! Theorem !! Statement !! Proof method
+|-
+| <code>era_to_macro</code> || E_Config n 0 → M_Config [] (n+2) [] in 5 steps || <code>simp only</code>
+|-
+| <code>macro_sweep</code> || Rule 1: [a,(c+3),d,R] → [a+1,(c+1),d+1,R] in 2c+13 steps || run_add + composed lemmas
+|-
+| <code>macro_sweep_to_zero</code> || Rule 1t: [a,(2),d,R] → M0[a+1,d+1,R] in 11 steps || <code>simp only</code>
+|-
+| <code>macro_sweep_solo</code> || Rule 1': [(c+3)] → [1,(c+1),1] in 2c+13 steps || run_add + composed lemmas
+|-
+| <code>macro_sweep_solo_to_zero</code> || Rule 1't: [(2)] → M0[1,1] in 11 steps || <code>rfl</code>
+|-
+| <code>macro_shift</code> || Rule 2: [a+1,(1),d,R] → [(a+1),1,d,R] in 6 steps || cases L + <code>simp only</code>
+|-
+| <code>macro_era_complete</code> || Rule 3: [a+1,(0),1] → [(a+6)] in 8 steps || cases L + <code>simp only</code>
+|-
+| <code>macro_zero_bounce</code> || Rule 4: [a,(0),z+4] → [a+4,(z+1),1] in z+13 steps || run_add + composed lemmas
+|-
+| <code>macro_zero_bounce_to_zero</code> || Rule 4t: [a,(0),3] → M0[a+4,1] in 12 steps || cases L + <code>simp only</code>
+|-
+| <code>macro_zero_two</code> || Rule 5: [a,(0),2,d,R] → [(a+3),d+1,R] in 8 steps || cases L + <code>simp only</code>
+|-
+| <code>macro_halt</code> || Rule 6: [...,(0),1,z+1,R] → Halt in 6 steps || <code>simp only</code>
+|}
+
+=== Concrete computations ===
+
+{| class="wikitable"
+! Theorem !! Statement !! Proof
+|-
+| <code>sweeper_init_to_era0</code> || initConfig → E_Config 4 0 in 19 steps || <code>rfl</code>
+|-
+| <code>era_0_to_1</code> || E_Config 4 0 → E_Config 10 0 in 65 steps || <code>rfl</code>
+|}
+
+== Remaining sorries (4) ==
 
 {| class="wikitable"
 ! Sorry !! Status !! Blocker
 |-
-| <code>c1_never_reached</code> || Open || C1Inv step-inductiveness (needs F + D conditions, joint left/right coupling)
+| <code>c1inv_step</code> (E,1→A case) || Intermediate || Needs SafeRight(E.right) when E.left[0]=false (the F-joint condition)
+|-
+| <code>c1inv_ext_step</code> (B,1→F case) || Intermediate || Needs F-condition for newly created F; cascading depth problem
+|-
+| <code>c1_never_reached</code> || Open || Follows from either c1inv_step or c1inv_ext_step being completed
 |-
 | <code>sweeper_never_halts</code> || Open || Follows from <code>c1_never_reached</code> + <code>e0_never_reached</code>
 |}
@@ -356,15 +491,6 @@ This holds trivially when F.right starts with true or is empty. The only dangero
 '''Each full sweep cycle shifts every zero-marker exactly one position inward (left zeros move right, right zeros move left).'''
 
 '''Caveat from proof attempt''': This property is '''emergent''' from the full cycle, not a single-step property. A naive formulation is '''false''' — the intermediate states pass through F, D, B before returning to A.
-
-=== C3 (Era growth — revised) ===
-The machine reaches all-1s E_Config only at tape lengths 5 and 11 (steps 19 and 84). After that, the tape continues growing but zero-markers persist permanently.
-
-=== C4 (Zero-pair annihilation spawns new pairs) ===
-'''When two adjacent zeros meet and annihilate, the resulting BCD extension creates a new zero pair at the right edge of the extended segment.''' This cascading behavior explains why the machine never returns to all-1s after era 1.
-
-=== C7 (Step count is exponential in tape length) ===
-'''The step count grows exponentially in tape length.''' Each sweep cycle takes O(L) steps. An era with tape length L has O(L) sweep cycles. So an era takes O(L²) steps. With L growing geometrically across eras, the total step count grows exponentially.
 
 == Key transitions for proof ==
 
@@ -426,11 +552,11 @@ The conditions are vacuously true at each level because the tape structure preve
 
 === Why macro-step induction also fails ===
 
-A natural alternative is to define macro configurations (as in the Cryptid proof pattern) and prove transitions between them. But this requires:
+All 7 macro rules (plus terminal variants) are '''proven''' in Lean — the macro-level transition system is fully formalized. However, having the rules is not sufficient:
 
-# '''Proving each sweep cycle completes''' without hitting C,1 or E,0 — which is the theorem itself.
-# '''Characterizing all reachable tape shapes''' per macro state — which requires tracking the exact positions and spacings of all zero-markers.
-# '''Handling the cascading sub-era structure''': after era 1, zero-marker pairs spawn recursively upon annihilation, creating unbounded cascading depth.
+# '''Proving which rule applies''' at each macro step requires knowing the tape structure (run lengths). Rule 6 (halt) applies when R starts with <code>[1, z+1, ...]</code> — proving this never happens requires the very invariant we seek.
+# '''Characterizing all reachable run-length lists''' requires tracking the exact positions and spacings of all zero-markers through the cascading sub-era structure.
+# '''The cascading depth is unbounded''': after era 1, zero-marker pairs spawn recursively upon annihilation. The run-length list has k entries where k grows without bound.
 
 The Cryptid proof works because its macro states (P(a), Q(a,b)) have '''two parameters''' that capture the full tape structure. This machine's tape has '''k zero-markers at arbitrary positions''' within a ones-block of length L, where k grows logarithmically with L. A macro state would need k parameters to capture marker positions, and the transition function between macro states is itself recursive in k. This is qualitatively harder than a fixed-parameter system.
 
