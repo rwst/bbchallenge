@@ -666,4 +666,113 @@ encounters a sequence of runs:
      (invariant-only approach)
 
   Estimated effort: 150–300 lines of Lean, 2–4 proof sessions.
+
+## 10. Invariant Gap: AllGe1 Is Too Weak for macro_progress
+
+### 10a. The problem
+
+`macro_progress` requires:  ∀ c, MacroProg c → ∃ k > 0, MacroProg (run c k) ∧ state ≠ none
+
+With MacroProg = ∃ cfg, c = cfg.toConfig ∧ MacroInvariant cfg, and
+MacroInvariant = AllGe1 L ∧ c ≥ 1 ∧ AllGe1 R (for M), AllGe1 L ∧ AllGe1 R (for M₀).
+
+This is **unprovable** because many configs satisfying AllGe1 actually halt
+(reach the undefined C,1 transition).
+
+### 10b. Configs that satisfy AllGe1 but halt (verified by simulation)
+
+  M_Config:
+    M([], 1, [d]) halts for any d ≥ 1              (step 11, via M₀([], 1∷d∷[]) → C,1)
+    M([1], 1, []) halts                             (step 17)
+    M([3], 1, []) halts                             (step 36)
+    M([], 3, R) halts for ANY R                     (step ~30, via sweep to c=1, L=[1], shift to M([], 1, ...) → halt)
+    M([], 7, R) halts for ANY R                     (via chain to M([], 3, ...) → halt)
+    M([], c, []) halts for c ∈ {3,4,7,13,15,16,19,21,23,24,31,37,39,41,45,50,...}
+
+  M₀_Config:
+    M₀([], 1∷(z+1)∷R') halts                       (step 6, macro_halt)
+    M₀([], R) with L=[] halts for many R patterns
+
+### 10c. Why these configs halt
+
+The root cause is the chain:
+  M([], c_odd, R)  →  sweep × ((c-1)/2)  →  M([(c-1)/2], 1, R')
+  →  shift  →  M([], 1, 1∷R'')
+  →  6 steps  →  M₀([], 1∷R'')
+  →  macro_halt (if |R''| ≥ 1, since R''[0] ≥ 1 from AllGe1)
+
+This applies whenever L=[] and the sweep chain produces L.head = 1 at c=1.
+The "bad" c values from L=[] include {3, 7, 15, 31, 63, ...} = {2ⁿ-1 : n ≥ 2}
+plus others reachable via even-c intermediate steps.
+
+### 10d. Why the reachable orbit avoids these
+
+From 10M-step simulation starting at M([], 6, []):
+  • M(L, 1, R) always has L ≠ [] and L.head ≥ 2  (min observed: L.head = 2)
+  • M([], c, R) with R nonempty: c is never 1 or 3  (min observed: c = 2)
+  • M₀(L, R) always has L ≠ [] and R ≠ []
+  • M₀(L, R) with |R| ≥ 2 always has R.head ≥ 2  (no halt pattern)
+
+So the halting configs are **unreachable** from s₀, but AllGe1 doesn't exclude them.
+
+### 10e. Required invariant strengthening
+
+The invariant must exclude configs that lead to halting.  Minimum additions:
+
+  For M₀_Config L R:
+    (i)   L ≠ []
+    (ii)  R ≠ []
+    (iii) NoHaltPattern R:  ∀ z R', R ≠ 1 :: (z+1) :: R'
+          (equivalently: |R| ≥ 2 → R.head ≥ 2)
+
+  For M_Config L c R:
+    (iv)  c = 1 → L ≠ [] ∧ L.head ≥ 2
+
+  Conditions (i)-(iii) are straightforward — all M₀ outputs satisfy them.
+  Condition (iv) is the hard part: it's NOT preserved by sweep_left_empty
+  at c=3, which produces c=1, L=[1].  This means the input M([], 3, d∷R)
+  must also be excluded, requiring an additional condition like:
+    (v)   L = [] → c ∉ {1, 3}
+
+  But (v) is not preserved by shift either (shift from M([3], 1, R) produces
+  M([], 3, 1∷R)).  The cascade continues: excluding c=3 at L=[] requires
+  excluding L.head=3 at c=1, which requires excluding c=7 at L=[], etc.
+
+  The "bad" set at L=[] is Collatz-like: iterate f(c) = (c-1)/2 for odd c.
+  If f^k(c) = 3 for some k ≥ 0, the config halts.
+
+### 10f. Possible solutions
+
+  (A) **Stronger structural invariant**: Track the relationship between L, c, R
+      more precisely.  E.g., require that the config is in the image of the
+      macro transition function (reachability from era_complete outputs).
+      This is correct but complex to formalize.
+
+  (B) **Era-based predicate**: Define P as "is at an era boundary" and prove
+      each era reaches the next.  Avoids the general invariant problem but
+      requires computing the exact orbit structure.
+
+  (C) **Combined transitions**: Merge sweep+shift into compound transitions
+      that skip c=1 entirely.  E.g., sweep from c≥3 directly to c=L.head+1
+      (post-shift).  Combine era_complete+first_sweep to avoid R=[].
+      Requires proving new compound transition theorems but keeps the
+      invariant simple: c ≥ 2 ∧ R ≠ [].
+
+  (D) **Decidable finite check + progress**: Compute enough of the orbit
+      to reach a "safe" region where a simple invariant works, then use
+      macro_progress only in that region.
+
+  Recommendation: approach (C) seems most practical.  The compound transitions
+  are mechanical to prove (just chain existing theorems), and the resulting
+  invariant is clean.
+
+### 10g. Status of proof (as of 2026-04-05)
+
+  Sorry count: 1 (macro_progress)
+  Blocker: invariant too weak
+  sweeper_never_halts first-24-steps: DONE (interval_cases)
+  macro_multi_bounce_general: DONE
+  macro_multi_bounce_general_to_zero: DONE
+  All invariant_* preservation theorems: DONE (for current AllGe1 invariant)
+  All macro transition theorems: DONE
 -/

@@ -4,6 +4,7 @@ import Mathlib.Data.List.Basic
 import Mathlib.Tactic.Ring
 import Mathlib.Tactic.NormNum
 import Mathlib.Tactic.FinCases
+import Mathlib.Tactic.IntervalCases
 import Mathlib.Data.Fintype.Basic
 
 open BusyLean
@@ -1058,13 +1059,84 @@ theorem macro_multi_bounce_general (a r rₙ : Nat) (L : List Nat) (R_mid : List
       false :: runs ((r + 1) :: (a + 4) :: L) from congr_arg _ (first_bounce_left_eq r a L)]
     exact F_multi_interior (r + 1) ((a + 4) :: L) (m :: R_mid') rₙ hR
 
+/-- F final phase to M0: sweep single one at right edge, transition to M0_Config.
+    Requires first run ≥ 1 for F_bounce_single_one. -/
+theorem F_final_to_M0 (a₀ : Nat) (L₀ : List Nat) (ha : a₀ ≥ 1) :
+    run sweeper (⟨some stF, false :: runs (a₀ :: L₀), true, []⟩ : Config 6) 7 =
+    M0_Config (a₀ :: L₀) [1] := by
+  obtain ⟨a', rfl⟩ : ∃ a', a₀ = a' + 1 := ⟨a₀ - 1, by omega⟩
+  cases L₀ with
+  | nil =>
+    simp only [runs_singleton]
+    conv_lhs => rw [show (false :: ones (a' + 1) : List Sym) =
+      (false :: ones (a' + 1) ++ [] : List Sym) from by rw [List.append_nil]]
+    rw [F_bounce_single_one a' []]
+    simp [M0_Config, runs, ones_succ, ones_zero]
+  | cons x xs =>
+    simp only [runs_cons₂]
+    conv_lhs =>
+      rw [show (false :: (ones (a' + 1) ++ [false] ++ runs (x :: xs)) : List Sym) =
+        (false :: (ones (a' + 1) ++ ([false] ++ runs (x :: xs))) : List Sym) from
+        congr_arg _ (List.append_assoc ..)]
+      rw [← List.cons_append]
+    rw [F_bounce_single_one a' ([false] ++ runs (x :: xs))]
+    simp only [M0_Config_cons, runs_cons₂, List.append_assoc, runs_singleton,
+      ones_succ, ones_zero]
+
+/-- F interior bounces + final to M0: induction on R_mid. -/
+theorem F_multi_interior_to_zero (a₀ : Nat) (L₀ : List Nat) (R_mid : List Nat)
+    (hR : ∀ x ∈ R_mid, x ≥ 1) (ha : a₀ ≥ 1) :
+    run sweeper (⟨some stF, false :: runs (a₀ :: L₀),
+                   listHead (runs (R_mid ++ [1])) false,
+                   listTail (runs (R_mid ++ [1]))⟩ : Config 6)
+      (3 * R_mid.length + List.sum R_mid + 7) =
+    M0_Config (R_mid.reverse ++ a₀ :: L₀) [1] := by
+  induction R_mid generalizing a₀ L₀ with
+  | nil =>
+    simp only [List.nil_append, List.length_nil, Nat.mul_zero, List.sum_nil, Nat.add_zero,
+      List.reverse_nil, List.nil_append, runs_singleton, ones_succ, ones_zero,
+      listHead_cons, listTail_cons]
+    exact F_final_to_M0 a₀ L₀ ha
+  | cons m R_mid' ih =>
+    have hm : m ≥ 1 := hR m List.mem_cons_self
+    have hR' : ∀ x ∈ R_mid', x ≥ 1 := fun x hx => hR x (List.mem_cons_of_mem m hx)
+    obtain ⟨m', rfl⟩ : ∃ m', m = m' + 1 := ⟨m - 1, by omega⟩
+    rw [List.cons_append, runs_cons_ne_nil (m' + 1) (R_mid' ++ [1]) (by simp)]
+    rw [listHead_ones_succ, listTail_ones_succ]
+    rw [show 3 * ((m' + 1) :: R_mid').length + List.sum ((m' + 1) :: R_mid') + 7 =
+        (m' + 4) + (3 * R_mid'.length + List.sum R_mid' + 7) from by
+      simp [List.length_cons, List.sum_cons]; omega]
+    rw [run_add,
+      F_interior_step m' (false :: runs (a₀ :: L₀)) (runs (R_mid' ++ [1]))]
+    have h_left : ones (m' + 1) ++ false :: runs (a₀ :: L₀) =
+        runs ((m' + 1) :: a₀ :: L₀) := by
+      simp only [runs_cons₂, List.append_assoc, List.singleton_append]
+    conv_lhs => rw [show false :: ones (m' + 1) ++ false :: runs (a₀ :: L₀) =
+      false :: runs ((m' + 1) :: a₀ :: L₀) from congr_arg _ h_left]
+    rw [List.reverse_cons, List.append_assoc, List.singleton_append]
+    exact ih (m' + 1) (a₀ :: L₀) hR' (by omega)
+
 /-- General n-run multi-bounce to zero (rₙ = 1): by induction on |R_mid|. -/
 theorem macro_multi_bounce_general_to_zero (a r : Nat) (L : List Nat) (R_mid : List Nat)
     (hR : ∀ x ∈ R_mid, x ≥ 1) :
     run sweeper (M0_Config (a :: L) ((r + 3) :: R_mid ++ [1]))
       (r + 3 * R_mid.length + List.sum R_mid + 16) =
     M0_Config (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) [1] := by
-  sorry
+  cases R_mid with
+  | nil =>
+    simp only [List.nil_append, List.length_nil, Nat.mul_zero, List.sum_nil, Nat.add_zero,
+      List.reverse_nil]
+    exact macro_multi_bounce_2_to_zero a r L
+  | cons m R_mid' =>
+    rw [show r + 3 * (m :: R_mid').length + List.sum (m :: R_mid') + 16 =
+        (r + 9) + (3 * (m :: R_mid').length + List.sum (m :: R_mid') + 7) from by omega,
+      List.cons_append, List.cons_append, run_add,
+      M0_first_bounce a r m L (R_mid' ++ [1])]
+    conv_lhs => rw [show
+      (false :: ones (r + 1) ++ false :: true :: true :: true :: true :: runs (a :: L) : List Sym) =
+      false :: runs ((r + 1) :: (a + 4) :: L) from congr_arg _ (first_bounce_left_eq r a L)]
+    rw [← List.cons_append]
+    exact F_multi_interior_to_zero (r + 1) ((a + 4) :: L) (m :: R_mid') hR (by omega)
 
 -- ============================================================
 -- Conjecture C3/C4: Era structure and growth
@@ -1433,6 +1505,7 @@ theorem sweeper_never_halts (k : Nat) :
       exact nonhalt_of_progress sweeper MacroProg macro_progress
         (run sweeper (initConfig 6) 24) init_macro_prog (k - 24)
   -- First 24 steps: each one computes to state = some _
-  intro j hj; sorry
+  intro j hj
+  interval_cases j <;> simp [run, step, sweeper, initConfig]
 
 end Sweeper
