@@ -905,6 +905,78 @@ theorem macro_multi_bounce_2_to_zero (a r : Nat) (L : List Nat) :
   rw [← List.append_assoc]
 
 -- ============================================================
+-- N-run multi-bounce (general case)
+-- ============================================================
+
+-- General n-run: prove by induction, reducing n-run to (n-1)-run after first bounce.
+
+/-- After M0_to_F + F_shift + f_bounce_interior for a multi-run config.
+    M0(a::L, (r+3)::r₂::R) after r+9 steps reaches F with:
+    - left = false :: ones(r+1) ++ false :: tttt :: runs(a::L)
+    - head = listHead(runs(r₂::R))
+    - right = listTail(runs(r₂::R)) -/
+theorem M0_first_bounce (a r r₂ : Nat) (L : List Nat) (R : List Nat) :
+    run sweeper (M0_Config (a :: L) ((r + 3) :: r₂ :: R)) (r + 9) =
+    (⟨some stF, false :: ones (r + 1) ++ false :: true :: true :: true :: true :: runs (a :: L),
+      listHead (runs (r₂ :: R)) false, listTail (runs (r₂ :: R))⟩ : Config 6) := by
+  simp only [M0_Config_cons, runs_cons₂]
+  rw [List.append_assoc, show [false] ++ runs (r₂ :: R) = false :: runs (r₂ :: R) from rfl]
+  -- Phase 0: M0_to_F (5 steps)
+  rw [show r + 9 = 5 + (r + 4) from by omega,
+    run_add, M0_to_F r (runs (a :: L)) (false :: runs (r₂ :: R))]
+  -- Phase 1: F_shift through r ones (r+1 steps)
+  rw [show r + 4 = (r + 1) + 3 from by omega,
+    run_add, F_shift r (false :: true :: true :: true :: true :: runs (a :: L))
+                       (false :: runs (r₂ :: R))]
+  simp only [listHead_cons, listTail_cons]
+  -- Phase 2: f_bounce_interior (3 steps)
+  exact f_bounce_interior r (false :: true :: true :: true :: true :: runs (a :: L)) (runs (r₂ :: R))
+
+/-- Key structural lemma: the left tape after first bounce can be rewritten
+    as the raw tape of a modified run list. -/
+lemma first_bounce_left_eq (r a : Nat) (L : List Nat) :
+    ones (r + 1) ++ false :: true :: true :: true :: true :: runs (a :: L) =
+    runs ((r + 1) :: (a + 4) :: L) := by
+  rw [show (true :: true :: true :: true :: runs (a :: L) : List Sym) =
+    ones 4 ++ runs (a :: L) from rfl]
+  rw [ones_append_runs, show 4 + a = a + 4 from by omega]
+  rw [show (false :: runs ((a + 4) :: L) : List Sym) =
+    [false] ++ runs ((a + 4) :: L) from rfl]
+  rw [← List.append_assoc]
+  exact (runs_cons₂ (r + 1) (a + 4) L).symm
+
+/-- F interior step: sweep m ones, bounce at zero, continue to next run.
+    Generalization of F_sweep_and_bounce with arbitrary left tape. -/
+theorem F_interior_step (m : Nat) (L R : List Sym) :
+    run sweeper (⟨some stF, L, true, ones m ++ false :: R⟩ : Config 6) (m + 4) =
+    (⟨some stF, false :: ones (m + 1) ++ L,
+      listHead R false, listTail R⟩ : Config 6) := by
+  rw [show m + 4 = (m + 1) + 3 from by omega]
+  rw [run_add, F_shift m L (false :: R)]
+  simp only [listHead_cons, listTail_cons]
+  rw [show m + 1 = m + 0 + 1 from by omega]
+  exact f_bounce_interior m L R
+
+/-- General n-run multi-bounce (rₙ ≥ 2): by induction on |R_mid|.
+    M0(a::L, (r+3) :: R_mid ++ [rₙ+2]) → M(rev(R_mid) ++ [r+1,a+4] ++ L, rₙ+1, [1]).
+
+    Here R_mid is the list of interior run lengths (may be empty = 2-run case). -/
+theorem macro_multi_bounce_general (a r rₙ : Nat) (L : List Nat) (R_mid : List Nat)
+    (hR : ∀ x ∈ R_mid, x ≥ 1) :
+    run sweeper (M0_Config (a :: L) ((r + 3) :: R_mid ++ [rₙ + 2]))
+      (r + rₙ + 3 * R_mid.length + List.sum R_mid + 17) =
+    M_Config (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) (rₙ + 1) [1] := by
+  sorry
+
+/-- General n-run multi-bounce to zero (rₙ = 1): by induction on |R_mid|. -/
+theorem macro_multi_bounce_general_to_zero (a r : Nat) (L : List Nat) (R_mid : List Nat)
+    (hR : ∀ x ∈ R_mid, x ≥ 1) :
+    run sweeper (M0_Config (a :: L) ((r + 3) :: R_mid ++ [1]))
+      (r + 3 * R_mid.length + List.sum R_mid + 16) =
+    M0_Config (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) [1] := by
+  sorry
+
+-- ============================================================
 -- Conjecture C3/C4: Era structure and growth
 -- ============================================================
 
@@ -1131,6 +1203,60 @@ theorem invariant_multi_bounce_2_to_zero {a r : Nat} {L : List Nat}
   exact ⟨AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL.2⟩⟩,
          AllGe1_singleton (by omega)⟩
 
+-- AllGe1 helper lemmas for general invariant proofs
+
+lemma AllGe1_append {L₁ L₂ : List Nat} (h1 : AllGe1 L₁) (h2 : AllGe1 L₂) :
+    AllGe1 (L₁ ++ L₂) := by
+  induction L₁ with
+  | nil => exact h2
+  | cons x xs ih =>
+    rw [AllGe1_cons] at h1
+    exact ⟨h1.1, ih h1.2⟩
+
+lemma AllGe1_reverse {L : List Nat} (h : AllGe1 L) : AllGe1 L.reverse := by
+  induction L with
+  | nil => exact trivial
+  | cons x xs ih =>
+    rw [AllGe1_cons] at h
+    simp only [List.reverse_cons]
+    exact AllGe1_append (ih h.2) (AllGe1_singleton h.1)
+
+lemma AllGe1_of_append_left {L₁ L₂ : List Nat} (h : AllGe1 (L₁ ++ L₂)) : AllGe1 L₁ := by
+  induction L₁ with
+  | nil => exact trivial
+  | cons x xs ih =>
+    rw [List.cons_append] at h
+    rw [AllGe1_cons] at h
+    exact ⟨h.1, ih h.2⟩
+
+lemma AllGe1_of_append_right {L₁ L₂ : List Nat} (h : AllGe1 (L₁ ++ L₂)) : AllGe1 L₂ := by
+  induction L₁ with
+  | nil => exact h
+  | cons x xs ih =>
+    rw [List.cons_append] at h
+    rw [AllGe1_cons] at h
+    exact ih h.2
+
+/-- Invariant preservation for general multi-bounce (rₙ ≥ 2). -/
+theorem invariant_multi_bounce_general {a r rₙ : Nat} {L : List Nat} {R_mid : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) ((r + 3) :: R_mid ++ [rₙ + 2]))) :
+    MacroInvariant (.M (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) (rₙ + 1) [1]) := by
+  obtain ⟨hL, hR⟩ := h
+  obtain ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
+  obtain ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
+  refine ⟨?_, by omega, AllGe1_singleton (by omega)⟩
+  exact AllGe1_append (AllGe1_reverse (AllGe1_of_append_left hR_mid)) ⟨by omega, by omega, hL_tail⟩
+
+/-- Invariant preservation for general multi-bounce to zero (rₙ = 1). -/
+theorem invariant_multi_bounce_general_to_zero {a r : Nat} {L : List Nat} {R_mid : List Nat}
+    (h : MacroInvariant (.M0 (a :: L) ((r + 3) :: R_mid ++ [1]))) :
+    MacroInvariant (.M0 (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) [1]) := by
+  obtain ⟨hL, hR⟩ := h
+  obtain ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
+  obtain ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
+  refine ⟨?_, AllGe1_singleton (by omega)⟩
+  exact AllGe1_append (AllGe1_reverse (AllGe1_of_append_left hR_mid)) ⟨by omega, by omega, hL_tail⟩
+
 -- ============================================================
 -- Invariant prevents halting
 -- ============================================================
@@ -1167,12 +1293,56 @@ theorem sweeper_init_to_era0 :
     run sweeper (initConfig 6) 19 = E_Config 4 0 := rfl
 
 -- ============================================================
--- Main non-halting conjecture
+-- Macro progress invariant
+-- ============================================================
+
+/-- The progress predicate: config is a macro config satisfying AllGe1. -/
+def MacroProg (c : Config 6) : Prop :=
+  ∃ cfg : MacroConfig, c = cfg.toConfig ∧ MacroInvariant cfg
+
+/-- MacroConfig.toConfig always has state = some stA. -/
+lemma MacroConfig.toConfig_state (cfg : MacroConfig) :
+    cfg.toConfig.state = some stA := by
+  cases cfg with
+  | M L c R => simp [MacroConfig.toConfig, M_Config]
+  | M0 L R => simp [MacroConfig.toConfig, M0_Config]
+
+/-- Every macro config satisfying the invariant progresses to another one.
+    This is the core dispatch: match on the config shape, apply the right rule. -/
+theorem macro_progress (c : Config 6) (h : MacroProg c) :
+    ∃ k, 0 < k ∧ MacroProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none := by
+  obtain ⟨cfg, hc, hinv⟩ := h
+  subst hc
+  -- Core dispatch: each MacroConfig shape maps to a known transition rule.
+  -- This requires matching on L/R structure and cursor value.
+  sorry
+
+/-- The initial config reaches a macro config after 24 steps. -/
+theorem init_to_macro :
+    run sweeper (initConfig 6) 24 = (MacroConfig.M [] 6 []).toConfig := by
+  show run sweeper (initConfig 6) 24 = M_Config [] 6 []
+  rw [show (24 : Nat) = 19 + 5 from rfl, run_add, sweeper_init_to_era0]
+  exact era_to_macro 4
+
+theorem init_macro_prog : MacroProg (run sweeper (initConfig 6) 24) := by
+  exact ⟨.M [] 6 [], init_to_macro, invariant_initial⟩
+
+-- ============================================================
+-- Main non-halting theorem
 -- ============================================================
 
 /-- The machine never halts: for all k, the state after k steps is not none. -/
 theorem sweeper_never_halts (k : Nat) :
     (run sweeper (initConfig 6) k).state ≠ none := by
-  sorry
+  -- Split: first 24 steps computed directly, then use macro progress
+  suffices h24 : ∀ j, j < 24 → (run sweeper (initConfig 6) j).state ≠ none by
+    by_cases hk : k < 24
+    · exact h24 k hk
+    · push_neg at hk
+      rw [show k = 24 + (k - 24) from by omega, run_add]
+      exact nonhalt_of_progress sweeper MacroProg macro_progress
+        (run sweeper (initConfig 6) 24) init_macro_prog (k - 24)
+  -- First 24 steps: each one computes to state = some _
+  intro j hj; sorry
 
 end Sweeper
