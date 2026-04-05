@@ -1334,7 +1334,10 @@ theorem invariant_era_and_sweep_solo {a : Nat}
 theorem macro_sweep_and_shift (a d : Nat) (L R : List Nat) :
     run sweeper (M_Config (a :: L) 3 (d :: R)) 19 =
     M_Config L (a + 1) (1 :: (d + 1) :: R) := by
-  sorry
+  rw [show (19 : Nat) = 13 + 6 from rfl, run_add,
+    show (13 : Nat) = 2 * (0 + 3) + 7 from rfl, show (3 : Nat) = 0 + 3 from rfl,
+    macro_sweep a 0 d L R, show (0 : Nat) + 1 = 1 from rfl,
+    macro_shift a (d + 1) L R]
 
 /-- Invariant for sweep+shift: a≥1 gives c=a+1≥2. -/
 theorem invariant_sweep_and_shift {a d : Nat} {L R : List Nat}
@@ -1349,7 +1352,11 @@ theorem invariant_sweep_and_shift {a d : Nat} {L R : List Nat}
 theorem macro_zero_bounce_and_shift (a : Nat) (L : List Nat) :
     run sweeper (M0_Config (a :: L) [4]) 19 =
     M_Config L (a + 4) [1, 1] := by
-  sorry
+  rw [show (19 : Nat) = 13 + 6 from rfl, run_add,
+    show (13 : Nat) = 0 + 13 from rfl, show (4 : Nat) = 0 + 4 from rfl,
+    macro_zero_bounce a 0 L, show (0 : Nat) + 1 = 1 from rfl,
+    show a + 4 = a + 3 + 1 from by omega, macro_shift (a + 3) 1 L [],
+    show a + 3 + 1 = a + 4 from by omega]
 
 /-- Invariant for zero_bounce+shift. -/
 theorem invariant_zero_bounce_and_shift {a : Nat} {L : List Nat}
@@ -1512,15 +1519,52 @@ lemma MacroConfig.toConfig_state (cfg : MacroConfig) :
   | M L c R => simp [MacroConfig.toConfig, M_Config]
   | M0 L R => simp [MacroConfig.toConfig, M0_Config]
 
+/-- Package a transition + invariant into a progress proof. -/
+private lemma mk_progress {c₀ : Config 6} (k : Nat) (cfg' : MacroConfig) (hk : 0 < k)
+    (htrans : run sweeper c₀ k = cfg'.toConfig) (hinv' : MacroInvariant cfg') :
+    ∃ k, 0 < k ∧ MacroProg (run sweeper c₀ k) ∧ (run sweeper c₀ k).state ≠ none :=
+  ⟨k, hk, ⟨cfg', htrans, hinv'⟩,
+   htrans ▸ by rw [MacroConfig.toConfig_state]; exact Option.some_ne_none _⟩
+
+set_option maxHeartbeats 800000 in
 /-- Every macro config satisfying the invariant progresses to another one.
     This is the core dispatch: match on the config shape, apply the right rule. -/
 theorem macro_progress (c : Config 6) (h : MacroProg c) :
     ∃ k, 0 < k ∧ MacroProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none := by
   obtain ⟨cfg, hc, hinv⟩ := h
   subst hc
-  -- Use sorry for now; the dispatch is large but structurally clear.
-  -- Each case applies a macro transition theorem + invariant preservation + state lemma.
-  sorry
+  cases cfg with
+  | M L c R =>
+    have hL := hinv.1; have hc := hinv.2.1; have hR := hinv.2.2.1
+    have hR_ne := hinv.2.2.2
+    obtain ⟨d, R', rfl⟩ := List.exists_cons_of_ne_nil hR_ne
+    cases L with
+    | nil =>
+      match c, hc with
+      | 2, _ =>
+        exact mk_progress 11 (.M0 [1] ((d+1)::R')) (by omega)
+          (macro_sweep_to_zero_left_empty d R') (invariant_sweep_to_zero_left_empty hinv)
+      | 3, _ => sorry -- 30-step compound
+      | c' + 4, _ =>
+        have htrans : run sweeper (M_Config [] (c' + 4) (d :: R')) (2 * (c' + 4) + 7) =
+            M_Config [1] (c' + 2) ((d + 1) :: R') := by
+          rw [show c' + 4 = (c' + 1) + 3 from by omega]; exact macro_sweep_left_empty (c' + 1) d R'
+        exact mk_progress _ (.M [1] (c'+2) ((d+1)::R')) (by omega) htrans (invariant_sweep_left_empty hinv)
+    | cons a L' =>
+      match c, hc with
+      | 2, _ =>
+        exact mk_progress 11 (.M0 ((a+1)::L') ((d+1)::R')) (by omega)
+          (macro_sweep_to_zero a d L' R') (invariant_sweep_to_zero hinv)
+      | 3, _ =>
+        exact mk_progress 19 (.M L' (a+1) (1::(d+1)::R')) (by omega)
+          (macro_sweep_and_shift a d L' R') (invariant_sweep_and_shift hinv)
+      | c' + 4, _ =>
+        have htrans : run sweeper (M_Config (a :: L') (c' + 4) (d :: R')) (2 * (c' + 4) + 7) =
+            M_Config ((a + 1) :: L') (c' + 2) ((d + 1) :: R') := by
+          rw [show c' + 4 = (c' + 1) + 3 from by omega]; exact macro_sweep a (c' + 1) d L' R'
+        exact mk_progress _ (.M ((a+1)::L') (c'+2) ((d+1)::R')) (by omega) htrans (invariant_sweep hinv)
+  | M0 L R =>
+    sorry
 
 /-- The initial config reaches M_Config [1] 4 [1] after 43 steps. -/
 theorem init_to_macro :

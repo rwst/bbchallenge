@@ -762,17 +762,60 @@ The invariant must exclude configs that lead to halting.  Minimum additions:
       to reach a "safe" region where a simple invariant works, then use
       macro_progress only in that region.
 
-  Recommendation: approach (C) seems most practical.  The compound transitions
-  are mechanical to prove (just chain existing theorems), and the resulting
-  invariant is clean.
+### 10g. Approach (C) attempted and blocked (2026-04-05)
 
-### 10g. Status of proof (as of 2026-04-05)
+  Implemented: compound sweep_and_shift, zero_bounce_and_shift, era_and_sweep.
+  Invariant: AllGe1 L ∧ c ≥ 2 ∧ AllGe1 R ∧ R ≠ [] (M), + L≠[] ∧ R≠[] ∧ NoHaltPattern (M₀).
+  Starting from step 43 (M [1] 4 [1]).
+  All invariant_* theorems and 5 of 6 M_Config cases in macro_progress compile.
+
+  **Blocked** by the cascade:
+  • M([], 3, d∷R) halts (step ~30). Must be excluded.
+  • But M([2], 3, d∷R) also halts (cascades to M([], 3, ...)).
+  • And M([6], 3, d∷R) also halts (cascades through M([], 7, ...)).
+  • The halting set is IRREGULAR and depends on the full (L, c, R) triple:
+    - M([], 5, [1]) halts; M([], 5, [1,2]) halts; M([], 11, [1]) does NOT halt
+    - M([], 7, R) halts for all R; M([], 4, [4,6,2]) does NOT halt
+  • No simple per-field condition (on L, c, or R individually) can
+    characterize the safe set.
+
+  Conclusion: approach (C) with simple invariant conditions cannot work.
+  The safe set is too complex for closed-form per-field predicates.
+
+### 10h. Approach (B): Era-based predicate
+
+  Instead of characterizing safe configs structurally, define the progress
+  predicate P as tracking the orbit through "eras":
+
+  • An era starts when the tape is all-1s (E_Config n) or at a known
+    macro-config after era_complete.
+  • Each era processes a fixed sequence of macro steps determined by the
+    run-length decomposition.
+  • The era transition is deterministic: given the era start, the entire
+    era plays out predictably.
+
+  Proof sketch:
+  1. Define EraConfig as the state at era boundaries (after era_complete or
+     era_and_sweep). This is M_Config L c R with specific L, c, R values.
+  2. Show that each EraConfig evolves (via many macro steps) to the next EraConfig.
+  3. The step count is computable from the era parameters.
+  4. Use nonhalt_of_progress with P = "is an EraConfig".
+
+  Advantages:
+  • P only matches configs that ACTUALLY arise on the orbit
+  • No need to exclude unreachable halting configs
+  • Each era transition is a single theorem (possibly by computation)
+
+  Disadvantages:
+  • Need to characterize the era transition function explicitly
+  • The transition function may be complex (recursive on run-length decomposition)
+  • Proof may require substantial computation
+
+### 10i. Status of proof (as of 2026-04-05)
 
   Sorry count: 1 (macro_progress)
-  Blocker: invariant too weak
-  sweeper_never_halts first-24-steps: DONE (interval_cases)
-  macro_multi_bounce_general: DONE
-  macro_multi_bounce_general_to_zero: DONE
-  All invariant_* preservation theorems: DONE (for current AllGe1 invariant)
-  All macro transition theorems: DONE
+  Blocker: invariant approach (C) failed; switching to (B)
+  All macro transition/invariant theorems: proven and compiling
+  Compound transitions: proven (sweep_and_shift, zero_bounce_and_shift, era_and_sweep)
+  sweeper_never_halts structure: ready (first 43 steps + nonhalt_of_progress)
 -/

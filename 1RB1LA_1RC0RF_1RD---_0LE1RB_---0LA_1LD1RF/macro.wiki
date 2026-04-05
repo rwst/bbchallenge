@@ -294,31 +294,58 @@ For '''M_Config L c R''':
 
 The M₀ conditions are clean and preserved by all transitions. The M_Config conditions cascade: excluding c=3 at L=[] requires excluding L.head=3 at c=1, which requires excluding c=7 at L=[], etc.
 
-=== Proposed fix: compound transitions (approach C) ===
+=== Approach (C) attempted and blocked ===
 
-Merge sweep+shift into compound transitions that skip c=1:
-* '''sweep_and_shift''': M(a∷L, 3, d∷R) → M(L, a+1, 1∷(d+1)∷R) in 19 steps (sweep 13 + shift 6)
-* '''era_and_sweep''': M₀(a∷L, [1]) → M(…, a+4, [1]) in 2a+27 steps (era_complete 8 + sweep 2a+19)
+Implemented compound transitions (all proven):
+* '''sweep_and_shift''': M(a∷L, 3, d∷R) → M(L, a+1, 1∷(d+1)∷R) in 19 steps
+* '''zero_bounce_and_shift''': M₀(a∷L, [4]) → M(L, a+4, [1,1]) in 19 steps
+* '''era_and_sweep''': M₀(a+1∷b∷L, [1]) → M((b+1)∷L, a+4, [1]) in 2a+27 steps
+* '''era_and_sweep_solo''': M₀([a+1], [1]) → M([1], a+4, [1]) in 2a+27 steps
 
-With compound transitions, the invariant simplifies to c ≥ 2 ∧ R ≠ [], avoiding all c=1 and R=[] edge cases. The remaining L=[] → c ≠ 3 issue also disappears because: when c≥2, the sweep from c=4 (c+3=4, c=1) gives c+1=2, and sweep_to_zero handles c=2 cleanly.
+Invariant: c ≥ 2 ∧ R ≠ [] (M) + L ≠ [] ∧ R ≠ [] ∧ NoHaltPattern (M₀). Starting from step 43.
+
+'''BLOCKED''' because the halting set is irregular:
+* M([], 3, d∷R) halts for ALL d,R — must be excluded
+* M([2], 3, d∷R) ALSO halts (cascades to M([], 3, ...))
+* The cascade extends: M([2], 3, ...) ← M([1], 5, ...) ← M([], 7, ...) ← ...
+* Halting depends on the full (L, c, R) triple, not individual fields:
+** M([], 5, [1]) halts; M([], 11, [1]) does NOT halt
+** M([], 7, R) halts for all R; M([], 4, [4,6,2]) does NOT halt
+* '''No simple per-field condition can characterize the safe set'''
+
+=== Next: Approach (B) — era-based predicate ===
+
+Instead of characterizing safe configs structurally, track the orbit through "eras":
+* Define the progress predicate P as "is at an era boundary" (after era_complete + first sweep)
+* Show each era leads to the next (deterministic transition)
+* P only matches configs that ACTUALLY arise on the orbit
+* Avoids the invariant gap entirely
 
 === Proof status (2026-04-05) ===
 
 {| class="wikitable"
 ! Component !! Status
 |-
-| sweeper_never_halts first-24-steps || '''DONE''' (interval_cases)
+| sweeper_never_halts first-43-steps || '''DONE''' (interval_cases)
 |-
 | macro_multi_bounce_general || '''DONE'''
 |-
 | macro_multi_bounce_general_to_zero || '''DONE'''
 |-
-| All invariant_* preservation theorems || '''DONE''' (for current AllGe1)
+| All invariant_* preservation theorems || '''DONE''' (compiling)
 |-
 | All macro transition theorems || '''DONE'''
 |-
-| macro_progress || '''BLOCKED''' — invariant too weak
+| Compound transitions || '''DONE''' (sweep_and_shift, bounce_and_shift, era_and_sweep)
 |-
-| '''Sorry count''' || '''1'''
+| macro_progress M_Config cases (5 of 6) || '''DONE'''
+|-
+| macro_progress M([], 3, d∷R) case || '''BLOCKED''' — config halts, invariant too weak
+|-
+| macro_progress M₀ dispatch || '''TODO'''
+|-
+| '''Sorry count''' || '''1''' (macro_progress)
+|-
+| '''Approach''' || Switching to '''(B) era-based'''
 |}
 
