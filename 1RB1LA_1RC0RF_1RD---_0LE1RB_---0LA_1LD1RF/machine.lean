@@ -1227,143 +1227,157 @@ lemma AllGe1_cons {n : Nat} {L : List Nat} :
 lemma AllGe1_singleton {n : Nat} (h : n ≥ 1) : AllGe1 [n] :=
   ⟨h, trivial⟩
 
-/-- The macro invariant: all run-length values ≥ 1, cursor ≥ 1. -/
+/-- No halt pattern: R doesn't start with 1 followed by a positive element. -/
+def NoHaltPattern (R : List Nat) : Prop :=
+  ∀ z R', R ≠ 1 :: (z + 1) :: R'
+
+lemma NoHaltPattern_singleton (r : Nat) : NoHaltPattern [r] :=
+  fun _ _ h => by simp [List.cons.injEq] at h
+
+lemma NoHaltPattern_cons_ge2 {d : Nat} {R : List Nat} (hd : d ≥ 2) : NoHaltPattern (d :: R) :=
+  fun z R' h => by injection h with h1 _; omega
+
+/-- The macro invariant: all run-length values ≥ 1, cursor ≥ 2,
+    R ≠ [] for M, L ≠ [] and R ≠ [] for M₀, L = [] → c ≠ 3 for M,
+    NoHaltPattern for M₀. -/
 def MacroInvariant : MacroConfig → Prop
-  | .M L c R => AllGe1 L ∧ c ≥ 1 ∧ AllGe1 R
-  | .M0 L R => AllGe1 L ∧ AllGe1 R
+  | .M L c R => AllGe1 L ∧ c ≥ 2 ∧ AllGe1 R ∧ R ≠ [] ∧ (L = [] → c ≠ 3)
+  | .M0 L R => AllGe1 L ∧ AllGe1 R ∧ L ≠ [] ∧ R ≠ [] ∧ NoHaltPattern R
 
 -- ============================================================
 -- Invariant preservation by macro rules
 -- ============================================================
 
-/-- Sweep preserves invariant. -/
+/-- Sweep preserves invariant. Input cursor c+4 ≥ 4, output c+2 ≥ 2. -/
 theorem invariant_sweep {a c d : Nat} {L R : List Nat}
-    (h : MacroInvariant (.M (a :: L) (c + 3) (d :: R))) :
-    MacroInvariant (.M ((a + 1) :: L) (c + 1) ((d + 1) :: R)) := by
-  obtain ⟨hL, _, hR⟩ := h
+    (h : MacroInvariant (.M (a :: L) (c + 4) (d :: R))) :
+    MacroInvariant (.M ((a + 1) :: L) (c + 2) ((d + 1) :: R)) := by
+  have hL := h.1; have hR := h.2.2.1
   rw [AllGe1_cons] at hL hR
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_cons.mpr ⟨by omega, hR.2⟩⟩
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_cons.mpr ⟨by omega, hR.2⟩,
+         List.cons_ne_nil _ _, nofun⟩
 
 /-- Sweep to zero preserves invariant. -/
 theorem invariant_sweep_to_zero {a d : Nat} {L R : List Nat}
     (h : MacroInvariant (.M (a :: L) 2 (d :: R))) :
     MacroInvariant (.M0 ((a + 1) :: L) ((d + 1) :: R)) := by
-  obtain ⟨hL, _, hR⟩ := h
+  have hL := h.1; have hR := h.2.2.1
   rw [AllGe1_cons] at hL hR
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_cons.mpr ⟨by omega, hR.2⟩⟩
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_cons.mpr ⟨by omega, hR.2⟩,
+         List.cons_ne_nil _ _, List.cons_ne_nil _ _, NoHaltPattern_cons_ge2 (by omega)⟩
 
-/-- Solo sweep preserves invariant. -/
-theorem invariant_sweep_solo {c : Nat}
-    (_ : MacroInvariant (.M [] (c + 3) [])) :
-    MacroInvariant (.M [1] (c + 1) [1]) := by
-  exact ⟨AllGe1_singleton (by omega), by omega, AllGe1_singleton (by omega)⟩
-
-/-- Solo sweep to zero preserves invariant. -/
-theorem invariant_sweep_solo_to_zero
-    (_ : MacroInvariant (.M [] 2 [])) :
-    MacroInvariant (.M0 [1] [1]) := by
-  exact ⟨AllGe1_singleton (by omega), AllGe1_singleton (by omega)⟩
-
-/-- Left-empty sweep preserves invariant. -/
+/-- Left-empty sweep preserves invariant. Input cursor c+4 ≥ 4, output c+2 ≥ 2. -/
 theorem invariant_sweep_left_empty {c d : Nat} {R : List Nat}
-    (h : MacroInvariant (.M [] (c + 3) (d :: R))) :
-    MacroInvariant (.M [1] (c + 1) ((d + 1) :: R)) := by
-  obtain ⟨_, _, hR⟩ := h
+    (h : MacroInvariant (.M [] (c + 4) (d :: R))) :
+    MacroInvariant (.M [1] (c + 2) ((d + 1) :: R)) := by
+  have hR := h.2.2.1
   rw [AllGe1_cons] at hR
-  exact ⟨AllGe1_singleton (by omega), by omega, AllGe1_cons.mpr ⟨by omega, hR.2⟩⟩
+  exact ⟨AllGe1_singleton (by omega), by omega, AllGe1_cons.mpr ⟨by omega, hR.2⟩,
+         List.cons_ne_nil _ _, nofun⟩
 
 /-- Left-empty sweep to zero preserves invariant. -/
 theorem invariant_sweep_to_zero_left_empty {d : Nat} {R : List Nat}
     (h : MacroInvariant (.M [] 2 (d :: R))) :
     MacroInvariant (.M0 [1] ((d + 1) :: R)) := by
-  obtain ⟨_, _, hR⟩ := h
+  have hR := h.2.2.1
   rw [AllGe1_cons] at hR
-  exact ⟨AllGe1_singleton (by omega), AllGe1_cons.mpr ⟨by omega, hR.2⟩⟩
+  exact ⟨AllGe1_singleton (by omega), AllGe1_cons.mpr ⟨by omega, hR.2⟩,
+         List.cons_ne_nil _ _, List.cons_ne_nil _ _, NoHaltPattern_cons_ge2 (by omega)⟩
 
-/-- Right-empty sweep preserves invariant. -/
-theorem invariant_sweep_right_empty {a c : Nat} {L : List Nat}
-    (h : MacroInvariant (.M (a :: L) (c + 3) [])) :
-    MacroInvariant (.M ((a + 1) :: L) (c + 1) [1]) := by
-  obtain ⟨hL, _, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_singleton (by omega)⟩
+-- Right-empty, solo sweep, and shift invariant theorems are not needed
+-- since R=[] and c=1 are excluded by the strengthened invariant.
+-- The transition theorems themselves are still used internally
+-- by compound era_and_sweep theorems.
 
-/-- Right-empty sweep to zero preserves invariant. -/
-theorem invariant_sweep_to_zero_right_empty {a : Nat} {L : List Nat}
-    (h : MacroInvariant (.M (a :: L) 2 [])) :
-    MacroInvariant (.M0 ((a + 1) :: L) [1]) := by
-  obtain ⟨hL, _, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_singleton (by omega)⟩
-
-/-- Shift preserves invariant. -/
-theorem invariant_shift {a d : Nat} {L R : List Nat}
-    (h : MacroInvariant (.M ((a + 1) :: L) 1 (d :: R))) :
-    MacroInvariant (.M L (a + 1) (1 :: d :: R)) := by
-  obtain ⟨hL, _, hR⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR⟩⟩
-
-/-- Era complete preserves invariant. -/
+/-- Era complete: extract AllGe1 from M0 invariant (output has R=[], not directly used). -/
 theorem invariant_era_complete {a : Nat} {L : List Nat}
     (h : MacroInvariant (.M0 (a :: L) [1])) :
-    MacroInvariant (.M L (a + 6) []) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨hL.2, by omega, AllGe1_nil⟩
+    AllGe1 L ∧ a + 6 ≥ 1 := by
+  have hL := h.1; rw [AllGe1_cons] at hL
+  exact ⟨hL.2, by omega⟩
+
+/-- Compound era_complete + sweep_right_empty: M₀(a+1∷b∷L, [1]) → M((b+1)∷L, a+4, [1]). -/
+theorem macro_era_and_sweep (a b : Nat) (L : List Nat) :
+    run sweeper (M0_Config ((a + 1) :: b :: L) [1]) (2 * a + 27) =
+    M_Config ((b + 1) :: L) (a + 4) [1] := by
+  rw [show 2 * a + 27 = 8 + (2 * (a + 6) + 7) from by omega,
+    run_add, macro_era_complete a (b :: L),
+    show a + 6 = (a + 3) + 3 from by omega,
+    macro_sweep_right_empty b (a + 3) L]
+
+/-- Compound era_complete + sweep_solo: M₀([a+1], [1]) → M([1], a+4, [1]). -/
+theorem macro_era_and_sweep_solo (a : Nat) :
+    run sweeper (M0_Config [a + 1] [1]) (2 * a + 27) =
+    M_Config [1] (a + 4) [1] := by
+  rw [show 2 * a + 27 = 8 + (2 * (a + 6) + 7) from by omega,
+    run_add, macro_era_complete a [],
+    show a + 6 = (a + 3) + 3 from by omega,
+    macro_sweep_solo (a + 3)]
+
+/-- Invariant preservation for compound era+sweep (L nonempty). -/
+theorem invariant_era_and_sweep {a b : Nat} {L : List Nat}
+    (h : MacroInvariant (.M0 ((a + 1) :: b :: L) [1])) :
+    MacroInvariant (.M ((b + 1) :: L) (a + 4) [1]) := by
+  have hL := h.1; rw [AllGe1_cons] at hL
+  have ⟨hb, hL'⟩ := AllGe1_cons.mp hL.2
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL'⟩, by omega, AllGe1_singleton (by omega),
+         List.cons_ne_nil _ _, nofun⟩
+
+/-- Invariant preservation for compound era+sweep (L singleton). -/
+theorem invariant_era_and_sweep_solo {a : Nat}
+    (_ : MacroInvariant (.M0 [a + 1] [1])) :
+    MacroInvariant (.M [1] (a + 4) [1]) :=
+  ⟨AllGe1_singleton (by omega), by omega, AllGe1_singleton (by omega),
+   List.cons_ne_nil _ _, nofun⟩
 
 /-- Zero two solo preserves invariant. -/
 theorem invariant_zero_two_solo {a : Nat} {L : List Nat}
     (h : MacroInvariant (.M0 (a :: L) [2])) :
     MacroInvariant (.M L (a + 3) [1]) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨hL.2, by omega, AllGe1_singleton (by omega)⟩
+  have hL := h.1; rw [AllGe1_cons] at hL; have ha := hL.1
+  exact ⟨hL.2, by omega, AllGe1_singleton (by omega), List.cons_ne_nil _ _, fun _ => by omega⟩
 
-/-- Zero bounce preserves invariant (R = [z+4]). -/
+/-- Zero bounce preserves invariant (R = [z+5], output cursor z+2 ≥ 2). -/
 theorem invariant_zero_bounce {a z : Nat} {L : List Nat}
-    (h : MacroInvariant (.M0 (a :: L) [z + 4])) :
-    MacroInvariant (.M ((a + 4) :: L) (z + 1) [1]) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_singleton (by omega)⟩
+    (h : MacroInvariant (.M0 (a :: L) [z + 5])) :
+    MacroInvariant (.M ((a + 4) :: L) (z + 2) [1]) := by
+  have hL := h.1; rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, by omega, AllGe1_singleton (by omega),
+         List.cons_ne_nil _ _, nofun⟩
 
 /-- Zero bounce to zero preserves invariant (R = [3]). -/
 theorem invariant_zero_bounce_to_zero {a : Nat} {L : List Nat}
     (h : MacroInvariant (.M0 (a :: L) [3])) :
     MacroInvariant (.M0 ((a + 4) :: L) [1]) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
-  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_singleton (by omega)⟩
+  have hL := h.1; rw [AllGe1_cons] at hL
+  exact ⟨AllGe1_cons.mpr ⟨by omega, hL.2⟩, AllGe1_singleton (by omega),
+         List.cons_ne_nil _ _, List.cons_ne_nil _ _, NoHaltPattern_singleton _⟩
 
 /-- Zero two (multi-run) preserves invariant. -/
 theorem invariant_zero_two {a d : Nat} {L R : List Nat}
     (h : MacroInvariant (.M0 (a :: L) (2 :: d :: R))) :
     MacroInvariant (.M L (a + 3) ((d + 1) :: R)) := by
-  obtain ⟨hL, hR⟩ := h
-  rw [AllGe1_cons] at hL
-  rw [AllGe1_cons] at hR
-  obtain ⟨_, hR2⟩ := hR
-  rw [AllGe1_cons] at hR2
-  exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR2.2⟩⟩
+  have hL := h.1; have hR := h.2.1
+  rw [AllGe1_cons] at hL hR; have ha := hL.1
+  have ⟨_, hR2⟩ := hR; rw [AllGe1_cons] at hR2
+  exact ⟨hL.2, by omega, AllGe1_cons.mpr ⟨by omega, hR2.2⟩,
+         List.cons_ne_nil _ _, fun _ => by omega⟩
 
-/-- Multi-run bounce (2-run, rₙ ≥ 2) preserves invariant. -/
+/-- Multi-run bounce (2-run, rₙ ≥ 3) preserves invariant. Output cursor rₙ+2 ≥ 2. -/
 theorem invariant_multi_bounce_2 {a r rₙ : Nat} {L : List Nat}
-    (h : MacroInvariant (.M0 (a :: L) [r + 3, rₙ + 2])) :
-    MacroInvariant (.M ((r + 1) :: (a + 4) :: L) (rₙ + 1) [1]) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
+    (h : MacroInvariant (.M0 (a :: L) [r + 3, rₙ + 3])) :
+    MacroInvariant (.M ((r + 1) :: (a + 4) :: L) (rₙ + 2) [1]) := by
+  have hL := h.1; rw [AllGe1_cons] at hL
   exact ⟨AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL.2⟩⟩,
-         by omega, AllGe1_singleton (by omega)⟩
+         by omega, AllGe1_singleton (by omega), List.cons_ne_nil _ _, nofun⟩
 
 /-- Multi-run bounce to zero (2-run, rₙ = 1) preserves invariant. -/
 theorem invariant_multi_bounce_2_to_zero {a r : Nat} {L : List Nat}
     (h : MacroInvariant (.M0 (a :: L) [r + 3, 1])) :
     MacroInvariant (.M0 ((r + 1) :: (a + 4) :: L) [1]) := by
-  obtain ⟨hL, _⟩ := h
-  rw [AllGe1_cons] at hL
+  have hL := h.1; rw [AllGe1_cons] at hL
   exact ⟨AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL.2⟩⟩,
-         AllGe1_singleton (by omega)⟩
+         AllGe1_singleton (by omega), List.cons_ne_nil _ _, List.cons_ne_nil _ _, NoHaltPattern_singleton _⟩
 
 -- AllGe1 helper lemmas for general invariant proofs
 
@@ -1401,23 +1415,25 @@ lemma AllGe1_of_append_right {L₁ L₂ : List Nat} (h : AllGe1 (L₁ ++ L₂)) 
 
 /-- Invariant preservation for general multi-bounce (rₙ ≥ 2). -/
 theorem invariant_multi_bounce_general {a r rₙ : Nat} {L : List Nat} {R_mid : List Nat}
-    (h : MacroInvariant (.M0 (a :: L) ((r + 3) :: R_mid ++ [rₙ + 2]))) :
-    MacroInvariant (.M (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) (rₙ + 1) [1]) := by
-  obtain ⟨hL, hR⟩ := h
-  obtain ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
-  obtain ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
-  refine ⟨?_, by omega, AllGe1_singleton (by omega)⟩
+    (h : MacroInvariant (.M0 (a :: L) ((r + 3) :: R_mid ++ [rₙ + 3]))) :
+    MacroInvariant (.M (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) (rₙ + 2) [1]) := by
+  have hL := h.1; have hR := h.2.1
+  have ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
+  have ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
+  refine ⟨?_, by omega, AllGe1_singleton (by omega), List.cons_ne_nil _ _,
+         fun h => absurd h (List.append_ne_nil_of_right_ne_nil _ (List.cons_ne_nil _ _))⟩
   exact AllGe1_append (AllGe1_reverse (AllGe1_of_append_left hR_mid)) ⟨by omega, by omega, hL_tail⟩
 
 /-- Invariant preservation for general multi-bounce to zero (rₙ = 1). -/
 theorem invariant_multi_bounce_general_to_zero {a r : Nat} {L : List Nat} {R_mid : List Nat}
     (h : MacroInvariant (.M0 (a :: L) ((r + 3) :: R_mid ++ [1]))) :
     MacroInvariant (.M0 (R_mid.reverse ++ (r + 1) :: (a + 4) :: L) [1]) := by
-  obtain ⟨hL, hR⟩ := h
-  obtain ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
-  obtain ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
-  refine ⟨?_, AllGe1_singleton (by omega)⟩
-  exact AllGe1_append (AllGe1_reverse (AllGe1_of_append_left hR_mid)) ⟨by omega, by omega, hL_tail⟩
+  have hL := h.1; have hR := h.2.1
+  have ⟨_, hR_mid⟩ := AllGe1_cons.mp hR
+  have ⟨_, hL_tail⟩ := AllGe1_cons.mp hL
+  refine ⟨?_, AllGe1_singleton (by omega), ?_, List.cons_ne_nil _ _, NoHaltPattern_singleton _⟩
+  · exact AllGe1_append (AllGe1_reverse (AllGe1_of_append_left hR_mid)) ⟨by omega, by omega, hL_tail⟩
+  · exact List.append_ne_nil_of_right_ne_nil _ (List.cons_ne_nil _ _)
 
 -- ============================================================
 -- Invariant prevents halting
@@ -1440,10 +1456,10 @@ theorem sweep_to_zero_first_ge2 {d : Nat} (hd : d ≥ 1) :
 -- Initial configuration satisfies invariant
 -- ============================================================
 
-/-- The initial macro config M_Config [] 6 [] satisfies the invariant
-    (vacuously — no runs). -/
-theorem invariant_initial : MacroInvariant (.M [] 6 []) :=
-  ⟨AllGe1_nil, by omega, AllGe1_nil⟩
+/-- The macro config M_Config [1] 4 [1] satisfies the strengthened invariant. -/
+theorem invariant_initial : MacroInvariant (.M [1] 4 [1]) :=
+  ⟨AllGe1_singleton (by omega), by omega, AllGe1_singleton (by omega),
+   List.cons_ne_nil _ _, nofun⟩
 
 -- ============================================================
 -- Initial configuration
@@ -1475,19 +1491,19 @@ theorem macro_progress (c : Config 6) (h : MacroProg c) :
     ∃ k, 0 < k ∧ MacroProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none := by
   obtain ⟨cfg, hc, hinv⟩ := h
   subst hc
-  -- Core dispatch: each MacroConfig shape maps to a known transition rule.
-  -- This requires matching on L/R structure and cursor value.
+  -- Use sorry for now; the dispatch is large but structurally clear.
+  -- Each case applies a macro transition theorem + invariant preservation + state lemma.
   sorry
 
-/-- The initial config reaches a macro config after 24 steps. -/
+/-- The initial config reaches M_Config [1] 4 [1] after 43 steps. -/
 theorem init_to_macro :
-    run sweeper (initConfig 6) 24 = (MacroConfig.M [] 6 []).toConfig := by
-  show run sweeper (initConfig 6) 24 = M_Config [] 6 []
-  rw [show (24 : Nat) = 19 + 5 from rfl, run_add, sweeper_init_to_era0]
-  exact era_to_macro 4
+    run sweeper (initConfig 6) 43 = (MacroConfig.M [1] 4 [1]).toConfig := by
+  show run sweeper (initConfig 6) 43 = M_Config [1] 4 [1]
+  rw [show (43 : Nat) = 19 + 5 + 19 from rfl, run_add, run_add, sweeper_init_to_era0,
+    era_to_macro 4, macro_sweep_solo (c := 3)]
 
-theorem init_macro_prog : MacroProg (run sweeper (initConfig 6) 24) := by
-  exact ⟨.M [] 6 [], init_to_macro, invariant_initial⟩
+theorem init_macro_prog : MacroProg (run sweeper (initConfig 6) 43) := by
+  exact ⟨.M [1] 4 [1], init_to_macro, invariant_initial⟩
 
 -- ============================================================
 -- Main non-halting theorem
@@ -1496,15 +1512,15 @@ theorem init_macro_prog : MacroProg (run sweeper (initConfig 6) 24) := by
 /-- The machine never halts: for all k, the state after k steps is not none. -/
 theorem sweeper_never_halts (k : Nat) :
     (run sweeper (initConfig 6) k).state ≠ none := by
-  -- Split: first 24 steps computed directly, then use macro progress
-  suffices h24 : ∀ j, j < 24 → (run sweeper (initConfig 6) j).state ≠ none by
-    by_cases hk : k < 24
-    · exact h24 k hk
+  -- Split: first 43 steps computed directly, then use macro progress
+  suffices h43 : ∀ j, j < 43 → (run sweeper (initConfig 6) j).state ≠ none by
+    by_cases hk : k < 43
+    · exact h43 k hk
     · push_neg at hk
-      rw [show k = 24 + (k - 24) from by omega, run_add]
+      rw [show k = 43 + (k - 43) from by omega, run_add]
       exact nonhalt_of_progress sweeper MacroProg macro_progress
-        (run sweeper (initConfig 6) 24) init_macro_prog (k - 24)
-  -- First 24 steps: each one computes to state = some _
+        (run sweeper (initConfig 6) 43) init_macro_prog (k - 43)
+  -- First 43 steps: each one computes to state = some _
   intro j hj
   interval_cases j <;> simp [run, step, sweeper, initConfig]
 
