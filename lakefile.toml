@@ -24,3 +24,8 @@ srcDir = "Cryptid"
 name = "TM5"
 srcDir = "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB"
 roots = ["machine"]
+
+[[lean_lib]]
+name = "Sweeper"
+srcDir = "1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF"
+roots = ["machine_base", "machine"]
