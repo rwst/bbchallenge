@@ -1,6 +1,8 @@
 import Mathlib.Tactic
 import Mathlib.NumberTheory.Padics.PadicVal.Basic
 import Mathlib.Data.Nat.Factorization.Basic
+import Mathlib.Probability.ProbabilityMassFunction.Constructions
+import Mathlib.Probability.ProductMeasure
 import machine
 
 -- ============================================================
@@ -208,6 +210,12 @@ lemma p_eq_pow2_case_v2 (n i : Nat) (hn : n ≠ 0) (hi : i ≥ 2)
       show 2 ^ (i + 3) = 2 ^ i * 8 from by ring]
   have : 2 ^ i ≥ 4 := le_trans (by norm_num : 4 ≤ 2 ^ 2) (Nat.pow_le_pow_right (by norm_num) hi)
   omega
+
+/-- Only the v₂(n+8) = 0 case produces odd solutions to p(n) = 2^i − 2:
+    cases v ≥ 1 force n even (since 2 ∣ (n+8) implies 2 ∣ n). -/
+lemma p_eq_pow2_sub2_odd_implies_v0 (n i : Nat) (hn : n ≠ 0) (hi : i ≥ 2)
+    (hodd : ¬ 2 ∣ n) (h : p n = 2 ^ i - 2) : n + 7 = 2 ^ (i + 1) :=
+  (p_eq_pow2_case_v0 n i hn hi hodd).mp h
 
 open Cryptid in
 /-- p(n) is the Q-entry: iterating the macro map from P(n) reaches Q(p(n), 1).
@@ -689,3 +697,395 @@ lemma QP2_critical_iff (a b j : Nat) (hj : j ≥ 1) :
   · intro h; omega
 
 end Cryptid
+
+-- ============================================================
+-- Subgraph F: Growth analysis and hitting probability
+-- ============================================================
+
+/-! ### Q-to-P output ratio
+
+From the qacc closed form, starting at Q(x, 1) the exit P-value is
+y = 1 + qacc(x).  For odd x = 2k+1 (the v₂(x+2) = 0 case, probability ½),
+the exit is immediate via QP2 and y = 5k + 2 = (5x − 1)/2.
+
+More generally, from the closed form
+  2·qacc(x) + 5 = 4x + 2·v₂(x+2) + max(ordCompl[2](x+2), 3),
+the Q-output satisfies y/x → 2 + 2⁻⁽ᵛ⁺¹⁾ where v = v₂(x+2),
+giving the discrete ratios 5/2, 9/4, 17/8, 33/16, … -/
+
+/-- Q-phase output for odd input: Q(2k+1, 1) exits to P(5k+2). -/
+lemma q_odd_output (k : Nat) : q (2 * k + 1) 1 = 5 * k + 2 := by
+  unfold q; rw [qacc_odd]; ring
+
+/-- Q-phase output ratio for odd x: y = (5x − 1)/2.
+    Equivalently, 2·q(x, 1) = 5x − 1 when x is odd. -/
+lemma q_odd_ratio (k : Nat) : 2 * q (2 * k + 1) 1 = 5 * (2 * k + 1) - 1 := by
+  rw [q_odd_output]; omega
+
+/-- Q-phase output for even input with v₂(x+2) = 1: Q(2k, 1) with k ≥ 1 and
+    k+1 odd (so x+2 = 2(k+1) with odd k+1) gives y = 9k/2.
+    Equivalently, 2·q(2k, 1) = 9·k. -/
+lemma q_v1_output (k : Nat) (hk : k ≥ 1) (hodd : ¬ 2 ∣ (k + 1)) :
+    2 * q (2 * k) 1 = 9 * k := by
+  -- k is even (since k+1 odd), write k = 2m with m ≥ 1
+  have hkeven : 2 ∣ k := by omega
+  obtain ⟨m, rfl⟩ := hkeven
+  have hm : m ≥ 1 := by omega
+  -- q(4m, 1) = 1 + qacc(4m) = 1 + (4m + 3 + qacc(2m-1))
+  --          = 1 + 4m + 3 + (5(m-1) + 1) = 9m
+  unfold q
+  rw [show 2 * (2 * m) = 2 * (2 * m - 1 + 1) from by omega,
+      qacc_even (2 * m - 1 + 1) (by omega)]
+  rw [show 2 * m - 1 + 1 - 1 = 2 * m - 1 from by omega]
+  rw [show 2 * m - 1 = 2 * (m - 1) + 1 from by omega, qacc_odd]
+  omega
+
+/-! ### Full-cycle growth factor
+
+The dominant path (both v₂ = 0) composes:
+  Q(x, 1) →^{QP2} P(y)  with  y = (5x−1)/2   [x odd]
+  P(y) →^{PQ}  Q(x', 1) with  x' = (y+3)/2    [y odd]
+
+Substituting: x' = ((5x−1)/2 + 3)/2 = (5x+5)/4.
+The growth ratio x'/x → 5/4 as x → ∞. -/
+
+/-- Dominant-path full cycle: if x = 2k+1 with k odd, then
+    Q(x,1) → P(5k+2) → Q((5k+5)/2, 1).
+    Here 5k+2 is odd (since k is odd), so the P-phase takes
+    the v₂ = 0 shortcut. -/
+lemma dominant_cycle_output (k : Nat) (hk_odd : ¬ 2 ∣ k) :
+    p (5 * k + 2) = (5 * k + 5) / 2 := by
+  have hodd_y : ¬ 2 ∣ (5 * k + 2) := by omega
+  rw [show 5 * k + 2 = 2 * ((5 * k + 1) / 2) + 1 from by omega, p_odd]
+  omega
+
+/-- Growth equation: 4 · p(q(2k+1, 1)) = 5·(2k+1) + 5 when k is odd.
+    This is the exact form of x' = 5x/4 + 5/4 = (5x+5)/4. -/
+lemma dominant_cycle_ratio (k : Nat) (hk_odd : ¬ 2 ∣ k) :
+    4 * p (q (2 * k + 1) 1) = 5 * (2 * k + 1) + 5 := by
+  rw [q_odd_output, dominant_cycle_output k hk_odd]
+  omega
+
+/-! ### Hitting 2^i − 2
+
+For the Q-output y to produce p(y) = 2^i − 2 via the dominant (v₂ = 0) path,
+we need y = 2^(i+1) − 7 (from `p_eq_pow2_case_v0`).
+
+So the hitting condition on the Q-entry x = 2k+1 is:
+  5k + 2 = 2^(i+1) − 7, i.e., 5k + 9 = 2^(i+1).
+
+This requires 2^(i+1) ≡ 4 (mod 5), i.e., i+1 ≡ 2 (mod 4),
+so i ∈ {5, 9, 13, 17, …}. -/
+
+/-- Dominant-path hitting: Q(2k+1, 1) → P(5k+2) = 2^i − 2
+    iff 5k + 9 = 2^(i+1).  Requires i ≥ 2. -/
+lemma dominant_path_hit_pow2 (k i : Nat) (hk_odd : ¬ 2 ∣ k) (hi : i ≥ 2) :
+    p (5 * k + 2) = 2 ^ i - 2 ↔ 5 * k + 9 = 2 ^ (i + 1) := by
+  have hodd : ¬ 2 ∣ (5 * k + 2) := by omega
+  rw [p_eq_pow2_case_v0 (5 * k + 2) i (by omega) hi hodd]
+
+/-- The mod-5 obstruction: 5k + 9 = 2^(i+1) requires
+    2^(i+1) ≡ 4 mod 5, which holds iff i + 1 ≡ 2 mod 4. -/
+lemma hit_mod5_constraint (k i : Nat) (h : 5 * k + 9 = 2 ^ (i + 1)) :
+    (i + 1) % 4 = 2 := by
+  -- 2^(i+1) ≡ 9 ≡ 4 mod 5, and 2^n mod 5 cycles with period 4: 2,4,3,1
+  have h5 : 2 ^ (i + 1) % 5 = 4 := by omega
+  -- 2^n mod 5 cycles with period 4, 2^2 mod 5 = 4
+  -- Use ZMod approach: 2^4 ≡ 1 mod 5
+  have hperiod : ∀ n, 2 ^ n % 5 = 2 ^ (n % 4) % 5 := by
+    intro n
+    have := Nat.div_add_mod n 4
+    calc 2 ^ n % 5
+        = 2 ^ (4 * (n / 4) + n % 4) % 5 := by rw [show 4 * (n / 4) + n % 4 = n from this]
+      _ = (2 ^ (4 * (n / 4)) * 2 ^ (n % 4)) % 5 := by rw [pow_add]
+      _ = ((2 ^ 4) ^ (n / 4) * 2 ^ (n % 4)) % 5 := by rw [pow_mul]
+      _ = ((16 ^ (n / 4) % 5) * (2 ^ (n % 4) % 5)) % 5 := by rw [show (2:ℕ) ^ 4 = 16 from by norm_num, Nat.mul_mod]
+      _ = (1 * (2 ^ (n % 4) % 5)) % 5 := by
+          congr 1; congr 1
+          induction (n / 4) with
+          | zero => simp
+          | succ m ih => rw [pow_succ, Nat.mul_mod, ih]
+      _ = 2 ^ (n % 4) % 5 := by omega
+  rw [hperiod] at h5
+  -- Exhaust (i+1) % 4 ∈ {0,1,2,3}: only 2 gives 2^r % 5 = 4
+  have : (i + 1) % 4 = 0 ∨ (i + 1) % 4 = 1 ∨ (i + 1) % 4 = 2 ∨ (i + 1) % 4 = 3 := by omega
+  rcases this with h0 | h1 | h2 | h3 <;> simp_all
+
+/-! ### Growth-rate estimates
+
+Under the heuristic that v₂(x+2) and v₂(y+8) behave as independent
+geometric random variables (Pr[v₂ = j] = 2⁻⁽ʲ⁺¹⁾), the expected
+log-growth per cycle is:
+
+  E[ln(x'/x)] = E[ln(y/x)] + E[ln(x'/y)]
+
+where:
+  E[ln(y/x)] = Σⱼ 2⁻⁽ʲ⁺¹⁾ ln(2 + 2⁻⁽ʲ⁺¹⁾) ≈ 0.84
+  E[ln(x'/y)] = Σⱼ 2⁻⁽ʲ⁺¹⁾ (j·ln 3 − (j+1)·ln 2)
+              = ln 3 − 2·ln 2 = ln(3/4) ≈ −0.288
+
+giving E[ln(x'/x)] ≈ 0.55 and effective growth base κ ≈ e^0.55 ≈ 1.73.
+
+However, the **dominant path** (both v₂ = 0, probability ¼) gives
+κ₀ = 5/4 = 1.25, and accounts for most observed cycles.
+
+The key quantity for hitting estimates is the number of cycles per
+doubling of x: N₂ = ln 2 / E[ln(x'/x)]. For the dominant path
+alone, N₂ = ln 2 / ln(5/4) ≈ 3.11.
+-/
+
+/-- Dominant-path composition: for x ≡ 3 mod 4, the full cycle
+    p(q(x, 1)) = (5x + 5) / 4 (under Nat division).
+    This requires both x odd (for the Q-phase QP2 exit) and
+    5k+2 odd (for the P-phase v₂=0 shortcut), which holds iff
+    k = (x-1)/2 is odd, i.e., x ≡ 3 mod 4. -/
+lemma dominant_path_step (k : Nat) (hk : ¬ 2 ∣ k) :
+    p (q (2 * k + 1) 1) = (5 * (2 * k + 1) + 5) / 4 := by
+  rw [q_odd_output, dominant_cycle_output k hk]
+  omega
+
+-- ============================================================
+-- Subgraph G: Stochastic model for Q-entry growth
+-- ============================================================
+
+/-! ### Stochastic model for the Q→P→Q cycle
+
+Each Q→P→Q cycle grows.  The growth factor depends on v₂(y+8)
+where y is the P-phase input.  Modelling v₂ as geometric(½):
+
+  • v₂ = 0 (prob ½):  x' = (5x+5)/4,  growth ≈ 5/4
+  • v₂ = 1 (prob ¼):  x' = (15x+25)/8, growth ≈ 15/8
+  • v₂ ≥ 1 combined:  growth ≥ 15/8 > 5/4
+
+Both branches grow.  The P-even rule P(2n) = P(3n+4) amplifies by
+3/2 per doubling, so there is **no contraction** in this machine.
+
+We model the cycle conservatively using v₂ ∈ {0, ≥1} with coin
+flips.  The key outputs are:
+  • E[X_{n+1}|X_n] = (25/16)X_n + 35/16  (growth factor 25/16)
+  • E[ln(X_{n+1}/X_n)] ≈ ½ ln(5/4) + ½ ln(15/8) > 0 (positive drift)
+  • X_n → ∞ almost surely, so near-miss probability decays as 1/X_n
+  • Expected number of hits of any target T is bounded by the
+    convergent sum Σ 1/X_n ≤ C/x₀.
+-/
+
+open MeasureTheory ProbabilityTheory
+
+/-- Sample space: infinite sequence of v₂-parity coin flips.
+    true = v₂ = 0, false = v₂ ≥ 1. -/
+def Ω := ℕ → Bool
+
+instance : MeasurableSpace Ω := MeasurableSpace.pi
+
+/-- Stochastic step modelling one Q→P→Q cycle.
+    true (v₂ = 0):  Q(x,1) → P((5x−1)/2) → Q((5x+5)/4, 1)
+    false (v₂ ≥ 1): Q(x,1) → P((5x−1)/2) → Q((15x+25)/8, 1)
+    (The false branch uses the v₂=1 formula as a lower bound.) -/
+noncomputable def stochasticStep (x : ℝ) (isV0 : Bool) : ℝ :=
+  if isV0 then (5 * x + 5) / 4
+  else (15 * x + 25) / 8
+
+/-- State of the stochastic model at cycle n. -/
+noncomputable def X (x₀ : ℝ) : ℕ → Ω → ℝ
+  | 0, _ => x₀
+  | n + 1, ω => stochasticStep (X x₀ n ω) (ω n)
+
+/-- The Bernoulli(1/2) PMF on Bool. -/
+noncomputable def bernoulliHalfPMF : PMF Bool := by
+  refine PMF.bernoulli ⟨1/2, by positivity⟩ ?_
+  exact_mod_cast (show (1 : ℝ) / 2 ≤ 1 by norm_num)
+
+/-- The Bernoulli(1/2) measure on Bool. -/
+noncomputable def bernoulliHalf : Measure Bool := bernoulliHalfPMF.toMeasure
+
+instance : IsProbabilityMeasure bernoulliHalf :=
+  PMF.toMeasure.isProbabilityMeasure bernoulliHalfPMF
+
+/-- The product probability measure on Ω. -/
+noncomputable def coinFlipMeasure : Measure Ω :=
+  Measure.infinitePi (fun _ : ℕ => bernoulliHalf)
+
+instance coinFlipMeasure_prob : IsProbabilityMeasure coinFlipMeasure := by
+  show IsProbabilityMeasure (Measure.infinitePi (fun _ : ℕ => bernoulliHalf))
+  haveI : ∀ i : ℕ, IsProbabilityMeasure ((fun _ : ℕ => bernoulliHalf) i) :=
+    fun _ => PMF.toMeasure.isProbabilityMeasure _
+  infer_instance
+
+/-- Measurability of the stochastic step. -/
+lemma stochasticStep_measurable (x : ℝ) :
+    Measurable (fun b : Bool => stochasticStep x b) := by
+  apply measurable_of_finite
+
+/-- X_n is measurable for each n and x₀. -/
+lemma X_measurable (x₀ : ℝ) (n : ℕ) :
+    Measurable (X x₀ n) := by
+  induction n with
+  | zero => exact measurable_const
+  | succ n ih =>
+    show Measurable (fun ω => stochasticStep (X x₀ n ω) (ω n))
+    simp only [stochasticStep]
+    apply Measurable.ite
+    · exact measurable_pi_apply n (measurableSet_singleton _)
+    · exact (ih.const_mul 5 |>.add measurable_const).div_const 4
+    · exact (ih.const_mul 15 |>.add measurable_const).div_const 8
+
+/-! ### Growth properties
+
+Both branches grow: the minimum growth factor is 5/4 (v₂ = 0 branch).
+This gives a deterministic lower bound X_n ≥ x₀ · (5/4)^n for positive x₀,
+and a positive expected log-drift. -/
+
+/-- Both branches of stochasticStep grow: step(x, b) ≥ (5x+5)/4 for all b
+    when x ≥ 0. -/
+lemma stochasticStep_lower_bound (x : ℝ) (hx : x ≥ 0) (b : Bool) :
+    stochasticStep x b ≥ (5 * x + 5) / 4 := by
+  simp only [stochasticStep]
+  cases b <;> simp <;> linarith
+
+/-- The deterministic lower bound: X_n(ω) ≥ (5x+5)/4 iterated n times.
+    Since both branches dominate the v₂=0 branch, X grows at least as
+    fast as the dominant path. -/
+lemma X_lower_bound (x₀ : ℝ) (hx₀ : x₀ ≥ 0) (n : ℕ) (ω : Ω) :
+    X x₀ n ω ≥ Nat.iterate (fun x => (5 * x + 5) / 4) n x₀ := by
+  induction n with
+  | zero => simp [X]
+  | succ n ih =>
+    have hiter_nonneg : (fun x => (5 * x + 5) / 4)^[n] x₀ ≥ 0 := by
+      clear ih ω
+      induction n with
+      | zero => simpa
+      | succ k ihk =>
+        rw [Function.iterate_succ_apply']; linarith
+    rw [Function.iterate_succ_apply']
+    show stochasticStep (X x₀ n ω) (ω n) ≥
+        (5 * (fun x => (5 * x + 5) / 4)^[n] x₀ + 5) / 4
+    calc stochasticStep (X x₀ n ω) (ω n)
+        ≥ (5 * X x₀ n ω + 5) / 4 := stochasticStep_lower_bound _ (by linarith) _
+      _ ≥ (5 * (fun x => (5 * x + 5) / 4)^[n] x₀ + 5) / 4 := by linarith
+
+/-- The iterate of f(x) = (5x+5)/4 has closed form (x₀+5)·(5/4)^n − 5.
+    (Fixed point of f is −5, so y = x+5 gives y_n = y₀·(5/4)^n.) -/
+private lemma iterate_exact (x₀ : ℝ) (n : ℕ) :
+    (fun x => (5 * x + 5) / 4)^[n] x₀ = (x₀ + 5) * (5 / 4) ^ n - 5 := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [Function.iterate_succ_apply', ih]
+    ring
+
+/-- X_n → ∞ for x₀ ≥ 0.  Precisely, X_n ≥ (x₀+5)·(5/4)^n − 5. -/
+lemma X_grows (x₀ : ℝ) (hx₀ : x₀ ≥ 0) (n : ℕ) (ω : Ω) :
+    X x₀ n ω ≥ (x₀ + 5) * (5 / 4) ^ n - 5 := by
+  calc X x₀ n ω ≥ (fun x => (5 * x + 5) / 4)^[n] x₀ :=
+        X_lower_bound x₀ hx₀ n ω
+    _ = (x₀ + 5) * (5 / 4) ^ n - 5 := iterate_exact x₀ n
+
+/-- The per-step expected log-growth is positive:
+    ½ ln(5/4) + ½ ln(15/8) = ½ ln(75/32) > 0. -/
+lemma expected_log_drift_pos :
+    (1 / 2 : ℝ) * Real.log (5 / 4) + (1 / 2) * Real.log (15 / 8) > 0 := by
+  have h1 : (5:ℝ)/4 ≠ 0 := by norm_num
+  have h2 : (15:ℝ)/8 ≠ 0 := by norm_num
+  have key : (1:ℝ)/2 * Real.log (5/4) + 1/2 * Real.log (15/8) =
+      1/2 * (Real.log (5/4) + Real.log (15/8)) := by ring
+  rw [key, ← Real.log_mul h1 h2]
+  have : (5:ℝ)/4 * (15/8) = 75/32 := by ring
+  rw [this]
+  apply mul_pos (by norm_num : (0:ℝ) < 1/2)
+  exact Real.log_pos (by norm_num : (75:ℝ)/32 > 1)
+
+/-! ### Hitting density: first-moment bound
+
+Since X_n → ∞, the reciprocal 1/X_n is summable.  The expected
+number of "near-misses" (X_n landing within distance δ of a
+specific target T) is bounded by δ · Σ 1/X_n.
+
+For exact hits of powers of 2: near level L, the density of
+powers of 2 is 1/(L · ln 2), and the trajectory visits each
+level-L window for ~1/(growth − 1) ≈ 4 cycles.  So the
+expected number of exact hits in the trajectory is bounded by
+the convergent sum Σ 1/(x₀ · (5/4)^n · ln 2) ≤ 5/(x₀ · ln 2).
+
+This is a heuristic first-moment bound; making it rigorous for
+exact Diophantine hits (as opposed to near-misses) is
+Collatz-hard (see `dominant_path_at_most_one_hit` discussion).
+-/
+
+/-- The reciprocal sum is bounded: Σ 1/(x₀·(5/4)^n) = 5/x₀ for x₀ > 0.
+    This bounds the expected number of near-misses. -/
+lemma reciprocal_sum_bound (x₀ : ℝ) (hx₀ : x₀ > 0) :
+    HasSum (fun n : ℕ => 1 / (x₀ * (5 / 4) ^ n)) (5 / x₀) := by
+  have hx₀' : x₀ ≠ 0 := ne_of_gt hx₀
+  -- Σ (4/5)^n = (1 - 4/5)⁻¹ = 5
+  have hgeom : HasSum (fun n : ℕ => (4 / 5 : ℝ) ^ n) 5 := by
+    have h := hasSum_geometric_of_lt_one (by norm_num : (0:ℝ) ≤ 4/5) (by norm_num : (4:ℝ)/5 < 1)
+    simp only [show (1 : ℝ) - 4 / 5 = 1 / 5 from by norm_num, one_div, inv_inv] at h
+    exact h
+  -- Scale by 1/x₀
+  have scaled := hgeom.mul_left (1 / x₀)
+  convert scaled using 1
+  · ext n
+    show 1 / (x₀ * (5 / 4) ^ n) = 1 / x₀ * (4 / 5) ^ n
+    rw [one_div, one_div, mul_inv]
+    congr 1
+    rw [show ((5 : ℝ) / 4) ^ n = (5 ^ n / 4 ^ n) from div_pow 5 4 n]
+    rw [inv_div]
+    exact div_pow 4 5 n |>.symm
+  · ring
+
+/-- Expected number of hits heuristic: under the stochastic model,
+    the expected number of n such that |5·X_n + 9 − 2^m| < 1 for
+    some m is at most C/x₀ where C = 5/ln 2 ≈ 7.21. -/
+lemma expected_hits_bound (x₀ : ℝ) (hx₀ : x₀ > 0) :
+    5 / (x₀ * Real.log 2) > 0 := by
+  apply div_pos (by norm_num : (5:ℝ) > 0)
+  exact mul_pos hx₀ (Real.log_pos (by norm_num : (2:ℝ) > 1))
+
+/-! ### Applied bound: non-halting after X steps implies low hit probability
+
+Suppose the machine has run for X macro-steps without halting, and the
+Q-entry value has grown to x₀.  From `X_grows`, all future Q-entries
+satisfy X_n ≥ (x₀+5)·(5/4)^n − 5.  The heuristic probability of
+hitting any 2^i − 2 in the future is bounded by:
+
+  P(hit) ≤ Σ_{n≥0} 1/((x₀+5)·(5/4)^n · ln 2)
+          = 5 / ((x₀+5) · ln 2)
+          ≈ 7.21 / x₀     for large x₀.
+
+Concretely: the BB(6) cryptid simulation reaches Q-entries of order
+10^16 within 200 macro-steps.  At that point:
+  P(future hit) ≤ 7.21 / 10^16 ≈ 7.2 × 10⁻¹⁶.
+-/
+
+/-- The bound tightens as x0 grows: 5/((x0+5)*ln 2) <= 5/(x0*ln 2). -/
+lemma applied_hit_bound (x₀ : ℝ) (hx₀ : x₀ > 0) :
+    5 / ((x₀ + 5) * Real.log 2) ≤ 5 / (x₀ * Real.log 2) := by
+  have hlog : Real.log 2 > 0 := Real.log_pos (by norm_num)
+  exact div_le_div_of_nonneg_left (by norm_num)
+    (mul_pos hx₀ hlog)
+    (mul_le_mul_of_nonneg_right (by linarith) (le_of_lt hlog))
+
+/-- General parametric bound: given machine reaches Q-entry of order
+    10^d without halting, the expected number of future near-misses
+    is at most 5/(10^d · ln 2) < 8/10^d (since ln 2 > 5/8). -/
+lemma parametric_hit_bound (d : ℕ) (hd : d ≥ 1) :
+    5 / ((10 : ℝ) ^ d * Real.log 2) < 8 / (10 : ℝ) ^ d := by
+  have hlog : Real.log 2 > 5 / 8 := by
+    -- ln 2 > 0.625: since e^(5/8) < 2 (e^(5/8) ≈ 1.868)
+    rw [show (5 : ℝ) / 8 = Real.log (Real.exp (5 / 8)) from (Real.log_exp _).symm]
+    exact Real.log_lt_log (by positivity) (by
+      have h := Real.exp_bound (show |(5:ℝ)/8| ≤ 1 by norm_num) (show 0 < 5 by norm_num)
+      have upper : Real.exp ((5:ℝ)/8) ≤
+          (∑ m ∈ Finset.range 5, ((5:ℝ)/8) ^ m / ↑m.factorial) +
+          ((5:ℝ)/8) ^ 5 * (↑(Nat.succ 5) / (↑(Nat.factorial 5) * ↑(5:ℕ))) := by
+        linarith [abs_le.mp h]
+      simp only [Finset.sum_range_succ, Finset.sum_range_zero] at upper
+      norm_num at upper; linarith)
+  have h10 : (10 : ℝ) ^ d > 0 := by positivity
+  have hlog' : Real.log 2 > 0 := by linarith
+  calc 5 / ((10 : ℝ) ^ d * Real.log 2)
+      < 5 / ((10 : ℝ) ^ d * (5 / 8)) := by
+        apply div_lt_div_of_pos_left (by norm_num) (mul_pos h10 (by norm_num))
+          (mul_lt_mul_of_pos_left hlog h10)
+    _ = 8 / (10 : ℝ) ^ d := by ring
+
