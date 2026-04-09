@@ -1210,15 +1210,17 @@ inductive MacroConfig where
   | M0 : List Nat → List Nat → MacroConfig         -- M0_Config L R
 
 /-- Embed a MacroConfig into a TM Config. -/
-def MacroConfig.toConfig : MacroConfig → Config 6
+@[irreducible] def MacroConfig.toConfig : MacroConfig → Config 6
   | .M L c R => M_Config L c R
   | .M0 L R => M0_Config L R
 
-lemma MacroConfig.toConfig_M (L : List Nat) (c : Nat) (R : List Nat) :
-    (MacroConfig.M L c R).toConfig = M_Config L c R := rfl
+@[simp] lemma MacroConfig.toConfig_M (L : List Nat) (c : Nat) (R : List Nat) :
+    (MacroConfig.M L c R).toConfig = M_Config L c R := by
+  rw [MacroConfig.toConfig]
 
-lemma MacroConfig.toConfig_M0 (L : List Nat) (R : List Nat) :
-    (MacroConfig.M0 L R).toConfig = M0_Config L R := rfl
+@[simp] lemma MacroConfig.toConfig_M0 (L : List Nat) (R : List Nat) :
+    (MacroConfig.M0 L R).toConfig = M0_Config L R := by
+  rw [MacroConfig.toConfig]
 
 /-- All elements of a list are ≥ 1. -/
 def AllGe1 : List Nat → Prop
