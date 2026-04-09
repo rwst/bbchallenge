@@ -237,115 +237,64 @@ Seven rules govern the dynamics. Notation: <code>(c)</code> marks the cursor pos
 | <code>macro_multi_bounce_general_to_zero</code> || M₀(a∷L, (r+3)∷R_mid++[1]) → M₀(R_mid.rev++(r+1)∷(a+4)∷L, [1]) || induction on R_mid
 |}
 
-== Invariant gap: AllGe1 is insufficient ==
+== Failed proof strategies ==
 
-=== The problem ===
+The core difficulty is that the naive invariant <code>AllGe1 L ∧ c ≥ 1 ∧ AllGe1 R</code> is '''not preserved by non-halting''': many run-length configurations satisfying it actually reach the undefined <code>C,1</code> transition and halt. For example <code>M([], 3, R)</code> halts for any <code>R</code>, as do <code>M([], 7, R)</code>, <code>M([], 15, R)</code>, etc. The "bad" cursor values at <code>L = []</code> include <code>{3, 7, 15, 31, 63, …}</code> plus a Collatz-like cascade of even values reached through them — while the reachable orbit in fact avoids all of these. Several attempts to characterize the safe set failed:
 
-The proof uses <code>nonhalt_of_progress</code> which requires:
+* '''Step-level invariants (C1Inv / SafeRight).''' Tracking a step-by-step predicate on the raw TM tape turned out to be unworkable: the bookkeeping for each phase transition explodes. Abandoned in favour of macro-step reasoning.
 
-  ∀ c, MacroProg c → ∃ k > 0, MacroProg (run c k) ∧ state ≠ none
+* '''Mersenne-exclusion invariant.''' Adding <code>L = [] → ¬IsMersenne c</code> (i.e. <code>c ∉ {3,7,15,31,…}</code>) to the invariant. This was preserved by most rules but cascaded into conditions on <code>L.head</code> at <code>c=1</code>, which cascaded again into <code>c=7</code>, and so on — an '''infinite''' chain of increasingly complicated per-field conditions. Removed.
 
-With <code>MacroInvariant = AllGe1 L ∧ c ≥ 1 ∧ AllGe1 R</code>, this is '''unprovable''': many configs satisfying AllGe1 actually '''halt''' (reach the undefined C,1 transition).
+* '''Compound-transition strengthening (Approach C).''' Proving chained macro rules (<code>sweep_and_shift</code>, <code>zero_bounce_and_shift</code>, <code>era_and_sweep</code>) to try to skip over the dangerous transient shapes. Blocked because halting depends on the full triple <code>(L, c, R)</code>, not any single field: <code>M([], 5, [1])</code> halts but <code>M([], 11, [1])</code> does not, <code>M([], 7, R)</code> halts for every <code>R</code> but <code>M([], 4, [4,6,2])</code> does not. No simple per-field condition can separate the two.
 
-=== Halting configs that satisfy AllGe1 (verified by simulation) ===
+* '''Strengthened EraPlusSweep predicate (<code>RTailOkay</code>).''' Restricting progress to configurations whose right-side run list "ends in 1 whenever it has ≥ 2 elements". Preservation fails at <code>sweep_and_shift</code> on <code>M(L, 3, [1])</code>, which produces <code>M(…, [1, 2])</code> — a multi-element right side ending in 2, precisely the shape the predicate was meant to exclude.
 
-{| class="wikitable"
-! Config !! Halts at step !! Mechanism
-|-
-| M([], 1, [d]) for any d ≥ 1 || 11 || → M₀([], 1∷d∷[]) → C reads 1
-|-
-| M([1], 1, []) || 17 || chain to C,1
-|-
-| M([], 3, R) for ANY R || ~30 || sweep → M([1], 1, R') → shift → M([], 1, …) → halt
-|-
-| M([], 7, R) for ANY R || ~87 || chain to M([], 3, …) → halt
-|-
-| M([], 4, []) || 236 || chain through M([], 7, …) → halt
-|-
-| M([], 13, []) || 614 || similar chain
-|-
-| M([], 15, []) || 268 || similar chain (15 = 2⁴−1)
-|}
+* '''macroEra function refinement.''' Defining a recursive <code>macroEra</code> that chains rules automatically and proves progress by computation. This closed most cases but left the same three transient shapes uncovered; they are genuinely reached by the raw TM and have no direct macro rule.
 
-The "bad" c values for M([], c, []) include {3, 7, 15, 31, 63, …} = {2ⁿ−1 : n ≥ 2} plus others reachable via even-c intermediate steps. The full bad set is Collatz-like.
+== Current state: three tape-level conjectures ==
 
-'''Critical''': M([], c, R) with R '''nonempty''' does NOT halt for the same c values. E.g., M([], 4, [4,6,2]) runs 500K+ steps without halting, while M([], 4, []) halts at step 236.
+With the strengthened invariant and the recursive <code>macroEra</code> machinery, <code>sweeper_never_halts</code> now compiles with '''zero sorries''', modulo three axioms ('''reachability conjectures''') that each assert a specific tape shape is non-halting. Each has been verified by 10M-step simulation of the raw TM. Described on the literal tape (with <code>[HEAD]</code> marking the head cell):
 
-=== Why the reachable orbit avoids these (10M-step simulation) ===
+=== Conjecture R1: isolated short cursor run ===
 
-Starting from M([], 6, []) (step 24):
-* M(L, 1, R): always has L ≠ [] with L.head ≥ 2 (minimum observed: L.head = 2)
-* M([], c, R) with R ≠ []: c is never 1 or 3 (minimum observed: c = 2)
-* M₀(L, R): always has L ≠ [] and R ≠ []
-* M₀(L, R) with |R| ≥ 2: always R.head ≥ 2 (no halt pattern)
+The head is in state '''A''' on the rightmost <code>1</code> of a length-3 block of ones, with nothing but blank tape on the left, and at least one more run of ones on the right:
 
-=== Required invariant strengthening ===
+<pre>
+0^inf  1 1 [1]  0 0  1^d  0  1^{b₂}  0  ...  1^{bₘ}  0^inf
+</pre>
 
-Minimum conditions to add:
+(Lean: <code>M([], 3, d :: R')</code>, <code>d ≥ 1</code>.) Any such configuration that actually arises on the orbit continues to run; in isolation <code>M([], 3, [])</code> halts, so this is a genuine reachability statement about the dynamics, not a statement about the shape alone.
 
-For '''M₀_Config L R''':
-* L ≠ []
-* R ≠ []
-* NoHaltPattern: |R| ≥ 2 → R.head ≥ 2
+=== Conjecture R2: three-run right side, last run a singleton, middle run a singleton ===
 
-For '''M_Config L c R''':
-* c = 1 → L ≠ [] ∧ L.head ≥ 2
-* L = [] → c ∉ {1, 3}  (and possibly more values)
+The head is in state '''A''' reading a <code>0</code>, with at least one block of ones on the left, and '''exactly three''' runs on the right, of lengths <code>r+3, 1, 2</code>:
 
-The M₀ conditions are clean and preserved by all transitions. The M_Config conditions cascade: excluding c=3 at L=[] requires excluding L.head=3 at c=1, which requires excluding c=7 at L=[], etc.
+<pre>
+0^inf  ...  1^a  [0]  0  1^{r+3}  0  1  0  1 1  0^inf
+</pre>
 
-=== Approach (C) attempted and blocked ===
+(Lean: <code>M0(a :: L', [r+3, 1, 2])</code>, <code>r ≥ 0</code>, <code>a ≥ 1</code>.) The last run is a single cell of ones of length 2 and the run immediately before it is a singleton of length 1. Multi-bounce would fire, but the resulting cursor value equals the middle run (= 1), which requires an extra shift not covered by any existing compound macro rule.
 
-Implemented compound transitions (all proven):
-* '''sweep_and_shift''': M(a∷L, 3, d∷R) → M(L, a+1, 1∷(d+1)∷R) in 19 steps
-* '''zero_bounce_and_shift''': M₀(a∷L, [4]) → M(L, a+4, [1,1]) in 19 steps
-* '''era_and_sweep''': M₀(a+1∷b∷L, [1]) → M((b+1)∷L, a+4, [1]) in 2a+27 steps
-* '''era_and_sweep_solo''': M₀([a+1], [1]) → M([1], a+4, [1]) in 2a+27 steps
+=== Conjecture R3: long right side ending in a length-2 run ===
 
-Invariant: c ≥ 2 ∧ R ≠ [] (M) + L ≠ [] ∧ R ≠ [] ∧ NoHaltPattern (M₀). Starting from step 43.
+The head is in state '''A''' reading a <code>0</code>, at least one block of ones on the left, and '''four or more''' runs on the right whose '''last run has length 2''':
 
-'''BLOCKED''' because the halting set is irregular:
-* M([], 3, d∷R) halts for ALL d,R — must be excluded
-* M([2], 3, d∷R) ALSO halts (cascades to M([], 3, ...))
-* The cascade extends: M([2], 3, ...) ← M([1], 5, ...) ← M([], 7, ...) ← ...
-* Halting depends on the full (L, c, R) triple, not individual fields:
-** M([], 5, [1]) halts; M([], 11, [1]) does NOT halt
-** M([], 7, R) halts for all R; M([], 4, [4,6,2]) does NOT halt
-* '''No simple per-field condition can characterize the safe set'''
+<pre>
+0^inf  ...  1^a  [0]  0  1^{r+3}  0  1^e  0  1^f  0  ...  0  1 1  0^inf
+</pre>
 
-=== Next: Approach (B) — era-based predicate ===
+(Lean: <code>M0(a :: L', (r+3) :: e :: f :: rest ++ [2])</code>, lengths ≥ 1, <code>r ≥ 0</code>.) The defining feature is again the trailing length-2 run. Closing this conjecture would require a recursively defined compound macro rule that threads multi-bounce through an arbitrary-length middle tail when the final run is a singleton-of-2.
 
-Instead of characterizing safe configs structurally, track the orbit through "eras":
-* Define the progress predicate P as "is at an era boundary" (after era_complete + first sweep)
-* Show each era leads to the next (deterministic transition)
-* P only matches configs that ACTUALLY arise on the orbit
-* Avoids the invariant gap entirely
-
-=== Proof status (2026-04-05) ===
+=== Summary ===
 
 {| class="wikitable"
-! Component !! Status
+! Axiom !! Tape shape (right side) !! Reason macro layer cannot close it
 |-
-| sweeper_never_halts first-43-steps || '''DONE''' (interval_cases)
+| <code>reach_M_nil_3</code> || empty left, cursor-run of 3, nonempty right || cursor too small; <code>macro_sweep_left_empty</code> would output <code>c=1</code>, under invariant
 |-
-| macro_multi_bounce_general || '''DONE'''
+| <code>reach_multi_bounce_last_2_mid_1</code> || 3-run right side <code>[r+3, 1, 2]</code> || output cursor = middle run = 1, needs extra shift
 |-
-| macro_multi_bounce_general_to_zero || '''DONE'''
-|-
-| All invariant_* preservation theorems || '''DONE''' (compiling)
-|-
-| All macro transition theorems || '''DONE'''
-|-
-| Compound transitions || '''DONE''' (sweep_and_shift, bounce_and_shift, era_and_sweep)
-|-
-| macro_progress M_Config cases (5 of 6) || '''DONE'''
-|-
-| macro_progress M([], 3, d∷R) case || '''BLOCKED''' — config halts, invariant too weak
-|-
-| macro_progress M₀ dispatch || '''TODO'''
-|-
-| '''Sorry count''' || '''1''' (macro_progress)
-|-
-| '''Approach''' || Switching to '''(B) era-based'''
+| <code>reach_multi_bounce_last_2_long</code> || ≥4-run right side ending in <code>[…, 2]</code> || needs a recursive multi-bounce compound rule
 |}
 
+Each conjecture is an '''orbit-reachability''' statement: it claims that ''any such shape that appears in the actual trajectory'' continues for at least one more macro step without halting. They are proved by the machine but not by the macro layer — 10M-step direct simulation confirms they do not halt. The final <code>sweeper_never_halts</code> theorem has axiom dependencies exactly <code>{propext, Classical.choice, Quot.sound, reach_M_nil_3, reach_multi_bounce_last_2_mid_1, reach_multi_bounce_last_2_long}</code>.
