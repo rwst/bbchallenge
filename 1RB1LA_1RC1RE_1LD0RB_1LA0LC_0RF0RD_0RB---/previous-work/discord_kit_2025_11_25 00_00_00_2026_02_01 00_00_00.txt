@@ -1,0 +1,1059 @@
+==============================================================
+Guild: bbchallenge
+Channel: General / forum-individual-machines / 1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---
+After: 11/25/2025 12:00 AM
+Before: 2/1/2026 12:00 AM
+==============================================================
+
+[11/26/2025 5:41 PM] dihedralgroup (pinned)
+According to mxdys: 
+```1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---
+
+start: S(18)
+
+S(n) --> S((n+(3^i*6+i+4))/2), n mod 2 = i mod 2, 3^i*2-i-2 <= n <= 3^i*6-i-6
+S(n) --> S(3^i*12-1), n mod 2 = (i+1) mod 2, 3^i*2-i <= n <= 3^i*6-i-10```
+
+are closed if `(3^i*2+i+5)/(2^v2(3^i*2+i+5))>=2i+14` for all i>=50
+
+
+[11/26/2025 5:42 PM] dihedralgroup
+attribution: https://discord.com/channels/960643023006490684/1239205785913790465/1441124403801755730
+
+
+[11/26/2025 5:42 PM] dihedralgroup
+<@722526786637791262>
+
+
+[11/26/2025 6:06 PM] dihedralgroup
+ok
+
+
+[11/26/2025 6:06 PM] dihedralgroup
+$for N_i = 2*3^i+i+5$
+
+
+[11/26/2025 6:06 PM] TeXit#0796
+**Autumn Pan**
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443302032034369698/1272286208793251843.png?ex=69d9e503&is=69d89383&hm=42f6ed2d0439a6c2a6c27467bf79df344c523637dd4ee31423da719b44bc953a&
+
+
+[11/26/2025 6:07 PM] dihedralgroup
+$\frac{N_i}{2^{v_2(N_i)}}>=2i+14 \\ \forall i>=50$
+
+
+[11/26/2025 6:08 PM] TeXit#0796
+**Autumn Pan**
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443302438525210665/1272286208793251843.png?ex=69d9e564&is=69d893e4&hm=10196320044691e95c7c10f353b8851b256f51f88a898f22259c3f6d0642173c&
+
+
+[11/26/2025 6:09 PM] dihedralgroup
+i think this sets us up
+
+
+[11/26/2025 6:23 PM] dihedralgroup
+<@1189044402631491586> check this out
+
+
+[11/26/2025 6:24 PM] entronid
+why would you ping me
+
+
+[11/26/2025 6:24 PM] entronid
+sob
+
+
+[11/26/2025 6:24 PM] dihedralgroup
+do you think it can be done with induction?
+
+
+[11/26/2025 6:35 PM] pomme_de_terre_
+no prpb not
+
+
+[11/26/2025 6:35 PM] pomme_de_terre_
+Wait gimme a sec
+
+
+[11/26/2025 6:35 PM] dihedralgroup
+why not?
+
+
+[11/26/2025 6:36 PM] pomme_de_terre_
+My computer is being slow to start
+
+
+[11/26/2025 6:37 PM] pomme_de_terre_
+
+
+{Forwarded Message}
+LLM claims that `exists r, v2(3^i*2+i+5)=v2(i-r)`, and `v2(i-r)=O(log i)`
+Originally sent: 11/20/2025 7:11 PM
+
+
+[11/26/2025 6:37 PM] pomme_de_terre_
+r is a 2-adic integer, and i agree with this statement (im not sure about the O(log i) bound though, at least it doesn't directly follow from the existence of r)
+
+
+[11/26/2025 6:37 PM] dihedralgroup
+i might try to runa  quick brute force check but it looks like it grows so astronomically that my computer may not be able to handle it
+
+
+[11/26/2025 6:37 PM] pomme_de_terre_
+i wrote an accelerated simulator with this in mind
+
+
+[11/26/2025 6:38 PM] dihedralgroup
+im going to take a shot at a pen and paper inductive proof
+
+
+[11/26/2025 6:38 PM] dihedralgroup
+and ill also share it with some mathematicians i know
+
+
+[11/26/2025 6:39 PM] pomme_de_terre_
+
+
+{Forwarded Message}
+its a bit of a futile effort but i wrote an accelerated simulator with this in mind and its not remotely close to breaking the bound up to at least i=10^8
+Originally sent: 11/24/2025 8:11 PM
+
+
+[11/26/2025 6:39 PM] pomme_de_terre_
+This is the work that ive done so far
+
+
+[11/26/2025 6:39 PM] pomme_de_terre_
+The issue is that the v2s do follow a predictable pattern (the existence of r from mxdys' message)
+
+
+[11/26/2025 6:40 PM] pomme_de_terre_
+But that doesnt tell us enough - in particular, its possible for the v2 to jump by a lot if the digits of r line up just right
+
+
+[11/26/2025 6:40 PM] dihedralgroup
+yeah absolutely
+
+
+[11/26/2025 6:41 PM] pomme_de_terre_
+some other approaches i've tried are
+
+
+[11/26/2025 6:41 PM] pomme_de_terre_
+the question can be reformulated as showing that `3^i+i+5` has an odd factor of at least `2i+14` for `i>=50`
+
+
+[11/26/2025 6:42 PM] pomme_de_terre_
+so you could try to see whether a sufficiently large prime will always divide it
+
+
+[11/26/2025 6:43 PM] pomme_de_terre_
+but the residues modulo primes don't mesh together well at all, and we kind of need them to be able to because the prime has to grow (albiet only at a rate of `\Omega(log i)`)
+
+
+[11/26/2025 6:45 PM] pomme_de_terre_
+another idea is to notice that, if we want the inequality to fail because `N_i` is divisible by `2^k` for some sufficiently large `k`, there's a narrow window for possible values of `i` with a width on the order of `O(log k)`, because it has to be big enough for `3^i+i+5>=2^k` while also not being bigger by a factor of more than `2i_14`
+
+
+[11/26/2025 6:46 PM] pomme_de_terre_
+so maybe there's just not enough space for the residues modulo `2^k` to move around and hit 0 after `N_i` first crosses `2^k` in magnitude before `N_i` gets too big again
+
+
+[11/26/2025 6:46 PM] pomme_de_terre_
+but i was also not able to make anything work from this
+
+
+[11/26/2025 6:50 PM] dihedralgroup
+honestly by intuition im guessing that the inequality holds
+
+
+[11/26/2025 6:50 PM] pomme_de_terre_
+i agree :D
+
+
+[11/26/2025 6:51 PM] pomme_de_terre_
+wait i can try to get a probability estimate
+
+
+[11/26/2025 6:51 PM] pomme_de_terre_
+there are actually quite a few ways to go about doing this
+
+
+[11/26/2025 6:51 PM] dihedralgroup
+:D
+
+
+[11/26/2025 6:52 PM] pomme_de_terre_
+you could look at the digits of the 2-adic `r` and look at how many of them need to line up at once to cause a failure
+
+
+[11/26/2025 6:52 PM] dihedralgroup
+yeah please do
+
+
+[11/26/2025 6:52 PM] pomme_de_terre_
+or you could do something closer to this by looking at the de bruijn function and tryna count the number of `2i+14`-smooth numbers around `N_i`
+
+
+[11/26/2025 6:58 PM] dihedralgroup
+hm im going to try and run a sim in the background maybe
+
+
+[11/26/2025 6:58 PM] dihedralgroup
+if thats computationally feasible
+
+
+[11/26/2025 6:59 PM] pomme_de_terre_
+python can calculate the first 10^5 terms or so in a reasonable amount of time, but i only ran it up to 10^4
+
+
+[11/26/2025 6:59 PM] pomme_de_terre_
+my accelerated simulator skips most terms to jump to the ones where `i-r` is expected to increase (if the smallest `v2` that we haven't found yet is `k`, then we increase `i` by increments of `2^k`), and my computer gets cooked at `10^8`
+
+
+[11/26/2025 7:00 PM] dihedralgroup
+i use c
+
+
+[11/26/2025 7:00 PM] pomme_de_terre_
+that will probably be faster
+
+
+[11/26/2025 7:01 PM] pomme_de_terre_
+but you might need to make an arbitrary precision implementation for big itnegers
+
+
+[11/26/2025 7:01 PM] dihedralgroup
+yeah i know how to do that
+
+{Reactions}
+👍
+
+[11/26/2025 7:02 PM] dihedralgroup
+cant you just count trailing zeros for v2
+
+
+[11/26/2025 7:03 PM] pomme_de_terre_
+yeah
+
+
+[11/26/2025 7:03 PM] pomme_de_terre_
+oh you could probably make it much faster by not calculating 3^i 💀
+
+
+[11/26/2025 7:03 PM] dihedralgroup
+oh wow
+
+
+[11/26/2025 7:03 PM] dihedralgroup
+so given some variable n,m
+
+
+[11/26/2025 7:03 PM] pomme_de_terre_
+just take it mod 2^k and increment k if the residue is 0 would save a *ton* of time
+
+
+[11/26/2025 7:03 PM] pomme_de_terre_
+wait this is a huge optimization
+
+
+[11/26/2025 7:04 PM] pomme_de_terre_
+im trolling
+
+
+[11/26/2025 7:04 PM] pomme_de_terre_
+ill go optimize my sim as well
+
+
+[11/26/2025 7:04 PM] dihedralgroup
+```
+size_t i = 0;
+while(!(n & 1U)) {
+  i++;
+  n >> 1;
+}
+
+return n >= m;
+```
+
+{Reactions}
+👍
+
+[11/26/2025 7:05 PM] dihedralgroup
+or rather
+
+
+[11/26/2025 7:05 PM] dihedralgroup
+yeah that works right
+
+
+[11/26/2025 7:06 PM] pomme_de_terre_
+also the probability that the inequality fails with this approach (given the sim result for `i>=10^8`) is somewhere on the order of `1/(3^(10^8))` give or take like 10 orders of magnitude i think
+
+
+[11/26/2025 7:06 PM] pomme_de_terre_
+ye
+
+
+[11/26/2025 7:06 PM] dihedralgroup
+yeah so that is pretty peak
+
+
+[11/26/2025 7:07 PM] dihedralgroup
+reminder that `n % 2^k == n & (2^k - 1)`
+
+
+[11/26/2025 7:07 PM] dihedralgroup
+:)
+
+
+[11/26/2025 7:08 PM] dihedralgroup
+can you just send the sim
+
+
+[11/26/2025 7:08 PM] pomme_de_terre_
+yeah sure
+
+
+[11/26/2025 7:08 PM] pomme_de_terre_
+the bottleneck was computing `3^i`, which is massive for big i
+
+
+[11/26/2025 7:08 PM] pomme_de_terre_
+but yeah we dont need to do that
+
+
+[11/26/2025 7:08 PM] pomme_de_terre_
+```
+from time import *
+
+def v2(n):
+    result = 0
+    while n%2 == 0:
+        n = n >> 1
+        result += 1
+    return result
+
+def k(i):
+    return 2 * (3 ** i) + i + 5
+
+first_seen = []
+for i in range(100):
+    first_seen.append(-1)
+
+seen_exponents = set()
+current_exponent = 0
+i = 1
+
+while current_exponent < 50:
+    val = v2(k(i))
+    if not val in seen_exponents:
+        seen_exponents.add(val)
+        first_seen[val] = i
+    if val == current_exponent:
+        i += 2 ** current_exponent
+        while current_exponent in seen_exponents:
+            current_exponent += 1
+    else:
+        i += 2 ** current_exponent
+    print(i)
+
+print(first_seen)
+```
+
+
+[11/26/2025 7:09 PM] pomme_de_terre_
+it never actually hits current exponent < 50, i had to manually kill it at i=10^8 bc it was taking forever
+
+
+[11/26/2025 7:09 PM] dihedralgroup
+lmao thats just `!((n & ((2 << k) - 1)) + k` right
+
+
+[11/26/2025 7:09 PM] dihedralgroup
+also like you're using python, this is better done in c
+
+
+[11/26/2025 7:09 PM] pomme_de_terre_
+no like
+
+
+[11/26/2025 7:10 PM] pomme_de_terre_
+if you keep all computations mod 2^k
+
+
+[11/26/2025 7:10 PM] dihedralgroup
+yeah
+
+
+[11/26/2025 7:10 PM] pomme_de_terre_
+this is true; i would appreciate a c implementation
+
+
+[11/26/2025 7:10 PM] pomme_de_terre_
+i just threw this together to test it and i thought python would be easiest to write
+
+
+[11/26/2025 7:10 PM] dihedralgroup
+im going to throw that together right now
+
+{Reactions}
+👍
+
+[11/26/2025 7:27 PM] vy.x
+(program is heavily optimized by fixing exponentation)
+
+
+[11/26/2025 7:28 PM] pomme_de_terre_
+ok this one gets to `i=10^270` in around 10 seconds on my machine (vyx is goated for spotting issue with my code)
+
+
+[11/26/2025 7:28 PM] pomme_de_terre_
+```from time import *
+
+def v2(n):
+    result = 0
+    while n%2 == 0:
+        n = n >> 1
+        result += 1
+    return result
+
+def three_exp(n, bits):
+    if n == 0:
+        return 1
+    if n == 1:
+        return 3
+
+    if n % 2 == 0:
+        return (three_exp(n // 2, bits) ** 2) % (2 ** bits)
+    else:
+        return (3 * three_exp(n // 2, bits) ** 2) % (2 ** bits)
+
+def k(i, bits):
+    return (2 * three_exp(i, bits) + i + 5) % (2 ** bits)
+
+def v2k(i, start_bits):
+    while k(i, start_bits) == 0:
+        start_bits += 1
+    return start_bits - 1
+
+first_seen = []
+for i in range(1000):
+    first_seen.append(-1)
+
+seen_exponents = set()
+current_exponent = 0
+i = 1
+
+while current_exponent < 900:
+    val = v2k(i, current_exponent)
+    if not val in seen_exponents:
+        seen_exponents.add(val)
+        first_seen[val] = i
+    if val == current_exponent:
+        i += 2 ** current_exponent
+        while current_exponent in seen_exponents:
+            current_exponent += 1
+    else:
+        i += 2 ** current_exponent
+    print(i)
+
+print(first_seen)
+```
+
+
+[11/26/2025 7:30 PM] dihedralgroup
+how's it going
+
+
+[11/26/2025 7:30 PM] dihedralgroup
+i've decided to use gmp
+
+
+[11/26/2025 7:31 PM] vy.x
+oh wait you are also rewriting
+
+
+[11/26/2025 7:31 PM] pomme_de_terre_
+ye
+
+
+[11/26/2025 7:31 PM] vy.x
+oops i did not scroll through the chat
+
+
+[11/26/2025 7:31 PM] pomme_de_terre_
+they're working on a c implementation
+
+
+[11/26/2025 7:31 PM] pomme_de_terre_
+which should be even faster
+
+
+[11/26/2025 7:31 PM] dihedralgroup
+yes
+
+
+[11/26/2025 7:32 PM] pomme_de_terre_
+new graph for i up to `10^90` with first seen v2s up to 300 (inequality fails if dot goes into red region, which is probviously never happening)
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443323433315340398/image.png?ex=69d9f8f2&is=69d8a772&hm=eeffafce08443cd0a3787c67315f977727f5a4f4757f8076aedc90e6c84f949d&
+
+
+[11/26/2025 7:32 PM] dihedralgroup
+```gcc yipee.c -O3 -march=native -mtune=native -flto -o bb```
+
+
+[11/26/2025 7:32 PM] dihedralgroup
+ill be using this
+
+
+[11/26/2025 7:33 PM] dihedralgroup
+extensive bitwise optimizations i added
+
+
+[11/26/2025 7:33 PM] dihedralgroup
+```c
+uint64_t powerof3(uint64_t n) {
+    uint64_t result = 1;
+    uint64_t tmp = 3;
+    while(n != 0) {
+        if(n & 1U != 0)
+            result *= tmp;
+        n >>= 1;
+        tmp = tmp * tmp;
+    }
+
+    return result;
+}
+``` ill have this but arbitrary sized
+
+
+[11/26/2025 7:34 PM] dihedralgroup
+gives me some very needed experience in gmp though :3
+
+
+[11/26/2025 7:41 PM] pomme_de_terre_
+i ran up to `i=10^300` and its chill
+
+
+[11/26/2025 7:41 PM] dihedralgroup
+ok
+
+
+[11/26/2025 7:41 PM] pomme_de_terre_
+ill just wait for faster c implementations
+
+
+[11/26/2025 7:42 PM] dihedralgroup
+it will take a bit so dont rely on it
+
+
+[11/26/2025 7:42 PM] pomme_de_terre_
+its chill
+
+
+[11/26/2025 7:42 PM] pomme_de_terre_
+solving this will take even longer :D
+
+
+[11/26/2025 7:42 PM] dihedralgroup
+ill run it overnight to compensate for development time
+
+
+[11/26/2025 7:42 PM] dihedralgroup
+i expect c to be a few dozen times faster
+
+
+[11/26/2025 7:45 PM] pomme_de_terre_
+if this tm halts then i will eat a hat
+
+
+[11/26/2025 7:45 PM] dihedralgroup
+yes
+
+
+[11/26/2025 7:45 PM] dihedralgroup
+can we call it probvious
+
+
+[11/26/2025 7:45 PM] pomme_de_terre_
+yeah
+
+
+[11/26/2025 7:45 PM] dihedralgroup
+anyhow we shouldnt be spending so much energy simming it
+
+
+[11/26/2025 7:45 PM] pomme_de_terre_
+this is true
+
+
+[11/26/2025 7:46 PM] dihedralgroup
+since the chances it does anything is astronomically lwo
+
+
+[11/26/2025 7:47 PM] pomme_de_terre_
+
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443327391643602994/hq720.jpg?ex=69d9fca1&is=69d8ab21&hm=76f35984ab04ff6e4b0fe7ce9e40de713d38422ea5fa7a1038c0b9befd9e629a&
+
+{Reactions}
+🗿 (2) 😂
+
+[11/26/2025 7:48 PM] dihedralgroup
+haha lol
+
+
+[11/26/2025 7:48 PM] dihedralgroup
+anyhow i will pick this back up in about an hour, i've to walk home before the sun sets
+
+{Reactions}
+👍
+
+[11/26/2025 7:48 PM] vy.x
+bad code
+```
+#include <bits/stdc++.h>
+#include <gmpxx.h>
+using namespace std;
+#define int mpz_class
+
+int v2(int n) {
+    int result = 0;
+    while (n % 2 == 0) {
+        n >>= 1;
+        result++;
+    }
+    return result;
+}
+
+int three_exp(int n, int &pbits) {
+    if (n == 0) return 1;
+    if (n == 1) return 3;
+    const int h = n / 2;
+    const int power = three_exp(h, pbits);
+    if (n % 2 == 0) return (power * power) % (pbits);
+    else return (3 * power * power) % (pbits);
+}
+
+int k(int &i, int pbits) {
+    return (2 * three_exp(i, pbits) + i + 5) % (pbits);
+}
+
+int tpow(long k) {
+    int x;
+    mpz_ui_pow_ui(x.get_mpz_t(), 2, k);
+    return x;
+}
+
+long v2k(int &i, long start_bits) {
+    while (k(i, tpow(start_bits)) == 0) {
+        start_bits += 1;
+    }
+    return start_bits - 1;
+}
+
+signed main() {
+    std::ios_base::sync_with_stdio(false);
+    std::cin.tie(nullptr);  
+
+    const long limit = 1100;
+    const long high = 1000;
+
+    vector<int> first_seen(limit, -1);
+    set<int> seen_exponents;
+    long current_exponent = 0;
+    int i = 1;
+
+    while (current_exponent < high) {
+        long val = v2k(i, current_exponent);
+        if (seen_exponents.find(val) == seen_exponents.end()) {
+            seen_exponents.insert(val);
+            first_seen[val] = i;
+        }
+        if (val == current_exponent) { 
+            i += tpow(current_exponent);
+            while (seen_exponents.find(current_exponent) != seen_exponents.end()) current_exponent += 1;
+        } else {
+            i += tpow(current_exponent);
+        }
+    }
+
+    for (long i = 0; i < first_seen.size(); i++) {
+        cout << mpz_sizeinbase(first_seen[i].get_mpz_t(), 2) << " ";
+    }
+}
+```
+
+
+[11/26/2025 7:49 PM] dihedralgroup
+oh cool
+
+
+[11/26/2025 7:50 PM] dihedralgroup
+i think i will rewrite the entire last component my own way
+
+
+[11/26/2025 7:50 PM] vy.x
+wait oops
+
+
+[11/26/2025 8:51 PM] dihedralgroup
+back
+
+
+[11/26/2025 8:51 PM] dihedralgroup
+anything happen in my absence?
+
+
+[11/26/2025 9:01 PM] pomme_de_terre_
+not rly
+
+
+[11/26/2025 9:01 PM] pomme_de_terre_
+this code runs fine on my machine
+
+
+[11/26/2025 9:02 PM] dihedralgroup
+alright how is the speed
+
+
+[11/26/2025 9:35 PM] pomme_de_terre_
+very fast
+
+
+[11/26/2025 9:40 PM] awnmp
+I don't understand why you do i += 2^k
+why would repeating it would find a counterexample if such one exist ?
+
+
+[11/26/2025 9:47 PM] dihedralgroup
+Wait hold on what are the axes to be specific?
+
+
+[11/26/2025 9:57 PM] vy.x
+'bad code' = not optimised code
+
+
+[11/26/2025 9:57 PM] vy.x
+i ddint check and were passing mpz_class by value sometimes
+
+
+[11/26/2025 9:57 PM] vy.x
+actually idk if that matters i forgor how gmp works
+
+
+[11/26/2025 9:58 PM] pomme_de_terre_
+i dont entirely understand what you mean here
+
+
+[11/26/2025 9:58 PM] dihedralgroup
+Pomme, for how many values of i was it simulated for
+
+
+[11/26/2025 9:58 PM] pomme_de_terre_
+points are lowest i where a given v2 is first seen, x-axis is v2, y-axis is i
+
+
+[11/26/2025 9:58 PM] dihedralgroup
+You went through 10^90 iterations on your computer?
+
+
+[11/26/2025 9:59 PM] pomme_de_terre_
+most values are skipped bc this guarantees that a lot of the v2s can be easily bounded
+
+
+[11/26/2025 9:59 PM] awnmp
+why do you check for your next i "i += 2^k"
+why only checking the ones that are accessible in this manner allows to say that you can say that the inequality holds also for the ones not of this form
+
+
+[11/26/2025 9:59 PM] dihedralgroup
+Oh right
+
+
+[11/26/2025 9:59 PM] dihedralgroup
+Whoops I forgot about that
+
+
+[11/26/2025 9:59 PM] pomme_de_terre_
+because of this statement
+
+
+[11/26/2025 9:59 PM] dihedralgroup
+by LLM 💀
+
+
+[11/26/2025 10:00 PM] pomme_de_terre_
+well
+
+
+[11/26/2025 10:00 PM] pomme_de_terre_
+its def true up to i<=10^4 and i kinda assumed it was true
+
+
+[11/26/2025 10:00 PM] pomme_de_terre_
+i believe it
+
+
+[11/26/2025 10:00 PM] dihedralgroup
+Whatever, sims wont be nearly as important as analysis
+
+{Reactions}
+👍
+
+[11/26/2025 10:03 PM] dihedralgroup
+uh ok so this guy is cooking
+
+
+[11/26/2025 10:04 PM] dihedralgroup
+
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443361718641361016/DA62E35E-6876-44A3-81F1-5EE0836B6E7C.jpg?ex=69d973da&is=69d8225a&hm=b7325f317273e076eb40a8c0413e7ad149e15ec7fe985e83b6b33e97e768e674&
+
+
+[11/26/2025 10:04 PM] awnmp
+if we assume that, 
+putting N_i = 2^i*2+i+5
+because 2^v2(n) <= n
+
+we get N_i / 2^v2(N_i) = N_i / 2^v2(i-r) >= N_i / i (>>> 2i + 14)
+
+
+[11/26/2025 10:04 PM] pomme_de_terre_
+r is a 2-adic integer
+
+
+[11/26/2025 10:05 PM] awnmp
+ah I see
+
+
+[11/26/2025 10:05 PM] pomme_de_terre_
+so its goofy
+
+
+[11/26/2025 10:05 PM] pomme_de_terre_
+like its possible for a ton of digits to line up (ex. `r = ...[a huge chunk of consecutive 1s]x` where im writing out consecutive blocks of digits, and `i=2^k-x`, where x is a base 2 number with k digits) for some specific `i`, which would cause the v2 to explode
+
+
+[11/26/2025 10:05 PM] pomme_de_terre_
+but its very unlikely
+
+
+[11/26/2025 10:10 PM] awnmp
+taking r = -(3^i*2+5) I guess we do get such a r
+
+is it the v2(i-r) = O(log i) claim that you checked for large i ?
+
+
+[11/26/2025 10:10 PM] dihedralgroup
+Thoughts of proving it?
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+no i only checked the i-r part
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+idk what the LLM did, but the existence of r doesn't imply O(log i) bound because you can keep on creating big jumps to just barely achieve O(i) growth
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+there might be some way you can show the existence of the O(log i) bound but it def doesn't follow only from the existence of r
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+no like
+
+
+[11/26/2025 10:10 PM] awnmp
+yeah
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+r is constant
+
+
+[11/26/2025 10:10 PM] pomme_de_terre_
+r doesn't depend on i
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+its p cool
+
+
+[11/26/2025 10:11 PM] awnmp
+ohh
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+one way you can see this
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+calculate the v2s of the terms for like `1<=i<=200`
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+and then plot `(i,N_i)` on desmos
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+and the 2-adic structure will become very clear
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+wait i can do this rn
+
+
+[11/26/2025 10:11 PM] pomme_de_terre_
+everything i tried has run into a brick wall (and very quickly, too)
+
+
+[11/26/2025 10:12 PM] dihedralgroup
+Alright I’ll see if induction is a brick wall or not
+
+
+[11/26/2025 10:12 PM] pomme_de_terre_
+alr
+
+
+[11/26/2025 10:12 PM] pomme_de_terre_
+just throw anything at it
+
+
+[11/26/2025 10:13 PM] pomme_de_terre_
+here it is
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443364102394089752/image.png?ex=69d97612&is=69d82492&hm=e7e4d67cc054e85bae3037f7d6f04dd8d7cb41623b085b87e380ba15924595f9&
+
+
+[11/26/2025 10:13 PM] pomme_de_terre_
+x axis is i, y axis is v2(N_i)
+
+
+[11/26/2025 10:14 PM] awnmp
+ah I see
+
+
+[11/26/2025 10:15 PM] dihedralgroup
+First of all let’s split the parity
+
+
+[11/26/2025 10:15 PM] dihedralgroup
+Because we know it holds for all even i, that’s trivial
+
+
+[11/26/2025 10:16 PM] dihedralgroup
+Then I’d plug in i = 2n+1
+
+
+[11/26/2025 10:19 PM] awnmp
+```[2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 9, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 8, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 10, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 8, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6, 1, 2, 1, 3, 1, 2, 1, 4, 1]```  v2(N_i) for i = 1 to 999 with step of 2
+
+
+[11/26/2025 10:20 PM] dihedralgroup
+What are you doing?
+
+
+[11/26/2025 10:20 PM] awnmp
+wanna know if I can find a closed form
+
+
+[11/26/2025 10:20 PM] dihedralgroup
+Ok
+
+
+[11/26/2025 10:22 PM] pomme_de_terre_
+this would require finding r pretty much
+
+
+[11/26/2025 10:22 PM] pomme_de_terre_
+which would be cool if this could be done
+
+
+[11/26/2025 10:23 PM] awnmp
+yeah, but first looking at oeis if it's known
+(and/or the sequence directly if I spot a pattern)
+
+
+[11/26/2025 10:23 PM] pomme_de_terre_
+oh also relating to the few messages after this one
+
+
+[11/26/2025 10:24 PM] pomme_de_terre_
+theres this theorem <https://en.wikipedia.org/wiki/Zsigmondy%27s_theorem> that forces prime divisors
+
+
+[11/26/2025 10:24 PM] pomme_de_terre_
+but i dont think its rly applicable
+
+
+[11/26/2025 10:31 PM] dihedralgroup
+Ok so I just jokingly told someone to prove it and he just sent an entire latex proof over discord
+
+
+[11/26/2025 10:33 PM] dihedralgroup
+what the heck
+
+
+[11/26/2025 10:33 PM] dihedralgroup
+
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369181671063654/7EE544F4-8C96-466D-96B3-6AD03FE6282F.jpg?ex=69d97acd&is=69d8294d&hm=3c13be76189f922137e8bfd4e86a4149279d76deacf741533709728451afc413&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369181981577247/6929D938-9BA0-4B62-B492-79164E4C47B1.jpg?ex=69d97acd&is=69d8294d&hm=1a32ad47b9fc2ce7f810a95e274fd222f0dd7a1596878c764d7b146ba7d564da&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369182279237642/15EE34C7-8B9B-4062-81D9-FB62A70E487E.jpg?ex=69d97acd&is=69d8294d&hm=e2ec471892f1a347e0049137cb4b71051791821e52c97fb250c56355ff4d5154&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369182514122795/5AC9E9DA-081F-4FA6-A417-3368304C5E9C.jpg?ex=69d97acd&is=69d8294d&hm=55d733e7e241cce25fc834b7a01cede9083613626e4f561222a94cc116b1bd3c&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369182782554235/2086BA0D-DB8A-4551-89FC-74DF66D1FE89.jpg?ex=69d97acd&is=69d8294d&hm=dcf5c5997f95bfc05a8c66dee75c077252d2cebab26a8939205fdace581e61c5&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369183055188189/563784D0-2C17-44B9-BCC2-B7AD4F26A3C6.jpg?ex=69d97acd&is=69d8294d&hm=a1064761833ffb3e92b0bbfbbdfd7642b3cba22bad74ea54ba3be793e4708878&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369183311171615/42210937-D912-4B01-A8C2-D2AE698EDE61.jpg?ex=69d97acd&is=69d8294d&hm=297b29c6112a12595f3ca32d28ed3e24598d272601993d16cd9c2d8f5b14d5f6&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369183562694718/2542F4D3-A148-4126-9CED-1DAF8476CC15.jpg?ex=69d97acd&is=69d8294d&hm=fd359e732aef4d166137d2a1b2dfdfa2511860963b2a08944e47b886b9fccadf&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369184049496084/F7B91AA9-A960-472A-ADFA-983D10A7E3C8.jpg?ex=69d97acd&is=69d8294d&hm=6ea5528a76afe407f43785bd9cbb5ea30475527e4cc580c1a09e05be1e38a704&
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369184334446693/A3E0C518-6706-4D8F-8582-290B6724517A.jpg?ex=69d97ace&is=69d8294e&hm=5b658a17343ddd081960f185864ab16a53a6affa5bd9b6c9629e69f0cbaa6707&
+
+
+[11/26/2025 10:33 PM] dihedralgroup
+<@722526786637791262> can you verify this
+
+
+[11/26/2025 10:34 PM] awnmp
+https://oeis.org/search?q=2%2c1%2c4%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c7%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c4%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c5%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c4%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c6%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c4%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c5%2c1%2c2%2c1%2c3%2c1%2c2%2c1%2c4%2c1%2c2%2c1%2c3%2c1%20id:A375961
+looks to match this good 🤔
+
+
+[11/26/2025 10:35 PM] dihedralgroup
+Crazy
+
+
+[11/26/2025 10:35 PM] dihedralgroup
+
+
+{Attachments}
+https://cdn.discordapp.com/attachments/1443295684878143579/1443369666738131105/0E5BAF14-A65E-4171-9BF9-FEB806C0F79B.jpg?ex=69d97b41&is=69d829c1&hm=b0f3d85f0dc5c079bfd0c2d8eebbd014bf1cc40a7179509b3d88847569d29600&
+
+
+[11/26/2025 10:36 PM] pomme_de_terre_
+wait wait what
+
+
+[11/26/2025 10:37 PM] pomme_de_terre_
+does this hold
+
+
+[11/26/2025 10:38 PM] vy.x
+holy
+
+
+==============================================================
+Exported 200 message(s)
+==============================================================

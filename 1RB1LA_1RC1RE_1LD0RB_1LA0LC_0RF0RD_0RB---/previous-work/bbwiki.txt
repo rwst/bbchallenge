@@ -1,0 +1,18 @@
+{{machine|1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---}}
+{{TM|1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---|undecided}} is a [[BB(6)]] holdout.
+
+=Analysis by mxdys=
+https://discord.com/channels/960643023006490684/1239205785913790465/1441124403801755730
+<pre>
+1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---
+
+start: S(18)
+
+S(n) --> S((n+(3^i*6+i+4))/2), n mod 2 = i mod 2, 3^i*2-i-2 <= n <= 3^i*6-i-6
+S(n) --> S(3^i*12-1), n mod 2 = (i+1) mod 2, 3^i*2-i <= n <= 3^i*6-i-10
+</pre>
+
+These rules are closed if <pre>(3^i*2+i+5)/(2^v2(3^i*2+i+5))>=2i+14 for all i>=50 </pre>
+= Further Analysis (Pomme, Autumn Pan, et al.) =
+Although it has not been proven in Rocq, it is known that the inequality holds. This has been proven informally by Pomme, though it references an external paper which makes it difficult to prove using computer proof assistants. Simulators written by Autumn Pan, Pomme, and vyx7 were used to verify the inequality for all <math>50\le i \le 10^{660}</math>.
+

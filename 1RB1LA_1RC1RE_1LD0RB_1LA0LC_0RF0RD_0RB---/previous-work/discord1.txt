@@ -1,0 +1,19 @@
+mxdys:
+```
+1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---
+
+start: S(18)
+
+S(n) --> S((n+(3^i*6+i+4))/2), n mod 2 = i mod 2, 3^i*2-i-2 <= n <= 3^i*6-i-6
+S(n) --> S(3^i*12-1), n mod 2 = (i+1) mod 2, 3^i*2-i <= n <= 3^i*6-i-10
+```
+the rules are closed if `(3^i*2+i+5)/(2^v2(3^i*2+i+5))>=2i+14` for all `i>=50`
+is this easy to prove?
+
+savask:
+Maybe I'm overthinking this, but seems like these types of results could be relevant https://mathoverflow.net/questions/214839/the-p-adic-valuation-of-a-linear-recurrence
+The answer by Silverman has a nice result in it which, alas, applies only to p > 2
+
+mxdys [HALT],  — 11/20/25, 8:11 PM
+LLM claims that exists r, v2(3^i*2+i+5)=v2(i-r), and v2(i-r)=O(log i)
+if it's correct, can this be turned into a proof of i>=50 instead of for large enough i?
