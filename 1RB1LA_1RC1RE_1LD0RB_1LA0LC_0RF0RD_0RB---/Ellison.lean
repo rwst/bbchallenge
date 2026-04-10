@@ -125,11 +125,32 @@ theorem ellison_cor1
   -- Real-valued linear form: `Λ_R := x · log m − y · log n + log(a/b)`.
   set Λ_R : ℝ := (x : ℝ) * Real.log m - (y : ℝ) * Real.log n + Real.log ((a : ℝ) / b) with hΛ_R_def
   -- The complex log sum equals the real linear form coerced to ℂ.
-  -- Each `φ (α i)` is a positive real, so `Complex.log` reduces to `Real.log`
-  -- and the sum becomes `x·log m − y·log n + log(a/b) = Λ_R`.
   have hsum_eq :
       (∑ i, (bvec i : ℂ) * Complex.log (φ (α i))) = (Λ_R : ℂ) := by
-    sorry
+    have h1 : Complex.log ((m : ℂ)) = ((Real.log m : ℝ) : ℂ) := by
+      have e : ((m : ℂ)) = (((m : ℝ)) : ℂ) := by push_cast; rfl
+      rw [e]; exact (Complex.ofReal_log hm_R_pos.le).symm
+    have h2 : Complex.log ((n : ℂ)) = ((Real.log n : ℝ) : ℂ) := by
+      have e : ((n : ℂ)) = (((n : ℝ)) : ℂ) := by push_cast; rfl
+      rw [e]; exact (Complex.ofReal_log hn_R_pos.le).symm
+    have h3 : Complex.log ((a : ℂ) / b) = ((Real.log ((a : ℝ) / b) : ℝ) : ℂ) := by
+      have e : (((a : ℂ)) / (b : ℂ)) = ((((a : ℝ) / b) : ℝ) : ℂ) := by push_cast; rfl
+      rw [e]; exact (Complex.ofReal_log habR_pos.le).symm
+    calc (∑ i, (bvec i : ℂ) * Complex.log (φ (α i)))
+        = (x : ℂ) * Complex.log (φ (α 0))
+          + (-(y : ℤ) : ℂ) * Complex.log (φ (α 1))
+          + (1 : ℂ) * Complex.log (φ (α 2)) := by
+          simp [Fin.sum_univ_three, bvec]
+      _ = (x : ℂ) * Complex.log ((m : ℂ))
+          + (-(y : ℤ) : ℂ) * Complex.log ((n : ℂ))
+          + (1 : ℂ) * Complex.log ((a : ℂ) / b) := by rw [hφ0, hφ1, hφ2]
+      _ = (x : ℂ) * ((Real.log m : ℝ) : ℂ)
+          + (-(y : ℤ) : ℂ) * ((Real.log n : ℝ) : ℂ)
+          + (1 : ℂ) * ((Real.log ((a : ℝ) / b) : ℝ) : ℂ) := by rw [h1, h2, h3]
+      _ = (Λ_R : ℂ) := by
+          rw [hΛ_R_def]
+          push_cast [-Complex.ofReal_log]
+          ring
   -- Ellison's Lemma 1 (p. 12-02): from `h_small`, derive smallness of the log sum.
   -- Chain: |Λ_R| ≤ 2·|a·m^x − b·n^y|/(b·n^y) ≤ 2·m^{(1−δ)x}/(b·n^y) < exp(−δH).
   have hΛ_small : ‖∑ i, (bvec i : ℂ) * Complex.log (φ (α i))‖ < Real.exp (-(δ * (H : ℝ))) := by
