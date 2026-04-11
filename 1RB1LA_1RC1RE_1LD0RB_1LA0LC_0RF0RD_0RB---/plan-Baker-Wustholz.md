@@ -545,3 +545,289 @@ None of these require number-field machinery or mathlib-gap work
 (unlike the old approach, which needed `Rat.mulHeight₁_eq_max_num_natAbs_den`
 that doesn't exist). They're all within reach of straightforward
 real-analysis tactics.
+
+## Detour: Could we use Matveev's theorem instead?
+
+**Matveev's theorem (2000)** is the current best general-purpose effective
+bound on linear forms in logarithms. From E. M. Matveev, *An explicit lower
+bound for a homogeneous rational linear form in the logarithms of algebraic
+numbers*, Izv. Math. **64** (2000), 1217–1269. The conclusion is:
+
+```
+|Λ| > exp(−C(n, D) · h'(α₁) · … · h'(αₙ) · log B)
+```
+
+where:
+- `Ω = h'(α₁) · … · h'(αₙ)` with **modified height**
+  `h'(α) = max(D · h(α), |log α|, 0.16)` — note `D · h` (not `h / D` as
+  in Baker–Wüstholz);
+- `C(n, D) ≈ 1.4 · 30^{n+3} · n^{4.5} · D² · (1 + log D)`.
+
+### Numerical comparison for our `(n, D) = (3, 1)` case
+
+| Bound | Outer exponent on `log B` | Constant `C(3, 1)` |
+|---|---|---|
+| Ellison (Baker 1966) | `(2n+1)² = 49` | absorbed into `(…)^{49}` |
+| Baker–Wüstholz 1993 | 1 | `~2.1 · 10^{12}` |
+| **Matveev 2000** | 1 | **`~4.8 · 10^{10}`** |
+
+Matveev gives **~40× tighter constant** than Baker–Wüstholz for `n = 3`.
+The big-`n` advantage of Matveev (`n^{4.5}` vs `n^{n+1}`) is wasted at
+`n = 3`, but the small-`n` constants still improve modestly.
+
+### Threshold for Pomme
+
+Pomme's threshold equation is `i · log 3 / 2 > C · (log i)²` (after the
+chain through `log_bound_to_integer_bound`).
+
+| Bound | Critical `i` | Choice for `pommeThreshold` |
+|---|---|---|
+| Ellison (Baker 1966) | `~10^{632}` | `2^{2100}` |
+| Baker–Wüstholz | `~10^{17}` | `2^{60}` |
+| **Matveev** | **`~10^{14}` to `10^{15}`** | **`2^{50}`** |
+
+So Matveev gives **another ~3 orders of magnitude** off the threshold,
+on top of the Baker–Wüstholz improvement.
+
+### What changes in the argument chain
+
+**Almost nothing structurally.** The proof skeleton in `Ellison.lean`
+ports verbatim:
+
+| Helper | Status under Matveev |
+|---|---|
+| `BakerWustholz.lean` (axiom file) | Replace by `Matveev.lean`. Same shape, different `C` and `modifiedHeight`. |
+| `log_bound_to_integer_bound` | **Unchanged.** Pure analytic Lemma 1; doesn't reference any Baker-style axiom. |
+| `pillai_k_ge_two` | **Unchanged.** Pure number-theoretic. |
+| `pillai_linear_form_ne_zero` | **Unchanged.** v₂ argument. |
+| `pillai_baker_application` → `pillai_matveev_application` | Replace one axiom call. Same shape. |
+| `pillai_baker_rhs_upper_bound` → `pillai_matveev_rhs_upper_bound` | Tighter constant, same form. |
+| `pillai_log_dominates`, `pillai_ip5_lt_three_pow` | **Unchanged** (only `pommeThreshold` value updated). |
+| `direct_pillai_bound_small` | **Unchanged structure**, just calls the new `_matveev_*` helpers. |
+
+Effort to switch: ~1–2 hours of editing. Mechanical find-and-replace plus
+one numerical re-derivation.
+
+### What changes in the axiom statement
+
+The Matveev axiom is **slightly more complex** to state than Baker–Wüstholz:
+
+```lean
+-- Matveev's modified height: max(D·h, |log α|, 0.16)
+noncomputable def modifiedHeight ... :=
+  let D : ℝ := Module.finrank ℚ K
+  max (Height.logHeight₁ α)               -- = D · h(α) since logHeight₁ = D·h
+      (max (‖Complex.log (φ α)‖) (0.16 : ℝ))
+
+-- C(n, D) ≈ 1.4 · 30^(n+3) · n^4.5 · D² · (1 + log D)
+noncomputable def C (n D : ℕ) : ℝ :=
+  1.4 * 30 ^ (n + 3) * (n : ℝ) ^ ((4.5 : ℝ)) *
+    (D : ℝ) ^ 2 * (1 + Real.log D)
+```
+
+Two notable differences:
+
+1. **`n^{4.5}` requires `Real.rpow`** because `4.5 ∉ ℕ`. Baker–Wüstholz
+   used integer powers (`n^{n+1}`), which is cleaner.
+2. **The `0.16` magic constant** in the modified height is harder to
+   justify than Baker–Wüstholz's `1/D`. It comes from a specific bound
+   on imaginary parts of certain logs, deep inside Matveev's proof.
+
+These are minor cosmetic complications.
+
+### Verdict on Matveev
+
+**Marginal improvement, not worth switching for the current state of the
+proof.** Reasoning:
+
+- For `n = 3`, the constant improvement (~40×) is real but not huge.
+- The threshold drop (`~10^{17} → ~10^{14}`) helps the simulator but
+  doesn't change the basic feasibility analysis (see "Dense vs sparse"
+  below).
+- The slightly more intricate axiom (Real.rpow, magic constant) costs
+  a bit of clarity.
+- The proof structure stays identical, so this isn't a one-way door —
+  we can switch later if useful.
+
+**The case for switching would be stronger if**:
+- Pomme's problem had `n ≥ 5` variables (where Matveev's polynomial
+  dependence on `n` would dominate).
+- We actually needed dense verification of `pomme_small_range` (where
+  every order of magnitude matters).
+- Matveev were already in mathlib (it isn't; neither is BW).
+
+**Aside: even better bounds for `n = 2`**.
+For special-case `n = 2`, **Laurent–Mignotte–Nesterenko (1995)** gives
+the best known constants. But Pomme's problem has `n = 3`, so LMN is
+not directly applicable.
+
+The hierarchy of "best effective Baker-type bound for `n` logarithms" is:
+- `n = 2`: Laurent–Mignotte–Nesterenko.
+- `n = 3`: Baker–Wüstholz or Matveev (within ~50× of each other).
+- `n ≥ 4` or `5`: Matveev wins clearly.
+
+## Dense vs sparse simulation: what `pomme_small_range` really requires
+
+The `pomme_small_range` axiom states:
+
+```lean
+axiom pomme_small_range
+    (i : ℕ) (hi_lo : 50 ≤ i) (hi_hi : i < pommeThreshold) :
+    2 * i + 14 ≤ N i / 2 ^ padicValNat 2 (N i)
+```
+
+This is a **universal** statement: the inequality must hold for **every**
+`i` in `[50, pommeThreshold)`. To discharge this axiom by computation,
+the verification must be exhaustive over the entire range.
+
+### What "sparse" verification actually does
+
+In the Discord transcript (`previous-work/discord_kit_*.txt`), pomme,
+vyx, and dihedralgroup discuss a **sparse iteration strategy** based on
+poppuncher's observation (`previous-work/discord3.txt`):
+
+> If `v₂(N_n) = k`, then `v₂(N_{n + 2^k}) ≥ k + 1`.
+
+This says: starting from any `i` with `v₂(N_i) = k`, the value at
+`i + 2^k` has `v₂ ≥ k + 1`. Iterating gives a **sequence of "first
+occurrences"** of larger and larger v₂ values, found by jumping in
+strides of `2^k`.
+
+The sparse strategy used by Pomme/vyx:
+1. Compute `v₂(N_i)` only at carefully chosen `i` values.
+2. Increment `i` by `2^k` (where `k` is the current "smallest unseen v₂").
+3. Each step is `O(1)` (modular arithmetic mod `2^k`); total work
+   `O((log threshold)²)`.
+
+For `threshold = 10^{300}`, this finishes in a few seconds. **But this
+is verification by sampling, not proof.**
+
+### Why sparse verification is incomplete for our axiom
+
+The sparse strategy explores only `O(log threshold)` values of `i`. The
+remaining `~threshold` values are skipped. The skipped i's aren't
+checked against the inequality, so:
+
+- A counterexample to the inequality at some skipped `i` would not be
+  detected by sparse verification.
+- Pomme's argument relies on a *probabilistic heuristic* that
+  counterexamples are extremely unlikely (~`1/3^{10^{8}}`), but this
+  is not a proof.
+
+In the Discord chat, awnmp explicitly raised this objection:
+
+> "why do you check for your next i `i += 2^k` / why only checking the
+> ones that are accessible in this manner allows to say that you can say
+> that the inequality holds also for the ones not of this form"
+
+Pomme's response: *"its def true up to i ≤ 10^4 and i kinda assumed it
+was true"*. This is honest — the sparse verification is informal.
+
+### What the proof needs
+
+To replace `pomme_small_range` with a verified theorem (rather than an
+axiom), we need **dense** verification: explicitly compute `v₂(N i)` and
+check `2·i + 14 ≤ N i / 2^{v₂(N i)}` for **every** `i` in `[50, threshold)`.
+
+| Strategy | Iterations needed | Per-iteration cost | Total cost |
+|---|---|---|---|
+| Sparse (informal) | `~log²(threshold)` | `O(1)` | trivial (seconds) |
+| Dense | `threshold` | `O(log² threshold)` (bigint v₂, division) | scales linearly |
+
+### Computational feasibility of dense verification
+
+For each candidate `pommeThreshold`:
+
+| Bound | Threshold | Dense iterations | Dense wall time (1 CPU, GMP) |
+|---|---|---|---|
+| Ellison (Baker 1966) | `2^{2100}` | `~10^{632}` | physically impossible |
+| Baker–Wüstholz | `2^{60}` | `~10^{18}` | `~10^{6}` CPU-years |
+| **Matveev** | **`2^{50}`** | **`~10^{15}`** | **`~10^{3}` CPU-years** |
+
+**Neither bound makes single-CPU dense verification practical.** Both
+need either massive parallelization or a smarter algorithm.
+
+### Why "smarter algorithm" is hard
+
+The natural question: can we replace `O(threshold)` work with something
+like `O(polylog(threshold))` while maintaining correctness?
+
+Poppuncher's lemma `v₂(N_{i+2^k}) ≥ v₂(N_i) + 1` (when `v₂(N_i) = k`)
+is *suggestive* but doesn't immediately imply that the inequality holds
+at intermediate `i`. The intermediate `i` between sparse jumps can have
+*any* v₂ value, not just predictable ones. A rigorous skip strategy
+would need to control v₂ at *every* `i`, not just the sparse checkpoints.
+
+Poppuncher tried this (see the Discord chat) and concluded:
+
+> "But that doesnt tell us enough — in particular, its possible for the
+> v2 to jump by a lot if the digits of r line up just right"
+
+So no rigorous sparse algorithm is currently known.
+
+### Practical implications for the proof
+
+This leaves us with three options for handling `pomme_small_range`:
+
+1. **Keep as axiom indefinitely.** The current state. The axiom is
+   `pomme_small_range` and is justified by sparse verification +
+   probabilistic heuristic. Not a formal proof, but morally accepted.
+
+2. **Replace with verified parallel computation.** Generate a witness
+   externally (a few CPU-decades on a cluster), encode the result in
+   Lean as a large constant, prove it discharges the axiom. Requires
+   trusting the cluster computation.
+
+3. **Replace with verified Lean-internal computation** via `decide` or
+   `native_decide`. Currently impractical because:
+   - Lean's `Nat` arithmetic is slow (no GMP backend in the kernel).
+   - `native_decide` adds the C compiler to the trusted base.
+   - Threshold of `2^{50}` would still take CPU-decades even with
+     compiled code.
+
+### Why the threshold size matters even for sparse verification
+
+A subtle point: even though sparse verification is informal, it does
+become **harder** as the threshold grows, because:
+
+- **Range of v₂ values to check**: the sparse strategy looks for first
+  occurrences of each v₂. Larger threshold means more v₂ values to
+  enumerate. With `threshold = 2^{2100}`, you need to verify v₂ values
+  up to ~`log₂(3^{2^{2100}}/(2·2^{2100})) ≈ 2^{2100}·log₂ 3`, which is
+  effectively infinite.
+- **Confidence interval**: the probabilistic heuristic that "no
+  counterexample exists in the unchecked i" gives a confidence bound
+  that depends on the threshold. Lower threshold ↔ tighter heuristic.
+
+So even informal verification benefits from a tight threshold. The
+Baker–Wüstholz threshold (`2^{60}`) is at the boundary of what's
+feasible to "morally check" via sparse iteration. The Matveev threshold
+(`2^{50}`) is comfortably inside that boundary.
+
+### Conclusion
+
+**For the formal Lean proof**, sparse vs dense doesn't matter — we
+have an axiom either way, and the axiom is universally quantified
+over `[50, threshold)`.
+
+**For *eliminating* the axiom**, we need dense verification, which is
+not currently feasible at any of our thresholds (Baker–Wüstholz or
+Matveev). This is the main reason `pomme_small_range` is likely to
+remain an axiom for the foreseeable future, regardless of which
+analytic bound we use.
+
+**The threshold reduction from Baker–Wüstholz to Matveev**
+(`2^{60} → 2^{50}`) would **not** make the small-`i` simulator
+formally verifiable. It would, however, narrow the gap between
+"informal sparse verification" and "rigorous dense verification" by
+about 3 orders of magnitude — useful for confidence but not for
+proof status.
+
+**Recommendation for the small-`i` axiom**:
+- Short term: keep as axiom, justify in the docstring.
+- Medium term: ship a verified C++ dense verifier (independent of
+  Lean) producing a checksum file; encode the checksum + a trusted
+  reflection in Lean.
+- Long term: when mathlib gets a verified bigint backend, port to
+  Lean-native `decide`. (This is the only path to a fully axiom-free
+  proof.)
