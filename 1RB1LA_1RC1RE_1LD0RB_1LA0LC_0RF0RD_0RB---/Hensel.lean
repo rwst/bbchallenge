@@ -564,10 +564,14 @@ theorem dvd_N_iff (k : ℕ) (hk : k ≤ 80) :
 
 /-! ## Step 5: Computational check `r 80 ≥ 2^60` -/
 
-/-- `r 80 ≥ 2^60`, verified by native compilation of the efficient
-`rState` recursion. The actual value is `r 80 ≈ 1.06·10^24`. -/
+set_option maxRecDepth 2000 in
+/-- `r 80 ≥ 2^60`, verified by kernel evaluation of the efficient
+`rState` recursion. The actual value is `r 80 ≈ 1.06·10^24`.
+
+Uses plain `decide` (no extended trusted base); the `maxRecDepth` bump
+is needed because the recursion in `rState` has depth ~80. -/
 theorem r_80_ge_pommeThreshold : r 80 ≥ 2 ^ 60 := by
-  native_decide
+  decide
 
 /-! ## Step 6: Structural corollary — for `i < 2^60`, `v₂(N i) < 80` -/
 
@@ -601,7 +605,7 @@ theorem padicValNat_N_lt_80 (i : ℕ) (hi_hi : i < 2 ^ 60) :
 /-- For `i ≥ 54`, `(i + 7)·2^79 ≤ 3^i`. Proved by induction with base case `i = 54`. -/
 lemma three_pow_dominates (i : ℕ) (hi : 54 ≤ i) : (i + 7) * 2 ^ 79 ≤ 3 ^ i := by
   induction i, hi using Nat.le_induction with
-  | base => native_decide
+  | base => decide
   | succ i hi ih =>
     -- (i + 8) * 2^79 ≤ 3 * (i + 7) * 2^79 ≤ 3 * 3^i = 3^(i+1)
     calc (i + 1 + 7) * 2 ^ 79
@@ -635,10 +639,29 @@ lemma pomme_ineq_large (i : ℕ) (hi_lo : 54 ≤ i) (hi_hi : i < 2 ^ 60) :
 
 /-! ## Step 8: Base case `i ∈ [50, 53]` and full `pomme_small_range_proved` -/
 
-/-- The base case: `i ∈ {50, 51, 52, 53}` by direct computation. -/
+/-- The base case: `i ∈ {50, 51, 52, 53}` by direct computation.
+Uses kernel `decide` by bounding `padicValNat 2 (N i) ≤ 6` and showing
+the stronger `(2·i + 14) · 2^6 ≤ N i`. -/
 lemma pomme_ineq_base (i : ℕ) (hi_lo : 50 ≤ i) (hi_hi : i < 54) :
     2 * i + 14 ≤ N i / 2 ^ padicValNat 2 (N i) := by
-  interval_cases i <;> (unfold N; native_decide)
+  haveI : Fact (Nat.Prime 2) := ⟨Nat.prime_two⟩
+  have h_N_ne : N i ≠ 0 := by unfold N; positivity
+  -- Bound v₂(N i) ≤ 6 by checking ¬ 2^7 ∣ N i for each i.
+  have h_v2 : padicValNat 2 (N i) ≤ 6 := by
+    by_contra h
+    push_neg at h
+    have h_dvd : (2 : ℕ) ^ 7 ∣ N i := (padicValNat_dvd_iff_le h_N_ne).mpr h
+    revert h_dvd
+    interval_cases i <;> (unfold N; decide)
+  -- (2·i + 14) · 2^6 ≤ N i for each i.
+  have h_strong : (2 * i + 14) * 2 ^ 6 ≤ N i := by
+    interval_cases i <;> (unfold N; decide)
+  have h_pow_pos : 0 < (2 : ℕ) ^ padicValNat 2 (N i) := by positivity
+  apply (Nat.le_div_iff_mul_le h_pow_pos).mpr
+  calc (2 * i + 14) * 2 ^ padicValNat 2 (N i)
+      ≤ (2 * i + 14) * 2 ^ 6 :=
+        Nat.mul_le_mul_left _ (Nat.pow_le_pow_right (by norm_num) h_v2)
+    _ ≤ N i := h_strong
 
 /-- **Main result for the small-`i` range**: the range `50 ≤ i < 2^60`
 is dispatched mathematically, eliminating the `pomme_small_range`

@@ -585,31 +585,29 @@ So the base case is `i ∈ {50, 51, 52, 53}` — 4 values instead of 5.
 
 ```
 'Hensel.pomme_main' depends on axioms:
-  [bakerWustholz_linearForms_logs,
-   propext, sorryAx, Classical.choice, Quot.sound,
-   Hensel.pomme_ineq_base._native.native_decide.ax_1_1,
-   Hensel.pomme_ineq_base._native.native_decide.ax_1_2,
-   Hensel.pomme_ineq_base._native.native_decide.ax_1_3,
-   Hensel.pomme_ineq_base._native.native_decide.ax_1_4,
-   Hensel.r_80_ge_pommeThreshold._native.native_decide.ax_1_1,
-   Hensel.three_pow_dominates._native.native_decide.ax_1_1]
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice, Quot.sound]
+'Hensel.r_80_ge_pommeThreshold' depends on axioms:
+  [propext]
+'Hensel.pomme_small_range_proved' depends on axioms:
+  [propext, Classical.choice, Quot.sound]
 ```
 
 Observations:
 
 - **`Pomme.pomme_small_range` is gone.** The simulator axiom is
   eliminated as planned.
+- **All `native_decide` axioms are gone.** The computational checks
+  were replaced by kernel `decide` (with `maxRecDepth` bumped to 2000
+  for `r_80_ge_pommeThreshold`). For `pomme_ineq_base`, the
+  `padicValNat` obstacle was sidestepped by bounding
+  `padicValNat 2 (N i) ≤ 6` via `padicValNat_dvd_iff_le` and proving
+  the stronger kernel-decidable inequality `(2·i + 14) · 2^6 ≤ N i`.
 - **`sorryAx` remains**, coming exclusively from the 9 sorries in
   `RatHeight.lean` (the independent mathlib gap).
 - **`bakerWustholz_linearForms_logs` remains** — the one "real"
   axiomatized theorem.
-- **`native_decide` auxiliary axioms** — six in total (one for
-  `r 80 ≥ 2^60`, one for the base case of `three_pow_dominates` at
-  `i = 54`, and four for the `interval_cases` branches of
-  `pomme_ineq_base` at `i ∈ {50, 51, 52, 53}`). These are all
-  instances of Lean's `Lean.ofReduceBool` trusted axiom — they extend
-  the trusted kernel slightly but are standard practice and are
-  **not** custom.
+- `Hensel.r_80_ge_pommeThreshold` depends **only on `propext`** — the
+  entire Hensel-lift computational check is axiom-minimal.
 
 ### Sorry inventory (final)
 
@@ -647,8 +645,6 @@ native_decide-axioms}` — a very tight chain for a BB(6) result.
 
 ### Open follow-ups
 
-- Close the 9 `RatHeight.lean` sorries (mathlib PR).
-- Optionally: reduce the `native_decide` dependency to plain `decide`
-  where feasible (e.g. for `three_pow_dominates` base case and
-  `pomme_ineq_base` — these might run in reasonable time with plain
-  `decide`, eliminating the `ofReduceBool`-flavored axioms).
+- Close the 9 `RatHeight.lean` sorries (mathlib PR). This is the last
+  non-standard axiom remaining (apart from
+  `bakerWustholz_linearForms_logs`).
