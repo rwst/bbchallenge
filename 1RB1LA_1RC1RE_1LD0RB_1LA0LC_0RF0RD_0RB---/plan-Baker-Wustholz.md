@@ -546,6 +546,109 @@ None of these require number-field machinery or mathlib-gap work
 that doesn't exist). They're all within reach of straightforward
 real-analysis tactics.
 
+### Final sorry-filling pass (session 2)
+
+After the structural port above was verified, a concentrated pass
+filled six of the eight sorries (four existing + two helpers added
+during assembly). The work was:
+
+| Lemma | Filled | How |
+|---|---|---|
+| `eight_i_le_three_pow` | ✅ | New helper, `Nat.le_induction` + `nlinarith`. |
+| `pillai_k_ge_two` | ✅ | Uses `eight_i_le_three_pow` to derive `4 ≤ 2^k`, then `interval_cases`. |
+| `pillai_linear_form_ne_zero` | ✅ | Convert complex logs of positive reals to real logs via `Complex.ofReal_log`, push to a real equation via `push_cast` + `linear_combination`, apply `Real.log_injOn_pos`, then `2^(k-1)·c = 3^i` gives `2 ∣ 3^i` by `Nat.prime_two.dvd_of_dvd_pow`. ~35 lines. |
+| `pillai_ip5_lt_three_pow` | ✅ | New helper. `i + 5 < 8·i ≤ 3^i` via `eight_i_le_three_pow`. ~8 lines. |
+| `pillai_log_dominates` | ✅ | New helper. `log((i+5)/4) ≤ (i+1)/4` via `Real.log_le_sub_one_of_pos`, plus `log 2 < 1 < log 3` from `Real.exp_one_gt_two` and `Real.exp_one_lt_three`. `nlinarith` closes for `i ≥ 10`. ~25 lines. |
+| `pillai_baker_application` | ✅ | Sum-form ↔ expanded-form via `simp [Fin.sum_univ_three]`. Product ↔ expanded via `simp [Fin.prod_univ_three]`. Direct `exact h_baker` after rewrites. ~25 lines (down from the previous ~40 lines with two internal sorries). |
+| `direct_pillai_bound_small` | ✅ | Assembly by contradiction: use `log_bound_to_integer_bound` for `‖Λ‖ ≤ (i+5)/3^i`, take log, combine with `pillai_baker_application` + `pillai_baker_rhs_upper_bound` to get `i · log 3 ≤ 2 log(i+5)`, contradict with `pillai_log_dominates`. ~45 lines. |
+
+**Remaining 2 sorries**:
+
+| Lemma | Why remaining |
+|---|---|
+| `log_bound_to_integer_bound` | Ellison's Lemma 1. Core analytic lemma: from `\|a·m^x − b·n^y\|` small, derive `‖Λ‖ ≤ 2·gap/(b·n^y)` via log Taylor. Not yet attempted; ~60-100 lines of real analysis using `Real.abs_log_one_add_le` or the explicit Taylor bound `\|log(1+z)\| ≤ 2\|z\|` for `\|z\| ≤ 1/2`. |
+| `pillai_baker_rhs_upper_bound` | Numerical constant comparison `C(3,1)·log B·∏h' ≤ i·log 3/2`. Requires unfolding `BakerWustholz.C` (which has factorial and `32^5` numerics), unfolding `modifiedHeight` (which has `max`, `log`, `π/d` terms), bounding each factor, and combining. Mechanical but tedious; ~100 lines of `norm_num`/`linarith`. |
+
+**Final sorry count**: 2 (down from 6 at plan writing, and 11 from the original Baker-1966 chain).
+
+**Final axiom chain** (unchanged):
+```
+'direct_pillai_bound_small' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice, Quot.sound]
+
+'Pomme.pomme_main' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice,
+   Pomme.pomme_small_range, Quot.sound]
+```
+
+**Scope note**: The verified simulator for the `50 ≤ i < 2^{60}` range
+(the `pomme_small_range` axiom) is deliberately not implemented —
+by the user's decision, it can be addressed after the axiom-dependent
+proof is finished. Crucially, **the simulator is not needed for filling
+the remaining two sorries** (`log_bound_to_integer_bound`,
+`pillai_baker_rhs_upper_bound`). Both lemmas handle only the large-`i`
+regime `i ≥ pommeThreshold` and are independent of the small-`i` range.
+
+### Session 3: filling `log_bound_to_integer_bound`
+
+`log_bound_to_integer_bound` — Ellison's Lemma 1 — is now **fully
+proved**. The proof (~110 lines total, including a small helper) uses:
+
+1. **Helper `abs_log_one_add_half_le`** (new): for `|x| ≤ 1/2`,
+   `|Real.log(1 + x)| ≤ (3/2)·|x|`. Derived from mathlib's
+   `Complex.norm_log_one_add_half_le_self` by converting between
+   `Real.log` and `Complex.log` on positive reals via
+   `Complex.ofReal_log`. ~15 lines.
+
+2. **Main proof**: the chain
+   - Convert `Complex.log` on `{2, 3, c}` to `Real.log` via
+     `Complex.ofReal_log`, yielding a real-valued linear form.
+   - Set `ω_R := 2·3^i − c·2^k` and `z := −ω_R/(2·3^i)`.
+   - Show `|ω_R| ≤ ε` via `Int.cast_abs` (so the real-abs agrees with
+     the integer-abs in `h_gap`).
+   - Show `|z| ≤ 1/2` via `ε < 3^i`.
+   - Algebraic identity: `(2^(k−1) · c) / 3^i = 1 + z`, using
+     `2^k = 2 · 2^(k−1)`.
+   - Rewrite `Λ_R = Real.log(1 + z)` via `Real.log_div`, `Real.log_mul`,
+     `Real.log_pow`.
+   - Apply `abs_log_one_add_half_le` to get
+     `|Λ_R| ≤ (3/2)·|z| = (3/2)·|ω_R|/(2·3^i)`.
+   - Chain with `|ω_R| ≤ ε` and `3/2 ≤ 2` to finish.
+
+   ~95 lines.
+
+### Final sorry inventory (1 remaining)
+
+| # | Lemma | Status | Why remaining |
+|---|---|---|---|
+| 1 | `pillai_baker_rhs_upper_bound` | **Sorry** | The numerical constant comparison `C(3,1) · log B · ∏ h' ≤ i · log 3 / 2` for `i ≥ 2^60`, `c ≤ 4·i`. Requires unfolding `BakerWustholz.modifiedHeight` for `(2 : ℚ)`, `(3 : ℚ)`, `((c : ℚ))` and bounding them, which in turn requires characterizing `Height.logHeight₁ (q : ℚ)` — exactly the **same mathlib gap** (`Rat.mulHeight₁_eq_max_num_natAbs_den`) that blocked the old approach. In the Baker–Wüstholz setup it's the ONLY place this gap matters, whereas in the old approach it affected the whole height plumbing. |
+
+**Final axiom chain** (unchanged throughout this session):
+```
+'direct_pillai_bound_small' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice, Quot.sound]
+
+'Pomme.pomme_main' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice,
+   Pomme.pomme_small_range, Quot.sound]
+```
+
+### Summary
+
+Starting from a Baker-1966 chain with 11 sorries and an infeasible
+`10^632` threshold, the Baker–Wüstholz refactor is now:
+
+- **`BakerWustholz.lean`**: 85 lines, 0 sorries (axiom only).
+- **`Ellison.lean`**: ~470 lines, **1 sorry** (the Rat-height gap).
+- **`Pomme.lean`**: 266 lines, 0 sorries.
+- **Threshold**: `i ≥ 2^60`, simulator-feasible.
+- **Axiom chain**: `bakerWustholz_linearForms_logs` + `pomme_small_range`
+  + standard.
+
+The one remaining sorry is **not** simulator-related and is a
+well-understood mathlib gap that, if filled once in mathlib, would
+eliminate this last obstacle.
+
 ## Detour: Could we use Matveev's theorem instead?
 
 **Matveev's theorem (2000)** is the current best general-purpose effective

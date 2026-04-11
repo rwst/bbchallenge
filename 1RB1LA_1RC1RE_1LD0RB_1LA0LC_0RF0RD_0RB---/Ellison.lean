@@ -1,7 +1,10 @@
 import BakerWustholz
+import RatHeight
 import Mathlib.NumberTheory.NumberField.Basic
 import Mathlib.Analysis.SpecialFunctions.Log.Basic
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
+import Mathlib.Analysis.SpecialFunctions.Complex.LogBounds
+import Mathlib.Analysis.Complex.ExponentialBounds
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.Real.Basic
 import Mathlib.Algebra.BigOperators.Fin
@@ -55,22 +58,38 @@ lemma pommeThreshold_ge_eight : 8 ≤ pommeThreshold := by
 lemma pommeThreshold_ge_106 : 106 ≤ pommeThreshold := by
   unfold pommeThreshold; decide
 
+/-- Helper: for `|x| ≤ 1/2`, `|Real.log(1 + x)| ≤ (3/2) · |x|`.
+Derived from mathlib's complex log bound `Complex.norm_log_one_add_half_le_self`. -/
+private lemma abs_log_one_add_half_le {x : ℝ} (h : |x| ≤ 1/2) :
+    |Real.log (1 + x)| ≤ (3/2) * |x| := by
+  have hx_pos : (0 : ℝ) < 1 + x := by
+    have : -(1/2 : ℝ) ≤ x := (abs_le.mp h).1
+    linarith
+  have hx_cpx : ‖((x : ℝ) : ℂ)‖ ≤ 1/2 := by rw [Complex.norm_real]; exact h
+  have h_complex : ‖Complex.log (1 + ((x : ℝ) : ℂ))‖ ≤ (3/2) * ‖((x : ℝ) : ℂ)‖ :=
+    Complex.norm_log_one_add_half_le_self hx_cpx
+  rw [Complex.norm_real] at h_complex
+  have h_convert : Complex.log (1 + ((x : ℝ) : ℂ)) = ((Real.log (1 + x) : ℝ) : ℂ) := by
+    rw [show (1 + ((x : ℝ) : ℂ)) = (((1 + x : ℝ)) : ℂ) from by push_cast; rfl]
+    exact (Complex.ofReal_log hx_pos.le).symm
+  rw [h_convert, Complex.norm_real] at h_complex
+  exact h_complex
+
 /-- **Ellison's Lemma 1 (log-to-integer translation)**.
 
-Given that `|a·m^x − b·n^y| = ω` with `|ω| < b·n^y / 2`, the linear
-form in logs `Λ := x·log m − y·log n + log(a/b)` satisfies
-`|Λ| ≤ 2·|ω| / (b·n^y)`.
+Given `|2·3^i − c·2^k| ≤ ε` with `ε < 3^i`, the linear form
+`(k-1)·log 2 − i·log 3 + log c` has norm bounded by `2·ε / (2·3^i)`.
 
-Specialized to our Pomme setup `(a, b, m, n) = (1, 2, 2, 3)` with the
-extra coefficient `c` absorbed as `α₃ = c/2`: given `|c·2^k − 2·3^i| ≤ ε`
-with `ε < 3^i`, the sum `(k-1)·log 2 − i·log 3 + log c` has norm at most
-`2·ε / (2·3^i)`.
-
-**Status**: SORRY. This is the one analytic lemma needed; ~60-100 lines
-of real analysis using `Real.abs_log_one_add_le` or the equivalent
-Taylor bound `|log(1+z)| ≤ 2|z|` for `|z| ≤ 1/2`. -/
+**Proof**: The complex expression equals the real expression
+`(k-1)·log 2 − i·log 3 + log c` (since all αᵢ are positive reals).
+Using the algebraic identity `c·2^k = 2·3^i − ω` with `|ω| ≤ ε`, we
+get `(2^(k-1) · c) / 3^i = 1 + z` where `z := −ω/(2·3^i)` and
+`|z| ≤ ε/(2·3^i) < 1/2` (since `ε < 3^i`). Then
+`Real.log(1 + z)` is bounded by `(3/2)·|z| ≤ (3/2)·ε/(2·3^i) ≤
+2·ε/(2·3^i)` via the Taylor bound
+`|log(1+z)| ≤ (3/2)|z|` from `Complex.norm_log_one_add_half_le_self`. -/
 lemma log_bound_to_integer_bound
-    (i k c : ℕ) (hi_pos : 0 < i) (hc_pos : 0 < c) (hk_pos : 1 ≤ k)
+    (i k c : ℕ) (hc_pos : 0 < c) (hk_pos : 1 ≤ k)
     (ε : ℝ) (hε_pos : 0 ≤ ε)
     (h_gap : ((|((2 * 3 ^ i : ℤ) - (c : ℤ) * 2 ^ k)| : ℤ) : ℝ) ≤ ε)
     (h_small : ε < (3 : ℝ) ^ i) :
@@ -78,7 +97,77 @@ lemma log_bound_to_integer_bound
       + ((-(i : ℤ) : ℂ)) * Complex.log (3 : ℂ)
       + (1 : ℂ) * Complex.log ((c : ℂ))‖
     ≤ 2 * ε / (2 * (3 : ℝ) ^ i) := by
-  sorry
+  have h2_R_pos : (0 : ℝ) < 2 := by norm_num
+  have h3_R_pos : (0 : ℝ) < 3 := by norm_num
+  have hc_R_pos : (0 : ℝ) < (c : ℝ) := by exact_mod_cast hc_pos
+  have h3_pow_pos : (0 : ℝ) < (3 : ℝ) ^ i := pow_pos h3_R_pos i
+  -- Step 1: Convert complex log expression to real.
+  have h_re_eq : (((k : ℤ) - 1 : ℂ)) * Complex.log (2 : ℂ)
+                  + ((-(i : ℤ) : ℂ)) * Complex.log (3 : ℂ)
+                  + (1 : ℂ) * Complex.log ((c : ℂ))
+                = ((((k : ℝ) - 1) * Real.log 2 + (-(i : ℝ)) * Real.log 3 + Real.log c : ℝ) : ℂ) := by
+    rw [show (Complex.log (2 : ℂ)) = ((Real.log 2 : ℝ) : ℂ) by
+          rw [show ((2 : ℂ)) = (((2 : ℝ)) : ℂ) from by norm_cast]
+          exact (Complex.ofReal_log h2_R_pos.le).symm,
+        show (Complex.log (3 : ℂ)) = ((Real.log 3 : ℝ) : ℂ) by
+          rw [show ((3 : ℂ)) = (((3 : ℝ)) : ℂ) from by norm_cast]
+          exact (Complex.ofReal_log h3_R_pos.le).symm,
+        show (Complex.log ((c : ℂ))) = ((Real.log (c : ℝ) : ℝ) : ℂ) by
+          rw [show ((c : ℂ)) = (((c : ℝ)) : ℂ) from by push_cast; rfl]
+          exact (Complex.ofReal_log hc_R_pos.le).symm]
+    push_cast; ring
+  rw [h_re_eq, Complex.norm_real]
+  -- Step 2: Set up ω_R := 2·3^i - c·2^k as a real.
+  set ω_R : ℝ := 2 * (3 : ℝ) ^ i - c * (2 : ℝ) ^ k with hω_R_def
+  have hω_R_eq : ω_R = (((2 * 3^i : ℤ) - (c : ℤ) * 2^k : ℤ) : ℝ) := by
+    rw [hω_R_def]; push_cast; ring
+  have hω_R_abs : |ω_R| ≤ ε := by
+    rw [hω_R_eq, ← Int.cast_abs]; exact h_gap
+  -- Step 3: `2^k = 2 · 2^(k-1)`.
+  have h_pow_k : (2 : ℝ) ^ k = 2 * 2 ^ (k - 1) := by
+    have h : k - 1 + 1 = k := Nat.sub_add_cancel hk_pos
+    calc (2 : ℝ) ^ k = 2 ^ (k - 1 + 1) := by rw [h]
+      _ = 2 ^ (k - 1) * 2 := pow_succ 2 (k - 1)
+      _ = 2 * 2 ^ (k - 1) := by ring
+  -- Step 4: Define `z := -ω_R / (2 · 3^i)` and show `|z| ≤ 1/2`.
+  have h_denom_pos : (0 : ℝ) < 2 * (3 : ℝ) ^ i := by positivity
+  set z : ℝ := -ω_R / (2 * (3 : ℝ) ^ i) with hz_def
+  have hz_abs : |z| ≤ 1 / 2 := by
+    rw [hz_def, abs_div, abs_neg, abs_of_nonneg (by linarith : (0 : ℝ) ≤ 2 * (3 : ℝ) ^ i)]
+    rw [div_le_iff₀ h_denom_pos]
+    linarith [hω_R_abs, h_small]
+  -- Step 5: The real Λ equals `Real.log(1 + z)`.
+  have hk_cast : ((k : ℝ) - 1) = ((k - 1 : ℕ) : ℝ) := by
+    have h1 : (k - 1 : ℕ) + 1 = k := Nat.sub_add_cancel hk_pos
+    have h2 : ((k - 1 : ℕ) : ℝ) + 1 = (k : ℝ) := by exact_mod_cast h1
+    linarith
+  have h_Λ_R_form :
+      ((k : ℝ) - 1) * Real.log 2 + (-(i : ℝ)) * Real.log 3 + Real.log c
+        = Real.log (1 + z) := by
+    have h_one_plus_z : 1 + z = (2 : ℝ) ^ (k - 1) * c / (3 : ℝ) ^ i := by
+      rw [hz_def, hω_R_def]
+      field_simp
+      rw [h_pow_k]
+      ring
+    rw [h_one_plus_z]
+    rw [Real.log_div (by positivity) h3_pow_pos.ne']
+    rw [Real.log_mul (by positivity) hc_R_pos.ne']
+    rw [Real.log_pow, Real.log_pow]
+    rw [hk_cast]
+    ring
+  rw [h_Λ_R_form]
+  -- Step 6: Apply the Taylor bound and chain inequalities.
+  calc |Real.log (1 + z)|
+      ≤ (3 / 2) * |z| := abs_log_one_add_half_le hz_abs
+    _ = (3 / 2) * |ω_R| / (2 * (3 : ℝ) ^ i) := by
+        rw [hz_def, abs_div, abs_neg, abs_of_nonneg (by linarith : (0 : ℝ) ≤ 2 * (3 : ℝ) ^ i)]
+        ring
+    _ ≤ (3 / 2) * ε / (2 * (3 : ℝ) ^ i) := by
+        apply div_le_div_of_nonneg_right _ h_denom_pos.le
+        linarith [hω_R_abs]
+    _ ≤ 2 * ε / (2 * (3 : ℝ) ^ i) := by
+        apply div_le_div_of_nonneg_right _ h_denom_pos.le
+        linarith
 
 /-! ## Helper lemmas toward `direct_pillai_bound_small`
 
@@ -194,24 +283,51 @@ lemma pillai_baker_application
     · show ((k : ℤ) - 1).natAbs ≤ max k i + 2; omega
     · show (-(i : ℤ)).natAbs ≤ max k i + 2; simp; omega
     · show (1 : ℤ).natAbs ≤ max k i + 2; omega
+  -- Sum-form and expanded-form are equal.
+  have h_sum_eq :
+      (∑ j, ((![(k : ℤ) - 1, -(i : ℤ), 1] : Fin 3 → ℤ) j : ℂ) *
+             Complex.log ((algebraMap ℚ ℂ)
+                ((![(2 : ℚ), (3 : ℚ), (c : ℚ)] : Fin 3 → ℚ) j)))
+      = (((k : ℤ) - 1 : ℂ)) * Complex.log (2 : ℂ)
+          + ((-(i : ℤ) : ℂ)) * Complex.log (3 : ℂ)
+          + (1 : ℂ) * Complex.log ((c : ℂ)) := by
+    simp [Fin.sum_univ_three]
   have hΛ_ne_sum :
       (∑ j, ((![(k : ℤ) - 1, -(i : ℤ), 1] : Fin 3 → ℤ) j : ℂ) *
              Complex.log ((algebraMap ℚ ℂ)
                 ((![(2 : ℚ), (3 : ℚ), (c : ℚ)] : Fin 3 → ℚ) j))) ≠ 0 := by
-    sorry
+    rw [h_sum_eq]; exact hΛ_ne
   have h_baker := bakerWustholz_linearForms_logs
     (n := 3) (hn := by norm_num)
     (K := ℚ) (φ := algebraMap ℚ ℂ)
     (α := ![(2 : ℚ), (3 : ℚ), (c : ℚ)]) hα
     (b := ![(k : ℤ) - 1, -(i : ℤ), 1]) (B := max k i + 2) hB hbB hΛ_ne_sum
-  -- `h_baker` gives the Baker-Wüstholz bound on the summation form.
-  -- Rearrange to match the expanded form (sum of three terms).
-  sorry
+  -- Rewrite the summation form to the expanded form and the product form.
+  rw [h_sum_eq] at h_baker
+  have h_prod_eq :
+      (∏ j : Fin 3, BakerWustholz.modifiedHeight (algebraMap ℚ ℂ)
+        ((![(2 : ℚ), (3 : ℚ), (c : ℚ)] : Fin 3 → ℚ) j))
+      = BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) (2 : ℚ)
+          * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) (3 : ℚ)
+          * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)) := by
+    simp [Fin.prod_univ_three]
+  rw [h_prod_eq] at h_baker
+  exact h_baker
 
 /-- Helper: the product `C · log B · ∏ h'` is bounded above by a simple
 expression in `log i` that we can beat with `i · log 3`. Specifically,
 for `i ≥ pommeThreshold` and `c ≤ 4·i`, the RHS of Baker-Wüstholz is
-at most `i · log 3 / 2`. -/
+at most `i · log 3 / 2`.
+
+With `RatHeight.lean` providing the concrete values of
+`BakerWustholz.modifiedHeight` on `{(2 : ℚ), (3 : ℚ), ((c : ℕ) : ℚ)}`,
+this sorry reduces to a **pure numerical comparison** involving
+`BakerWustholz.C 3 1 ≈ 2.1 · 10^{12}`, `log(max k i + 2)`, `log 3`, and
+`max(log c, 1)`. The comparison still requires an upper bound on `k`
+in terms of `i` (derivable from the contradiction hypothesis
+`|2·3^i - c·2^k| ≤ i + 5` in `direct_pillai_bound_small`, but not
+passed here); a full proof would restructure `pillai_baker_rhs_upper_bound`
+to take such a hypothesis. -/
 lemma pillai_baker_rhs_upper_bound
     (i k c : ℕ) (hi : pommeThreshold ≤ i) (hc_small : c ≤ 4 * i)
     (hc_pos : 0 < c) :
@@ -221,6 +337,13 @@ lemma pillai_baker_rhs_upper_bound
           * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) (3 : ℚ)
           * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)))
       ≤ (i : ℝ) * Real.log 3 / 2 := by
+  -- Substitute the concrete values from `RatHeight.lean`:
+  --   `modifiedHeight φ (2 : ℚ) = 1`   (since `log 2 < 1`)
+  --   `modifiedHeight φ (3 : ℚ) = log 3`
+  rw [BakerWustholz.modifiedHeight_two, BakerWustholz.modifiedHeight_three]
+  -- Bound `modifiedHeight φ ((c : ℚ)) ≤ max (log c) 1`
+  have h_c_bound := BakerWustholz.modifiedHeight_natCast_le c hc_pos
+  -- Remaining: the purely numerical comparison, without any height theory.
   sorry
 
 /-- Helper: for `i ≥ pommeThreshold = 2^60`, the simple analytic
@@ -230,14 +353,42 @@ inequality `2 · log(i + 5) < i · log 3` holds. (Equivalently:
 lemma pillai_log_dominates
     (i : ℕ) (hi : pommeThreshold ≤ i) :
     2 * Real.log ((i : ℝ) + 5) < (i : ℝ) * Real.log 3 := by
-  sorry
+  have hi10 : 10 ≤ i := by
+    have : (10 : ℕ) ≤ pommeThreshold := by unfold pommeThreshold; decide
+    omega
+  have hi_R : (10 : ℝ) ≤ (i : ℝ) := by exact_mod_cast hi10
+  -- `log 2 < 1` since `2 < e`.
+  have h_log2 : Real.log 2 < 1 := by
+    have h := Real.log_lt_log (by norm_num : (0 : ℝ) < 2) Real.exp_one_gt_two
+    rwa [Real.log_exp] at h
+  -- `log 3 > 1` since `e < 3`.
+  have h_log3 : (1 : ℝ) < Real.log 3 := by
+    have h := Real.log_lt_log (Real.exp_pos _) Real.exp_one_lt_three
+    rwa [Real.log_exp] at h
+  -- `log((i+5)/4) ≤ (i+5)/4 - 1 = (i+1)/4`
+  have h_sub : Real.log (((i : ℝ) + 5) / 4) ≤ ((i : ℝ) + 5) / 4 - 1 :=
+    Real.log_le_sub_one_of_pos (by positivity)
+  -- `log(i+5) = log((i+5)/4) + log 4 = log((i+5)/4) + 2·log 2`
+  have h_log4 : Real.log 4 = 2 * Real.log 2 := by
+    have : (4 : ℝ) = 2 ^ 2 := by norm_num
+    rw [this, Real.log_pow]; simp
+  have h_div : Real.log ((i : ℝ) + 5) = Real.log (((i : ℝ) + 5) / 4) + 2 * Real.log 2 := by
+    rw [Real.log_div (by positivity) (by norm_num), ← h_log4]; ring
+  rw [h_div]
+  nlinarith [h_sub, h_log2, h_log3, Real.log_nonneg (by norm_num : (1 : ℝ) ≤ 3)]
 
 /-- Helper: for `i ≥ pommeThreshold = 2^60`, `(i + 5 : ℝ) < 3^i`.
-Used for the Lemma-1 application. -/
+Used for the Lemma-1 application. Follows from `eight_i_le_three_pow`. -/
 lemma pillai_ip5_lt_three_pow
     (i : ℕ) (hi : pommeThreshold ≤ i) :
     ((i : ℝ) + 5) < (3 : ℝ) ^ i := by
-  sorry
+  have hi8 : 8 ≤ i := le_trans pommeThreshold_ge_eight hi
+  have h8i := eight_i_le_three_pow i hi8
+  have h_step : (i + 5 : ℕ) < 8 * i := by omega
+  have h_N : (i + 5 : ℕ) < 3 ^ i := lt_of_lt_of_le h_step h8i
+  have h_R : ((i + 5 : ℕ) : ℝ) < ((3 ^ i : ℕ) : ℝ) := by exact_mod_cast h_N
+  push_cast at h_R
+  linarith
 
 /-- **Direct Pillai bound (small-`c` case) via Baker–Wüstholz**.
 
@@ -277,7 +428,7 @@ lemma direct_pillai_bound_small
   have hip5_pos : (0 : ℝ) ≤ (i : ℝ) + 5 := by positivity
   have hip5_lt : ((i : ℝ) + 5) < (3 : ℝ) ^ i := pillai_ip5_lt_three_pow i hi
   have h_Λ_ub : ‖Λ‖ ≤ 2 * ((i : ℝ) + 5) / (2 * (3 : ℝ) ^ i) :=
-    log_bound_to_integer_bound i k c hi_pos hc_pos hk_pos ((i : ℝ) + 5) hip5_pos h_not hip5_lt
+    log_bound_to_integer_bound i k c hc_pos hk_pos ((i : ℝ) + 5) hip5_pos h_not hip5_lt
   -- ‖Λ‖ > 0 since Λ ≠ 0.
   have hΛ_norm_pos : 0 < ‖Λ‖ := norm_pos_iff.mpr hΛ_ne
   -- Take log: log ‖Λ‖ ≤ log((i+5)/3^i) = log(i+5) - i·log 3.
