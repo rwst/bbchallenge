@@ -238,30 +238,92 @@ Observed instances in the start-from-blank trajectory:
   Smacro 0 0 280 → Smacro 2 4 272  (steps 37112 → 37134)
 -/
 
--- Concrete instances of the launch rule, provable by `decide` (the
--- tapes are fully concrete). The parametric version `launch_rule (b)`
--- reduces to these by splitting on `b` (and using a list-append
--- locality lemma for the uniform case).
-
-theorem launch_rule_0 : run tm (Smacro 0 0 8)  22 = Smacro 2 4 0 := by decide
-theorem launch_rule_2 : run tm (Smacro 0 0 10) 22 = Smacro 2 4 2 := by decide
-
+/-- **Launch rule** (uniform in `b`). 22 steps from `Smacro 0 0 (b+8)`
+produce `Smacro 2 4 b`. Proved by `run_right_append`: the 22-step run
+starting from `{A, [], 0, ones 8}` keeps the right strip non-empty, so
+appending an arbitrary tail commutes with the run. -/
 theorem launch_rule (b : ℕ) :
     run tm (Smacro 0 0 (b + 8)) 22 = Smacro 2 4 b := by
-  sorry
+  let c_left : Config 6 :=
+    { state := some stA, left := [], head := false, right := ones 8 }
+  have base : run tm c_left 22 =
+      { state := some stA, left := [], head := false,
+        right := ones 2 ++ zebra 4 } := by decide
+  have hne : ∀ m, m < 22 → (run tm c_left m).right ≠ [] := by decide
+  have key := run_right_append tm c_left (ones b ++ [false, true]) 22 hne
+  rw [base] at key
+  -- `key : run tm {c_left with right := ones 8 ++ (ones b ++ [0,1])} 22
+  --       = {state:=A, left:=[], head:=0, right := ones 2 ++ zebra 4 ++ (ones b ++ [0,1])}`
+  -- Align with Smacro shapes.
+  have e1 : Smacro 0 0 (b + 8) =
+      { state := some stA, left := [], head := false,
+        right := ones 8 ++ (ones b ++ [false, true]) } := by
+    show _ = _
+    unfold Smacro
+    simp [zebra, show b + 8 = 8 + b from by omega, ← ones_append,
+          List.append_assoc]
+  have e2 : (Smacro 2 4 b : Config 6) =
+      { state := some stA, left := [], head := false,
+        right := ones 2 ++ zebra 4 ++ (ones b ++ [false, true]) } := by
+    unfold Smacro
+    simp [List.append_assoc]
+  rw [e1, e2]
+  exact key
 
 /-- **Shift 4→16 rule** (222 steps). `Smacro 2 4 (b + 22) → Smacro 2 16 b`.
 Observed at (steps 368 → 590), (731 → 953), (2804 → 3026), (17535 →
-17757), (37134 → 37356). -/
+17757), (37134 → 37356). Proved analogously to `launch_rule`. -/
 theorem shift_4_16 (b : ℕ) :
     run tm (Smacro 2 4 (b + 22)) 222 = Smacro 2 16 b := by
-  sorry
+  let c_left : Config 6 :=
+    { state := some stA, left := [], head := false,
+      right := ones 2 ++ zebra 4 ++ ones 22 }
+  have base : run tm c_left 222 =
+      { state := some stA, left := [], head := false,
+        right := ones 2 ++ zebra 16 } := by native_decide
+  have hne : ∀ m, m < 222 → (run tm c_left m).right ≠ [] := by native_decide
+  have key := run_right_append tm c_left (ones b ++ [false, true]) 222 hne
+  rw [base] at key
+  have e1 : Smacro 2 4 (b + 22) =
+      { state := some stA, left := [], head := false,
+        right := (ones 2 ++ zebra 4 ++ ones 22) ++ (ones b ++ [false, true]) } := by
+    unfold Smacro
+    simp [show b + 22 = 22 + b from by omega, ← ones_append,
+          List.append_assoc]
+  have e2 : (Smacro 2 16 b : Config 6) =
+      { state := some stA, left := [], head := false,
+        right := (ones 2 ++ zebra 16) ++ (ones b ++ [false, true]) } := by
+    unfold Smacro
+    simp [List.append_assoc]
+  rw [e1, e2]
+  exact key
 
 /-- **Shift 16→52 rule** (1974 steps). `Smacro 2 16 (b + 70) → Smacro 2 52 b`.
 Observed at (17757 → 19731), (37356 → 39330). -/
 theorem shift_16_52 (b : ℕ) :
     run tm (Smacro 2 16 (b + 70)) 1974 = Smacro 2 52 b := by
-  sorry
+  let c_left : Config 6 :=
+    { state := some stA, left := [], head := false,
+      right := ones 2 ++ zebra 16 ++ ones 70 }
+  have base : run tm c_left 1974 =
+      { state := some stA, left := [], head := false,
+        right := ones 2 ++ zebra 52 } := by native_decide
+  have hne : ∀ m, m < 1974 → (run tm c_left m).right ≠ [] := by native_decide
+  have key := run_right_append tm c_left (ones b ++ [false, true]) 1974 hne
+  rw [base] at key
+  have e1 : Smacro 2 16 (b + 70) =
+      { state := some stA, left := [], head := false,
+        right := (ones 2 ++ zebra 16 ++ ones 70) ++ (ones b ++ [false, true]) } := by
+    unfold Smacro
+    simp [show b + 70 = 70 + b from by omega, ← ones_append,
+          List.append_assoc]
+  have e2 : (Smacro 2 52 b : Config 6) =
+      { state := some stA, left := [], head := false,
+        right := (ones 2 ++ zebra 52) ++ (ones b ++ [false, true]) } := by
+    unfold Smacro
+    simp [List.append_assoc]
+  rw [e1, e2]
+  exact key
 
 /-! The full rule set appears to be a sequence of "shifts" at growing
 periods `22, 222, 1974, …` and growing `c`-values `4, 16, 52, 136, …`
