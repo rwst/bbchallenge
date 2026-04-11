@@ -1071,7 +1071,7 @@ theorem F_final_to_M0 (a₀ : Nat) (L₀ : List Nat) (ha : a₀ ≥ 1) :
     conv_lhs => rw [show (false :: ones (a' + 1) : List Sym) =
       (false :: ones (a' + 1) ++ [] : List Sym) from by rw [List.append_nil]]
     rw [F_bounce_single_one a' []]
-    simp [M0_Config, runs, ones_succ, ones_zero]
+    simp [M0_Config, runs, ones_succ]
   | cons x xs =>
     simp only [runs_cons₂]
     conv_lhs =>
