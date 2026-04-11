@@ -245,22 +245,8 @@ theorem pomme_cor3
 /-! ### Small-`i` range
 
 The direct Baker–Wüstholz bound covers `i ≥ pommeThreshold = 2^60`. The
-range `50 ≤ i < 2^60 ≈ 1.15·10^{18}` has to be handled by a dense
-simulator. (Down from `50 ≤ i < 2^{2100}` in the old approach —
-computationally feasible in CPU-hours with GMP.) -/
-
-/-- Dense simulator verification for the small-`i` range `50 ≤ i < 2^{60}`.
-To be discharged later by a verified computation. -/
-axiom pomme_small_range
-    (i : ℕ) (hi_lo : 50 ≤ i) (hi_hi : i < pommeThreshold) :
-    2 * i + 14 ≤ N i / 2 ^ padicValNat 2 (N i)
-
-/-- **Main theorem**: the TM-closure inequality `(*)` for all `i ≥ 50`. -/
-theorem pomme_main (i : ℕ) (hi : 50 ≤ i) :
-    2 * i + 14 ≤ N i / 2 ^ padicValNat 2 (N i) := by
-  by_cases h : i < pommeThreshold
-  · exact pomme_small_range i hi h
-  · push_neg at h
-    exact pomme_cor3 i h
+range `50 ≤ i < 2^60 ≈ 1.15·10^{18}` is handled mathematically (no
+simulator) by a Hensel-lift argument; see `Hensel.lean`. The two ranges
+are stitched together in `Hensel.pomme_main`. -/
 
 end Pomme
