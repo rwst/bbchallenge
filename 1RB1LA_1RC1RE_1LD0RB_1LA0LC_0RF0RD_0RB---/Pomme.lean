@@ -10,7 +10,7 @@ This file follows Pomme (Nov 28, 2025), `previous-work/Pomme2.pdf`, but
 replaces the original Baker 1966-68 approach with the sharper
 **Baker–Wüstholz (1993)** route defined in `Ellison.lean`. The main
 consequence is that the threshold drops from `i ≥ 2^{2100}` to
-`i ≥ 2^{60}`, making a verified small-`i` simulator feasible.
+`i ≥ 2^{60}`, making a Hensel lift argument possible.
 
 The target is the number-theoretic closure inequality needed to prove
 non-halting of the Turing machine
