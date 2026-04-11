@@ -33,4 +33,4 @@ roots = ["machine_base", "machine"]
 [[lean_lib]]
 name = "Pillai"
 srcDir = "1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---"
-roots = ["Baker", "BakerWustholz", "RatHeight", "Ellison", "Pomme"]
+roots = ["Baker", "BakerWustholz", "RatHeight", "Ellison", "Pomme", "Hensel"]
