@@ -617,13 +617,116 @@ proved**. The proof (~110 lines total, including a small helper) uses:
 
    ~95 lines.
 
-### Final sorry inventory (1 remaining)
+### Session 4: isolating the Rat-height gap in `RatHeight.lean`
 
-| # | Lemma | Status | Why remaining |
-|---|---|---|---|
-| 1 | `pillai_baker_rhs_upper_bound` | **Sorry** | The numerical constant comparison `C(3,1) · log B · ∏ h' ≤ i · log 3 / 2` for `i ≥ 2^60`, `c ≤ 4·i`. Requires unfolding `BakerWustholz.modifiedHeight` for `(2 : ℚ)`, `(3 : ℚ)`, `((c : ℚ))` and bounding them, which in turn requires characterizing `Height.logHeight₁ (q : ℚ)` — exactly the **same mathlib gap** (`Rat.mulHeight₁_eq_max_num_natAbs_den`) that blocked the old approach. In the Baker–Wüstholz setup it's the ONLY place this gap matters, whereas in the old approach it affected the whole height plumbing. |
+The remaining `pillai_baker_rhs_upper_bound` sorry had two distinct
+obstacles bundled together:
 
-**Final axiom chain** (unchanged throughout this session):
+1. **Rat-height gap** — closed-form values of `Height.logHeight₁` on
+   `(2 : ℚ)`, `(3 : ℚ)`, `((c : ℕ) : ℚ)` (a mathlib gap).
+2. **Pure numerical comparison** — `C(3,1) · log(max k i + 2) · log 3 ·
+   h'(c) ≤ i · log 3 / 2` given 1.
+
+We **factored (1) out** into a new file `RatHeight.lean` with sorried
+bridge lemmas, and **proved (2) in full** in `Ellison.lean`. This
+separates the one remaining mathematical obstacle (mathlib PR) from
+the numerical bookkeeping that used to be entangled with it.
+
+#### `RatHeight.lean` (new, sorried)
+
+Provisional replacement for the target mathlib PR sketched earlier in
+this plan. It axiomatizes the rational-height closed forms as sorried
+theorems, to be replaced by mathlib lemmas when the PR lands.
+
+| Lemma | Statement |
+|---|---|
+| `Rat.mulHeight₁_eq` | `Height.mulHeight₁ q = max(\|q.num\|, q.den)` |
+| `Rat.logHeight₁_eq` | log variant |
+| `Rat.logHeight₁_two` | `logHeight₁ (2 : ℚ) = log 2` |
+| `Rat.logHeight₁_three` | `logHeight₁ (3 : ℚ) = log 3` |
+| `Rat.logHeight₁_natCast` | `logHeight₁ ((n : ℕ) : ℚ) = log n` (`1 ≤ n`) |
+| `BakerWustholz.modifiedHeight_rat_eq` | unfold for `K = ℚ` (`d = 1`) |
+| `BakerWustholz.modifiedHeight_two` | `= 1` (since `log 2 < 1`) |
+| `BakerWustholz.modifiedHeight_three` | `= log 3` (since `log 3 > 1`) |
+| `BakerWustholz.modifiedHeight_natCast_le` | `≤ max (log c) 1` |
+
+9 sorries total, all isolated to `RatHeight.lean`, none in the main
+proof chain except through the explicit list above.
+
+#### `pillai_baker_rhs_upper_bound` — fully proved in `Ellison.lean`
+
+Proof strategy (~170 lines, all numerical, no height theory):
+
+**Signature change**. The lemma now takes an extra hypothesis
+`hk_ub : k ≤ 2·i + 2`, which `direct_pillai_bound_small` derives inline
+from the contradiction hypothesis `|2·3^i − c·2^k| ≤ i + 5`:
+
+- `c · 2^k ≤ 2·3^i + (i + 5) ≤ 4·3^i ≤ 4·4^i = 2^{2i+2}`
+  (using `eight_i_le_three_pow` for `i + 5 ≤ 8·i ≤ 3^i`),
+- so `2^k ≤ 2^{2i+2}` since `c ≥ 1`,
+- hence `k ≤ 2·i + 2`.
+
+~25 lines in `direct_pillai_bound_small`.
+
+**Main numerical chain**. After substituting `modifiedHeight_two = 1`,
+`modifiedHeight_three = log 3`, and `Module.finrank_self ℚ`, the goal
+reduces to
+
+```
+C(3,1) · log(max k i + 2) · log 3 · h'(c) ≤ i · log 3 / 2
+```
+
+We bound `log(max k i + 2) ≤ log(4i)` (using `k ≤ 2i+2`, `i ≥ 2`) and
+`h'(c) ≤ max(log c, 1) ≤ log(4i)` (using `c ≤ 4i`, `4i ≥ 32 > e`),
+reducing to
+
+```
+2 · C(3,1) · log(4i)² ≤ i.
+```
+
+**Four numerical helper lemmas** (all proved, no sorries):
+
+| Helper | Content |
+|---|---|
+| `bakerWustholz_C_three_one_le` | `C(3,1) ≤ 2^42`. Bound `log 6 ≤ 2` via `Real.exp_one_gt_d9` → `exp 2 > 6`; then `18 · 24 · 3^4 · 32^5 · 2 ≤ 2^42` by `norm_num`. |
+| `log_sq_le_rpow_thirtieth` | `(log x)² ≤ 3600 · x^{1/30}` for `x ≥ 1`. From `Real.log_le_rpow_div` with `ε = 1/60`: `log x ≤ 60 · x^{1/60}`, square, `60² = 3600`, `(x^{1/60})² = x^{1/30}`. |
+| `rpow_29_30_ge_2_pow_57` | `i^{29/30} ≥ 2^57` for `i ≥ 2^60`. At boundary: `(2^60)^{29/30} = 2^58 ≥ 2^57` (one bit of slack). |
+| `four_rpow_thirtieth_le_two` | `4^{1/30} ≤ 4^{1/2} = 2` via `Real.rpow_le_rpow_of_exponent_le`. |
+
+**Final chain**. Putting it together:
+
+```
+  2 · C(3,1) · log(4i)²
+ ≤ 2 · 2^42 · (3600 · (4i)^{1/30})        -- C bound, log² bound
+ ≤ 2 · 2^42 · 3600 · (2 · i^{1/30})        -- split (4i)^{1/30} = 4^{1/30} · i^{1/30}
+ = 2^42 · 14400 · i^{1/30}
+ ≤ 2^56 · i^{1/30}                         -- norm_num: 2 · 2^42 · 7200 ≤ 2^56
+ ≤ 2^57 · i^{1/30}                         -- trivially
+ ≤ i^{29/30} · i^{1/30}                    -- rpow_29_30_ge_2_pow_57
+ = i^{30/30} = i.                          -- Real.rpow_add
+```
+
+Total added to `Ellison.lean`: four helper lemmas (~55 lines combined)
+and ~125 lines of main proof. The factor of `log 3` is reattached
+after cancelling via `log 3 > 0`.
+
+### Final sorry inventory (0 in `Ellison.lean`, 9 isolated in `RatHeight.lean`)
+
+| File | Sorries | Where |
+|---|---|---|
+| `BakerWustholz.lean` | 0 | axiom only |
+| `Ellison.lean` | **0** | fully proved |
+| `Pomme.lean` | 0 | fully proved |
+| `RatHeight.lean` | 9 | all isolated to rational-height bridge |
+
+All 9 `RatHeight.lean` sorries are **exactly the mathlib PR sketched
+earlier in this plan** — specifically, the bridge from
+`Rat.AbsoluteValue.equiv_real_or_padic` (Ostrowski, already in mathlib)
+to the `NumberField.FinitePlace` infrastructure used by
+`Mathlib.NumberTheory.Height.NumberField`. When that PR lands,
+`RatHeight.lean` can be deleted outright.
+
+**Final axiom chain**:
 ```
 'direct_pillai_bound_small' depends on axioms:
   [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice, Quot.sound]
@@ -633,21 +736,28 @@ proved**. The proof (~110 lines total, including a small helper) uses:
    Pomme.pomme_small_range, Quot.sound]
 ```
 
+The `sorryAx` in both chains comes exclusively from the 9
+`RatHeight.lean` lemmas — no sorries remain in the active proof logic.
+
 ### Summary
 
 Starting from a Baker-1966 chain with 11 sorries and an infeasible
 `10^632` threshold, the Baker–Wüstholz refactor is now:
 
 - **`BakerWustholz.lean`**: 85 lines, 0 sorries (axiom only).
-- **`Ellison.lean`**: ~470 lines, **1 sorry** (the Rat-height gap).
+- **`Ellison.lean`**: ~625 lines, **0 sorries**.
 - **`Pomme.lean`**: 266 lines, 0 sorries.
+- **`RatHeight.lean`**: 126 lines, 9 sorries (the mathlib gap, fully isolated).
 - **Threshold**: `i ≥ 2^60`, simulator-feasible.
 - **Axiom chain**: `bakerWustholz_linearForms_logs` + `pomme_small_range`
-  + standard.
+  + standard (+ 9 sorries in `RatHeight.lean`).
 
-The one remaining sorry is **not** simulator-related and is a
-well-understood mathlib gap that, if filled once in mathlib, would
-eliminate this last obstacle.
+The remaining work on `RatHeight.lean` is a mathlib PR, not a
+proof-engineering task: its sorries have clean statements and directly
+mirror already-formalized pieces (`Rat.infinitePlace`, Ostrowski,
+`Height.mulHeight₁_eq`). Once merged upstream, this file is deleted and
+the axiom chain of `Pomme.pomme_main` collapses to
+`{bakerWustholz_linearForms_logs, pomme_small_range} ∪ standard`.
 
 ## Detour: Could we use Matveev's theorem instead?
 

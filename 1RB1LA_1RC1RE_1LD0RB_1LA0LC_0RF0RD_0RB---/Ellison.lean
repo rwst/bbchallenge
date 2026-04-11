@@ -314,37 +314,273 @@ lemma pillai_baker_application
   rw [h_prod_eq] at h_baker
   exact h_baker
 
+/-! ### Numerical helper lemmas for `pillai_baker_rhs_upper_bound`
+
+The main lemma reduces, via the closed-form `modifiedHeight` values in
+`RatHeight.lean`, to a pure numerical comparison
+
+    `2 · C(3, 1) · log(4i)² ≤ i`        (for `i ≥ pommeThreshold = 2^60`).
+
+We prove this by breaking it into three independently checkable bounds:
+
+* `bakerWustholz_C_three_one_le` — `C(3, 1) ≤ 2^42`.
+* `log_sq_le_rpow_thirtieth` — `log x² ≤ 3600 · x^(1/30)` for `x ≥ 1`.
+* `rpow_29_30_ge_2_pow_57` — `(i : ℝ)^(29/30) ≥ 2^57` for `i ≥ 2^60`.
+
+Combined, these give `2^56 · i^(1/30) ≤ i` and hence the target. -/
+
+/-- Numerical bound: the Baker–Wüstholz constant `C(3, 1) ≤ 2^42`.
+
+`C(3, 1) = 18 · 4! · 3^4 · 32^5 · log 6 ≈ 2.1·10^12 < 2^42 ≈ 4.4·10^12`. -/
+private lemma bakerWustholz_C_three_one_le :
+    BakerWustholz.C 3 1 ≤ (2 : ℝ) ^ 42 := by
+  unfold BakerWustholz.C
+  push_cast
+  have hfact : ((Nat.factorial (3 + 1) : ℕ) : ℝ) = 24 := by
+    have : Nat.factorial (3 + 1) = 24 := by decide
+    exact_mod_cast this
+  rw [hfact]
+  have h_log6 : Real.log (2 * 3 * 1) ≤ 2 := by
+    have h_eq : (2 * 3 * 1 : ℝ) = 6 := by norm_num
+    rw [h_eq]
+    have h_e1 : (2.7 : ℝ) < Real.exp 1 := by linarith [Real.exp_one_gt_d9]
+    have h_add : Real.exp 2 = Real.exp 1 * Real.exp 1 := by
+      rw [show (2 : ℝ) = 1 + 1 from by norm_num, Real.exp_add]
+    have h_e2 : (6 : ℝ) < Real.exp 2 := by nlinarith [h_e1, h_add]
+    have h := Real.log_le_log (by norm_num : (0 : ℝ) < 6) h_e2.le
+    rwa [Real.log_exp] at h
+  have h_log6_nn : 0 ≤ Real.log (2 * 3 * 1) :=
+    Real.log_nonneg (by norm_num)
+  have h_numerical : (18 : ℝ) * 24 * 3 ^ 4 * (32 * 1) ^ 5 * 2 ≤ (2 : ℝ) ^ 42 := by norm_num
+  have h_pos : (0 : ℝ) ≤ 18 * 24 * (3 : ℝ) ^ 4 * (32 * 1 : ℝ) ^ 5 := by positivity
+  nlinarith [h_log6, h_log6_nn, h_numerical, h_pos]
+
+/-- Numerical bound: `(log x)² ≤ 3600 · x^(1/30)` for `x ≥ 1`.
+Follows from `Real.log_le_rpow_div` with `ε = 1/60`, giving
+`log x ≤ 60 · x^(1/60)`, then squaring. -/
+private lemma log_sq_le_rpow_thirtieth (x : ℝ) (hx : 1 ≤ x) :
+    Real.log x ^ 2 ≤ 3600 * x ^ ((1 : ℝ) / 30) := by
+  have hx_pos : 0 < x := by linarith
+  have h_log : Real.log x ≤ 60 * x ^ ((1 : ℝ) / 60) := by
+    have h := Real.log_le_rpow_div hx_pos.le (show (0 : ℝ) < 1/60 by norm_num)
+    have h_div : x ^ ((1 : ℝ) / 60) / (1/60) = 60 * x ^ ((1 : ℝ) / 60) := by field_simp
+    linarith [h, h_div]
+  have h_log_nn : 0 ≤ Real.log x := Real.log_nonneg hx
+  have h_sq : Real.log x ^ 2 ≤ (60 * x ^ ((1 : ℝ) / 60)) ^ 2 :=
+    pow_le_pow_left₀ h_log_nn h_log 2
+  have h_eq : (60 * x ^ ((1 : ℝ) / 60)) ^ 2 = 3600 * x ^ ((1 : ℝ) / 30) := by
+    rw [mul_pow]
+    have h60 : (60 : ℝ) ^ 2 = 3600 := by norm_num
+    rw [h60]
+    have h_sqx : (x ^ ((1 : ℝ) / 60)) ^ 2 = x ^ ((1 : ℝ) / 30) := by
+      rw [← Real.rpow_natCast (x ^ ((1 : ℝ) / 60)) 2, ← Real.rpow_mul hx_pos.le]
+      norm_num
+    rw [h_sqx]
+  linarith
+
+/-- Numerical bound: `i^(29/30) ≥ 2^57` for `i ≥ 2^60`.
+At `i = 2^60`, `i^(29/30) = 2^58 ≥ 2^57` with one bit of slack. -/
+private lemma rpow_29_30_ge_2_pow_57 (i : ℕ) (hi : (2 : ℕ) ^ 60 ≤ i) :
+    (2 : ℝ) ^ 57 ≤ (i : ℝ) ^ ((29 : ℝ) / 30) := by
+  have hi_R : ((2 : ℕ) ^ 60 : ℝ) ≤ (i : ℝ) := by exact_mod_cast hi
+  have h1 : ((2 : ℕ) ^ 60 : ℝ) ^ ((29 : ℝ) / 30) ≤ (i : ℝ) ^ ((29 : ℝ) / 30) := by
+    apply Real.rpow_le_rpow (by positivity) hi_R (by norm_num)
+  have h2 : ((2 : ℕ) ^ 60 : ℝ) = (2 : ℝ) ^ 60 := by push_cast; rfl
+  rw [h2] at h1
+  have h3 : ((2 : ℝ) ^ 60) ^ ((29 : ℝ) / 30) = (2 : ℝ) ^ 58 := by
+    rw [← Real.rpow_natCast (2 : ℝ) 60, ← Real.rpow_mul (by norm_num : (0 : ℝ) ≤ 2)]
+    norm_num
+  rw [h3] at h1
+  have h57_58 : (2 : ℝ) ^ 57 ≤ (2 : ℝ) ^ 58 := by norm_num
+  linarith
+
+/-- Numerical bound: `4^(1/30) ≤ 2`. Used to simplify `(4i)^(1/30)`. -/
+private lemma four_rpow_thirtieth_le_two :
+    (4 : ℝ) ^ ((1 : ℝ) / 30) ≤ 2 := by
+  have h1 : (4 : ℝ) ^ ((1 : ℝ) / 30) ≤ (4 : ℝ) ^ ((1 : ℝ) / 2) := by
+    apply Real.rpow_le_rpow_of_exponent_le (by norm_num : (1 : ℝ) ≤ 4)
+    norm_num
+  have h2 : (4 : ℝ) ^ ((1 : ℝ) / 2) = 2 := by
+    rw [show (4 : ℝ) = 2 ^ 2 from by norm_num]
+    rw [← Real.rpow_natCast (2 : ℝ) 2, ← Real.rpow_mul (by norm_num : (0 : ℝ) ≤ 2)]
+    norm_num
+  linarith
+
 /-- Helper: the product `C · log B · ∏ h'` is bounded above by a simple
 expression in `log i` that we can beat with `i · log 3`. Specifically,
-for `i ≥ pommeThreshold` and `c ≤ 4·i`, the RHS of Baker-Wüstholz is
-at most `i · log 3 / 2`.
+for `i ≥ pommeThreshold`, `c ≤ 4·i`, and `k ≤ 2i + 2` (this last bound
+is derived from the contradiction hypothesis `|2·3^i - c·2^k| ≤ i + 5`
+in `direct_pillai_bound_small`), the RHS of Baker–Wüstholz is at most
+`i · log 3 / 2`.
 
-With `RatHeight.lean` providing the concrete values of
-`BakerWustholz.modifiedHeight` on `{(2 : ℚ), (3 : ℚ), ((c : ℕ) : ℚ)}`,
-this sorry reduces to a **pure numerical comparison** involving
-`BakerWustholz.C 3 1 ≈ 2.1 · 10^{12}`, `log(max k i + 2)`, `log 3`, and
-`max(log c, 1)`. The comparison still requires an upper bound on `k`
-in terms of `i` (derivable from the contradiction hypothesis
-`|2·3^i - c·2^k| ≤ i + 5` in `direct_pillai_bound_small`, but not
-passed here); a full proof would restructure `pillai_baker_rhs_upper_bound`
-to take such a hypothesis. -/
+Proof outline:
+1. Substitute the closed-form values `modifiedHeight φ (2 : ℚ) = 1`,
+   `modifiedHeight φ (3 : ℚ) = log 3`, and the bound
+   `modifiedHeight φ (c : ℚ) ≤ max (log c, 1)`.
+2. Cancel `log 3` on both sides (it is positive).
+3. Bound `log(max k i + 2) ≤ log(4i)` using `k ≤ 2i + 2` and `i ≥ 2`.
+4. Bound `max (log c) 1 ≤ log(4i)` using `c ≤ 4i` and `i ≥ 2^60` large.
+5. Bound `C(3, 1) * log(4i)² ≤ 2^42 · 7200 · i^(1/30) ≤ 2^55 · i^(1/30)`
+   using `bakerWustholz_C_three_one_le`, `log_sq_le_rpow_thirtieth`, and
+   `four_rpow_thirtieth_le_two`.
+6. Double and use `rpow_29_30_ge_2_pow_57` to get `≤ i`. -/
 lemma pillai_baker_rhs_upper_bound
     (i k c : ℕ) (hi : pommeThreshold ≤ i) (hc_small : c ≤ 4 * i)
-    (hc_pos : 0 < c) :
+    (hc_pos : 0 < c) (hk_ub : k ≤ 2 * i + 2) :
     BakerWustholz.C 3 (Module.finrank ℚ ℚ)
       * Real.log ((max k i + 2 : ℕ) : ℝ)
       * (BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) (2 : ℚ)
           * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) (3 : ℚ)
           * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)))
       ≤ (i : ℝ) * Real.log 3 / 2 := by
-  -- Substitute the concrete values from `RatHeight.lean`:
-  --   `modifiedHeight φ (2 : ℚ) = 1`   (since `log 2 < 1`)
-  --   `modifiedHeight φ (3 : ℚ) = log 3`
+  -- Substitute the concrete values from `RatHeight.lean`.
   rw [BakerWustholz.modifiedHeight_two, BakerWustholz.modifiedHeight_three]
-  -- Bound `modifiedHeight φ ((c : ℚ)) ≤ max (log c) 1`
   have h_c_bound := BakerWustholz.modifiedHeight_natCast_le c hc_pos
-  -- Remaining: the purely numerical comparison, without any height theory.
-  sorry
+  -- `Module.finrank ℚ ℚ = 1`.
+  rw [show (Module.finrank ℚ ℚ : ℕ) = 1 from Module.finrank_self ℚ]
+  -- Basic positivity facts.
+  have hi8 : 8 ≤ i := le_trans pommeThreshold_ge_eight hi
+  have hi_pos : 0 < i := by omega
+  have hi_R : (8 : ℝ) ≤ (i : ℝ) := by exact_mod_cast hi8
+  have hi_R_pos : (0 : ℝ) < (i : ℝ) := by linarith
+  have h_log3 : (1 : ℝ) < Real.log 3 := by
+    have h := Real.log_lt_log (Real.exp_pos _) Real.exp_one_lt_three
+    rwa [Real.log_exp] at h
+  have h_log3_pos : (0 : ℝ) < Real.log 3 := by linarith
+  -- `4i ≥ 8`, so `log(4i) ≥ log 8 > 1`.
+  have h4i_pos : (0 : ℝ) < 4 * (i : ℝ) := by linarith
+  have h4i_ge1 : (1 : ℝ) ≤ 4 * (i : ℝ) := by linarith
+  have h_log4i_pos : (0 : ℝ) ≤ Real.log (4 * (i : ℝ)) := Real.log_nonneg h4i_ge1
+  have h_log4i_ge_one : (1 : ℝ) ≤ Real.log (4 * (i : ℝ)) := by
+    have h32 : (4 * (i : ℝ)) ≥ 32 := by linarith
+    have : Real.log 32 ≤ Real.log (4 * (i : ℝ)) :=
+      Real.log_le_log (by norm_num) h32
+    have h_log32 : (1 : ℝ) ≤ Real.log 32 := by
+      have h_e_lt : Real.exp 1 < 32 := by
+        have : Real.exp 1 < 3 := Real.exp_one_lt_three
+        linarith
+      have h := Real.log_lt_log (Real.exp_pos _) h_e_lt
+      rw [Real.log_exp] at h; linarith
+    linarith
+  -- Bound `log(max k i + 2) ≤ log(4i)` via `k ≤ 2i+2`.
+  have h_maxki_le : ((max k i + 2 : ℕ) : ℝ) ≤ 4 * (i : ℝ) := by
+    have : (max k i + 2 : ℕ) ≤ 4 * i := by omega
+    exact_mod_cast this
+  have h_maxki_pos : (0 : ℝ) < ((max k i + 2 : ℕ) : ℝ) := by
+    have : 0 < max k i + 2 := by omega
+    exact_mod_cast this
+  have h_log_max_le : Real.log ((max k i + 2 : ℕ) : ℝ) ≤ Real.log (4 * (i : ℝ)) :=
+    Real.log_le_log h_maxki_pos h_maxki_le
+  have h_log_max_nn : 0 ≤ Real.log ((max k i + 2 : ℕ) : ℝ) := by
+    apply Real.log_nonneg
+    have : 1 ≤ max k i + 2 := by omega
+    exact_mod_cast this
+  -- Bound `h'(c) ≤ log(4i)`.
+  have h_c_nat_R : ((c : ℕ) : ℝ) ≤ 4 * (i : ℝ) := by exact_mod_cast hc_small
+  have h_c_R_pos : (0 : ℝ) < (c : ℝ) := by exact_mod_cast hc_pos
+  have h_logc_le : Real.log (c : ℝ) ≤ Real.log (4 * (i : ℝ)) :=
+    Real.log_le_log h_c_R_pos h_c_nat_R
+  have h_max_log_c_one_le : max (Real.log c) 1 ≤ Real.log (4 * (i : ℝ)) := by
+    apply max_le h_logc_le h_log4i_ge_one
+  have h_hc_le : BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ))
+                  ≤ Real.log (4 * (i : ℝ)) := le_trans h_c_bound h_max_log_c_one_le
+  have h_hc_nn : 0 ≤ BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)) := by
+    unfold BakerWustholz.modifiedHeight
+    simp only [Module.finrank_self, Nat.cast_one, div_one]
+    positivity
+  -- Let `L := log(4i)`. We now have:
+  --   log(max k i + 2) ≤ L  and  h'(c) ≤ L,  both nonneg.
+  set L : ℝ := Real.log (4 * (i : ℝ)) with hL_def
+  -- Denote `C := C(3, 1) ≥ 0`.
+  have hC_nn : 0 ≤ BakerWustholz.C 3 1 := by
+    unfold BakerWustholz.C
+    have : Real.log (2 * 3 * 1) ≥ 0 :=
+      Real.log_nonneg (by norm_num)
+    positivity
+  -- Main chain:
+  --   LHS = C * log(max k i+2) * (1 * log 3 * h'(c))
+  --       = C * log 3 * log(max k i+2) * h'(c)
+  --       ≤ C * log 3 * L * L
+  --       = C * L² * log 3
+  have h_L_nn : 0 ≤ L := h_log4i_pos
+  have h_prod_le : Real.log ((max k i + 2 : ℕ) : ℝ)
+                      * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ))
+                    ≤ L * L := by
+    have h1 : Real.log ((max k i + 2 : ℕ) : ℝ)
+                * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ))
+              ≤ L * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)) := by
+      apply mul_le_mul_of_nonneg_right h_log_max_le h_hc_nn
+    have h2 : L * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)) ≤ L * L := by
+      apply mul_le_mul_of_nonneg_left h_hc_le h_L_nn
+    linarith
+  -- Reduce to: 2 * C * L² ≤ i.
+  suffices h : 2 * BakerWustholz.C 3 1 * L * L ≤ (i : ℝ) by
+    have h_log_max_times_prod_le :
+        BakerWustholz.C 3 1 * Real.log ((max k i + 2 : ℕ) : ℝ)
+            * (1 * Real.log 3 * BakerWustholz.modifiedHeight (algebraMap ℚ ℂ) ((c : ℚ)))
+          ≤ BakerWustholz.C 3 1 * (L * L) * Real.log 3 := by
+      have := mul_le_mul_of_nonneg_left h_prod_le hC_nn
+      nlinarith [this, h_log3_pos, h_L_nn, hC_nn, h_log_max_nn, h_hc_nn]
+    have h_final : BakerWustholz.C 3 1 * (L * L) * Real.log 3
+                    ≤ (i : ℝ) * Real.log 3 / 2 := by
+      have h2 : 2 * (BakerWustholz.C 3 1 * (L * L)) ≤ (i : ℝ) := by nlinarith [h]
+      nlinarith [h2, h_log3_pos]
+    linarith
+  -- Numerical chain: `2 * C * L² ≤ 2 * 2^42 * 3600 * (4i)^(1/30)`.
+  have hC_le : BakerWustholz.C 3 1 ≤ (2 : ℝ) ^ 42 := bakerWustholz_C_three_one_le
+  have h_L_sq : L ^ 2 ≤ 3600 * (4 * (i : ℝ)) ^ ((1 : ℝ) / 30) :=
+    log_sq_le_rpow_thirtieth (4 * (i : ℝ)) h4i_ge1
+  -- `(4i)^(1/30) = 4^(1/30) * i^(1/30) ≤ 2 * i^(1/30)`.
+  have h_4i_split : (4 * (i : ℝ)) ^ ((1 : ℝ) / 30)
+                    = (4 : ℝ) ^ ((1 : ℝ) / 30) * (i : ℝ) ^ ((1 : ℝ) / 30) := by
+    rw [Real.mul_rpow (by norm_num) hi_R_pos.le]
+  have h_4rpow : (4 : ℝ) ^ ((1 : ℝ) / 30) ≤ 2 := four_rpow_thirtieth_le_two
+  have h_irpow_nn : 0 ≤ (i : ℝ) ^ ((1 : ℝ) / 30) :=
+    Real.rpow_nonneg hi_R_pos.le _
+  have h_4i_rpow_le : (4 * (i : ℝ)) ^ ((1 : ℝ) / 30)
+                      ≤ 2 * (i : ℝ) ^ ((1 : ℝ) / 30) := by
+    rw [h_4i_split]
+    exact mul_le_mul_of_nonneg_right h_4rpow h_irpow_nn
+  have h_L_sq_le : L ^ 2 ≤ 7200 * (i : ℝ) ^ ((1 : ℝ) / 30) := by
+    calc L ^ 2 ≤ 3600 * (4 * (i : ℝ)) ^ ((1 : ℝ) / 30) := h_L_sq
+      _ ≤ 3600 * (2 * (i : ℝ) ^ ((1 : ℝ) / 30)) := by
+          apply mul_le_mul_of_nonneg_left h_4i_rpow_le (by norm_num)
+      _ = 7200 * (i : ℝ) ^ ((1 : ℝ) / 30) := by ring
+  -- `L * L = L^2`.
+  have h_LL : L * L = L ^ 2 := by ring
+  -- `2 * C * L² ≤ 2 * 2^42 * 7200 * i^(1/30) = 2^56 * i^(1/30)` (since 2*2^42*7200 ≤ 2^56).
+  have h_chain : 2 * BakerWustholz.C 3 1 * (L * L)
+                  ≤ (2 : ℝ) ^ 56 * (i : ℝ) ^ ((1 : ℝ) / 30) := by
+    rw [h_LL]
+    have step1 : 2 * BakerWustholz.C 3 1 * L^2 ≤ 2 * (2 : ℝ)^42 * L^2 := by
+      have hL2_nn : 0 ≤ L^2 := sq_nonneg _
+      nlinarith [hC_le, hL2_nn]
+    have step2 : 2 * (2 : ℝ)^42 * L^2 ≤ 2 * (2 : ℝ)^42 * (7200 * (i : ℝ) ^ ((1 : ℝ) / 30)) := by
+      have h_coeff : (0 : ℝ) ≤ 2 * (2 : ℝ)^42 := by positivity
+      nlinarith [h_L_sq_le, h_coeff]
+    have step3 : 2 * (2 : ℝ)^42 * (7200 * (i : ℝ) ^ ((1 : ℝ) / 30))
+                  ≤ (2 : ℝ)^56 * (i : ℝ) ^ ((1 : ℝ) / 30) := by
+      have : 2 * (2 : ℝ)^42 * 7200 ≤ (2 : ℝ)^56 := by norm_num
+      nlinarith [h_irpow_nn, this]
+    linarith
+  -- `2^56 * i^(1/30) ≤ i`, since `2^56 ≤ i^(29/30)` (from rpow_29_30_ge_2_pow_57).
+  have hi60 : (2 : ℕ) ^ 60 ≤ i := by
+    have : pommeThreshold = 2 ^ 60 := rfl
+    rw [this] at hi; exact hi
+  have h_57 : (2 : ℝ) ^ 57 ≤ (i : ℝ) ^ ((29 : ℝ) / 30) := rpow_29_30_ge_2_pow_57 i hi60
+  have h_56 : (2 : ℝ) ^ 56 ≤ (i : ℝ) ^ ((29 : ℝ) / 30) := by
+    have : (2 : ℝ)^56 ≤ (2 : ℝ)^57 := by norm_num
+    linarith
+  -- `2^56 * i^(1/30) ≤ i^(29/30) * i^(1/30) = i^(30/30) = i`.
+  have h_split : (i : ℝ) ^ ((29 : ℝ) / 30) * (i : ℝ) ^ ((1 : ℝ) / 30) = (i : ℝ) := by
+    rw [← Real.rpow_add hi_R_pos]
+    have : (29 : ℝ) / 30 + 1 / 30 = 1 := by norm_num
+    rw [this, Real.rpow_one]
+  have h_final_ineq : (2 : ℝ) ^ 56 * (i : ℝ) ^ ((1 : ℝ) / 30) ≤ (i : ℝ) := by
+    have h := mul_le_mul_of_nonneg_right h_56 h_irpow_nn
+    rw [h_split] at h
+    exact h
+  linarith [h_chain, h_final_ineq]
 
 /-- Helper: for `i ≥ pommeThreshold = 2^60`, the simple analytic
 inequality `2 · log(i + 5) < i · log 3` holds. (Equivalently:
@@ -415,9 +651,45 @@ lemma direct_pillai_bound_small
   push_neg at h_not
   -- `h_not : |2·3^i − c·2^k| ≤ i + 5`
   have hk_ge_2 : 2 ≤ k := pillai_k_ge_two i k hi hk
+  -- Derive upper bound `k ≤ 2·i + 2` from `h_not` and `hc_pos`.
+  have hk_ub : k ≤ 2 * i + 2 := by
+    have hi8 : 8 ≤ i := le_trans pommeThreshold_ge_eight hi
+    -- From `h_not`: `c·2^k ≤ 2·3^i + (i + 5) ≤ 4·3^i ≤ 4·4^i = 2^(2i+2)`.
+    -- Since `c ≥ 1`, `2^k ≤ 2^(2i+2)`, giving `k ≤ 2i+2`.
+    have h_not_int : |((2 * 3 ^ i : ℤ) - (c : ℤ) * 2 ^ k)| ≤ (i : ℤ) + 5 := by
+      have : ((|((2 * 3 ^ i : ℤ) - (c : ℤ) * 2 ^ k)| : ℤ) : ℝ) ≤ (i : ℝ) + 5 := h_not
+      exact_mod_cast this
+    have h_bound_int : (c : ℤ) * 2 ^ k ≤ 2 * 3 ^ i + (i + 5) := by
+      have h_abs := abs_le.mp h_not_int
+      linarith [h_abs.1, h_abs.2]
+    have h_ip5_le : (i : ℤ) + 5 ≤ 8 * i := by omega
+    have h_8i_le : (8 * i : ℤ) ≤ 2 * 3 ^ i := by
+      have h_nat := eight_i_le_three_pow i hi8
+      have : (8 * i : ℤ) ≤ (3 ^ i : ℤ) := by exact_mod_cast h_nat
+      linarith [show (0 : ℤ) ≤ 3 ^ i from by positivity]
+    have h_total : (c : ℤ) * 2 ^ k ≤ 4 * 3 ^ i := by linarith
+    have h_3_le_4 : (3 : ℤ) ^ i ≤ 4 ^ i := by
+      have h_N : (3 : ℕ) ^ i ≤ 4 ^ i := Nat.pow_le_pow_left (by norm_num) i
+      exact_mod_cast h_N
+    have h_4_pow : (4 : ℤ) ^ i = 2 ^ (2 * i) := by
+      rw [show (4 : ℤ) = 2^2 from by norm_num, ← pow_mul]
+    have h_total' : (c : ℤ) * 2 ^ k ≤ 2 ^ (2 * i + 2) := by
+      calc (c : ℤ) * 2 ^ k ≤ 4 * 3 ^ i := h_total
+        _ ≤ 4 * 4 ^ i := by linarith [h_3_le_4]
+        _ = 2^2 * 2 ^ (2 * i) := by rw [h_4_pow]; norm_num
+        _ = 2 ^ (2 * i + 2) := by rw [← pow_add]; ring_nf
+    have h1 : (2 : ℤ) ^ k ≤ 2 ^ (2 * i + 2) := by
+      have hc1 : (1 : ℤ) ≤ (c : ℤ) := by exact_mod_cast hc_pos
+      calc (2 : ℤ) ^ k = 1 * 2 ^ k := by ring
+        _ ≤ (c : ℤ) * 2 ^ k := by
+            apply mul_le_mul_of_nonneg_right hc1
+            positivity
+        _ ≤ 2 ^ (2 * i + 2) := h_total'
+    have h1N : (2 : ℕ) ^ k ≤ 2 ^ (2 * i + 2) := by exact_mod_cast h1
+    exact (Nat.pow_le_pow_iff_right (by norm_num : 1 < 2)).mp h1N
   have hΛ_ne := pillai_linear_form_ne_zero i k c hk_ge_2 hc_pos
   have h_baker := pillai_baker_application i k c hc_pos hk_ge_2 hΛ_ne
-  have h_rhs := pillai_baker_rhs_upper_bound i k c hi hc_small hc_pos
+  have h_rhs := pillai_baker_rhs_upper_bound i k c hi hc_small hc_pos hk_ub
   -- Set Λ to be the linear form (so we don't repeat the long expression).
   set Λ : ℂ := (((k : ℤ) - 1 : ℂ)) * Complex.log (2 : ℂ)
               + ((-(i : ℤ) : ℂ)) * Complex.log (3 : ℂ)
