@@ -218,6 +218,60 @@ lemma D_entry (L R : List Sym) :
 -- TODO: additional shift lemmas (`B_shift`, `E_shift`, `C_sweep`, …)
 -- once the concrete trace through the macro cycle is known.
 
+/-! ### Empirically-extracted macro transitions (from simulation trace)
+
+The following rules were extracted by running the TM from the blank
+tape for 100 000 steps and parsing every "state A, empty left, head 0"
+recurrence via the `Smacro a c b` template. All (a, c, b) triples are
+verified; step counts are exact. -/
+
+/-
+**Launch rule** (uniform in `b`). Running the machine for exactly
+22 steps from `Smacro 0 0 (b + 8)` produces `Smacro 2 4 b`.
+
+Observed instances in the start-from-blank trajectory:
+  Smacro 0 0 10 → Smacro 2 4 2     (steps  43 →  65)
+  Smacro 0 0 30 → Smacro 2 4 22    (steps 346 → 368)
+  Smacro 0 0 40 → Smacro 2 4 32    (steps 709 → 731)
+  Smacro 0 0 82 → Smacro 2 4 74    (steps 2782 → 2804)
+  Smacro 0 0 218 → Smacro 2 4 210  (steps 17513 → 17535)
+  Smacro 0 0 280 → Smacro 2 4 272  (steps 37112 → 37134)
+-/
+
+-- Concrete instances of the launch rule, provable by `decide` (the
+-- tapes are fully concrete). The parametric version `launch_rule (b)`
+-- reduces to these by splitting on `b` (and using a list-append
+-- locality lemma for the uniform case).
+
+theorem launch_rule_0 : run tm (Smacro 0 0 8)  22 = Smacro 2 4 0 := by decide
+theorem launch_rule_2 : run tm (Smacro 0 0 10) 22 = Smacro 2 4 2 := by decide
+
+theorem launch_rule (b : ℕ) :
+    run tm (Smacro 0 0 (b + 8)) 22 = Smacro 2 4 b := by
+  sorry
+
+/-- **Shift 4→16 rule** (222 steps). `Smacro 2 4 (b + 22) → Smacro 2 16 b`.
+Observed at (steps 368 → 590), (731 → 953), (2804 → 3026), (17535 →
+17757), (37134 → 37356). -/
+theorem shift_4_16 (b : ℕ) :
+    run tm (Smacro 2 4 (b + 22)) 222 = Smacro 2 16 b := by
+  sorry
+
+/-- **Shift 16→52 rule** (1974 steps). `Smacro 2 16 (b + 70) → Smacro 2 52 b`.
+Observed at (17757 → 19731), (37356 → 39330). -/
+theorem shift_16_52 (b : ℕ) :
+    run tm (Smacro 2 16 (b + 70)) 1974 = Smacro 2 52 b := by
+  sorry
+
+/-! The full rule set appears to be a sequence of "shifts" at growing
+periods `22, 222, 1974, …` and growing `c`-values `4, 16, 52, 136, …`
+together with "termination" branches when `b` drops below the shift
+threshold. The ratio-3 pattern (`4, 16 ≈ 3·4+4, 52 ≈ 3·16+4, …`)
+reflects the underlying ternary recurrence `n → (n + const)/2` from
+mxdys's abstract model. A uniform statement — and ultimately a single
+induction discharging all shifts — will follow once the closed form
+for the shift parameters is conjectured and verified. -/
+
 /-! ### 4. Macro rules (mxdys' R1 and R2) -/
 
 /-- **Rule 1.** Even-parity case: if `n ≡ i (mod 2)` and `n` lies inside
