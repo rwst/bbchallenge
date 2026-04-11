@@ -21,18 +21,24 @@ open Complex
 /-- **Baker's theorem on linear forms in logarithms**, effective form.
 
 Let `α₁, …, αₙ` be nonzero elements of a number field `K` of degree `d ≥ 4`
-embedded into `ℂ` via `φ`, and suppose each `αᵢ` has multiplicative Weil height
-at most `A`, where `A ≥ 4`. Let `log (φ (αᵢ))` denote the principal value of
-the complex logarithm. Let `0 < δ ≤ 1`. If there exist rational integers
-`b₁, …, bₙ`, of absolute value at most `H`, such that the linear form
-`Λ := ∑ bᵢ · log (φ (αᵢ))` satisfies `0 < |Λ| < exp (−δ · H)`, then
-`H ≤ (4 ^ (n²) · δ⁻¹ · d ^ (2n) · log A) ^ ((2n + 1)²)`. -/
+embedded into `ℂ` via `φ`. Suppose each `αᵢ` has classical (= normalized Weil)
+height at most `A ≥ 4`; since mathlib's `Height.mulHeight₁` is the
+**un-normalized** product-over-places height, this is expressed as the
+hypothesis `mulHeight₁ (αᵢ) ≤ A ^ d`. (For a rational `q = a/b` lifted to `K`,
+this gives `(max |a| b) ^ d`, as expected.) Let `log (φ (αᵢ))` denote the
+principal value of the complex logarithm. Let `0 < δ ≤ 1`. If there exist
+rational integers `b₁, …, bₙ`, of absolute value at most `H`, such that the
+linear form `Λ := ∑ bᵢ · log (φ (αᵢ))` satisfies `0 < |Λ| < exp (−δ · H)`, then
+`H ≤ (4 ^ (n²) · δ⁻¹ · d ^ (2n) · log A) ^ ((2n + 1)²)`
+(exactly Ellison's Lemma 2 bound, with `A` now meaning the classical Weil
+height). -/
 axiom baker_linearForms_logs
     {n : ℕ}
     {K : Type*} [Field K] [NumberField K] (φ : K →+* ℂ)
     (hd : 4 ≤ Module.finrank ℚ K)
     (α : Fin n → K) (hα : ∀ i, α i ≠ 0)
-    {A : ℝ} (hA : 4 ≤ A) (hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A)
+    {A : ℝ} (hA : 4 ≤ A)
+    (hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A ^ Module.finrank ℚ K)
     (b : Fin n → ℤ) {H : ℕ} (hH_b : ∀ i, (b i).natAbs ≤ H)
     {δ : ℝ} (hδ_pos : 0 < δ) (hδ_le : δ ≤ 1)
     (hΛ_pos   : 0 < ‖∑ i, (b i : ℂ) * Complex.log (φ (α i))‖)

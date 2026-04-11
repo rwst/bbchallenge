@@ -26,7 +26,8 @@ the `hd : 4 ≤ finrank` requirement of Baker using
 `IsCyclotomicExtension.finrank` + `Nat.totient 5 = 4`. -/
 private lemma baker_helper_degree4
     (α : Fin 3 → CyclotomicField 5 ℚ) (hα : ∀ i, α i ≠ 0)
-    (A : ℝ) (hA : 4 ≤ A) (hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A)
+    (A : ℝ) (hA : 4 ≤ A)
+    (hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A ^ Module.finrank ℚ (CyclotomicField 5 ℚ))
     (b : Fin 3 → ℤ) (H : ℕ) (hH_b : ∀ i, (b i).natAbs ≤ H)
     (δ : ℝ) (hδ_pos : 0 < δ) (hδ_le : δ ≤ 1)
     (φ : CyclotomicField 5 ℚ →+* ℂ)
@@ -93,8 +94,12 @@ theorem ellison_cor1
   have hH_b : ∀ i, (bvec i).natAbs ≤ H := by
     intro i
     fin_cases i <;> simp [bvec, H]
-  -- Height bound (moderate analytic work, sorry'd).
-  have hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A := by sorry
+  -- Height bound: `mulHeight₁ (α i) ≤ A^{finrank}`. For a rational lifted
+  -- to K, mathlib's unnormalized `mulHeight₁` equals the classical (normalized)
+  -- Weil height raised to `[K:ℚ]`. Since each αᵢ is a rational bounded by
+  -- `max(|num|, den) ≤ A`, the unnormalized height is bounded by `A^{finrank}`.
+  have hH_α : ∀ i, Height.mulHeight₁ (α i) ≤ A ^ Module.finrank ℚ (CyclotomicField 5 ℚ) := by
+    sorry
   -- Choose a complex embedding of `K = CyclotomicField 5 ℚ` (lift `algebraMap ℚ ℂ`).
   let φ : K →+* ℂ :=
     NumberField.ComplexEmbedding.lift (k := ℚ) (K := K) (algebraMap ℚ ℂ)
@@ -149,7 +154,7 @@ theorem ellison_cor1
           + (1 : ℂ) * ((Real.log ((a : ℝ) / b) : ℝ) : ℂ) := by rw [h1, h2, h3]
       _ = (Λ_R : ℂ) := by
           rw [hΛ_R_def]
-          push_cast [-Complex.ofReal_log]
+          push_cast [-Complex.natCast_log]
           ring
   -- Ellison's Lemma 1 (p. 12-02): from `h_small`, derive smallness of the log sum.
   -- Chain: |Λ_R| ≤ 2·|a·m^x − b·n^y|/(b·n^y) ≤ 2·m^{(1−δ)x}/(b·n^y) < exp(−δH).
