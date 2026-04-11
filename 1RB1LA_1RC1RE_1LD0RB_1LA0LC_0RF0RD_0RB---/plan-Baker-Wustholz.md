@@ -354,3 +354,194 @@ mathlib.
 4. Simplify `Pomme.lean`.
 5. Retire the old `Baker.lean` + `ellison_cor1` once the new chain
    passes `lake build`.
+
+## Progress log
+
+### Step 1 — ✅ `BakerWustholz.lean` axiomatized
+
+Created the file with:
+- `BakerWustholz.C (n d : ℕ) : ℝ` — the constant
+  `18 · (n+1)! · n^{n+1} · (32d)^{n+2} · log(2nd)`.
+- `BakerWustholz.modifiedHeight (φ : K →+* ℂ) (α : K) : ℝ` — the modified
+  height `max(h(α), |log φ(α)|/d, 1/d)` faithful to Baker–Wüstholz 1993.
+- `bakerWustholz_linearForms_logs` — the main axiom, with hypotheses
+  `0 < n`, `2 ≤ B`, `hbB`, and `hΛ_ne_zero`. Conclusion:
+  `log |Λ| ≥ -C(n,d) · log B · ∏ h'(αᵢ)`.
+
+Updated `lakefile.toml` to add `BakerWustholz` as a new root of the
+`Pillai` library. `lake build Pillai` passes with only the pre-existing
+sorry warnings (in `Pomme.lean`); `BakerWustholz.lean` itself compiles
+clean with no errors or warnings.
+
+Notes:
+- Used `Height.logHeight₁` from `Mathlib.NumberTheory.Height.NumberField`
+  as mathlib's un-normalized logarithmic height, dividing by `d` inside
+  `modifiedHeight` to recover the classical `h`.
+- The axiom takes `φ : K →+* ℂ` as an explicit ring-hom (matching the
+  convention of the older `Baker.lean`), so the "any determination" of
+  the logarithm is fixed by the choice of embedding.
+- No `Real.pi` needed in the end — the `π/d` term in the modified
+  height proposed in the plan was unnecessary; the standard
+  Baker–Wüstholz form uses `|log α|/d` instead.
+
+### Step 2–5 — ✅ `Ellison.lean` rewritten around Baker–Wüstholz
+
+Replaced the old Baker-via-Ellison machinery (`ellisonX₀`,
+`baker_helper_degree4`, `ellison_cor1`) with three declarations:
+
+1. **`pommeThreshold := 2^60`** — moved from `Pomme.lean` into
+   `Ellison.lean` because it's the threshold at which the direct
+   Baker–Wüstholz argument becomes effective. Was `2^{2100}` before.
+   Includes helper lemmas `pommeThreshold_pos`,
+   `pommeThreshold_ge_eight`, `pommeThreshold_ge_106`.
+
+2. **`log_bound_to_integer_bound`** (stated, sorry) — Ellison's Lemma 1
+   style: given `|2·3^i − c·2^k| ≤ ε < 3^i`, the linear form
+   `(k−1)·log 2 − i·log 3 + log c` has norm at most `2ε/(2·3^i)`.
+   ~60–100 lines of real analysis to fill.
+
+3. **`direct_pillai_bound_small`** (stated, sorry) — replaces
+   `ellison_cor1 + pomme_case_c_small`. For `i ≥ pommeThreshold`,
+   `1 ≤ c ≤ 4i`, `3^i/(2i) ≤ 2^k`, gives `|2·3^i − c·2^k| > i + 5`
+   directly via Baker–Wüstholz + Lemma 1.
+
+**Key simplification**: Baker–Wüstholz works with `K = ℚ` directly
+(no `d ≥ 4` restriction), so the entire `CyclotomicField 5 ℚ`
+infrastructure disappears. No `NumberField.ComplexEmbedding.lift`,
+no `IsCyclotomicExtension.finrank`, no `baker_helper_degree4`
+specialization. Just apply the axiom with `K := ℚ`.
+
+`Ellison.lean` went from 191 lines to ~85 lines. The old file (before
+this rewrite) is available in git history.
+
+Build status: `Ellison.lean` compiles standalone. `Pomme.lean` now
+has errors because it still references `ellisonX₀` and
+`ellison_cor1` — these are the expected broken references that
+Step 6 will fix.
+
+### Step 6 — ✅ `Pomme.lean` simplified around the new threshold
+
+Rewrote `Pomme.lean` around the Baker–Wüstholz direct bound. Changes:
+
+**Deleted** (dead code from the old calculus cluster):
+- `pomme_case_c_small` (replaced by `direct_pillai_bound_small`)
+- `ellisonX₀_upper`
+- `pomme_k_ge_x₀_base`
+- `pomme_derivative_comparison`
+- `pomme_k_ge_x₀`
+- `pomme_two_pow_beats_linear`
+- `Pomme.pommeThreshold` (now lives at top level in `Ellison.lean`)
+
+**Kept** (still needed):
+- `N`, `N_def`, `N_pos`, `N_odd_iff_even`, `pomme_even_case`
+- `pomme_not_dvd_of_gap`
+- `pomme_case_c_large` (handles the `c > 4·i` elementary case)
+- `two_i_sq_plus_ten_i_lt_three_pow`
+- `pomme_ip5_lt_ratio` (rewritten to use `pommeThreshold_ge_eight`)
+- `pomme_cor3`, `pomme_small_range`, `pomme_main`
+
+**Simplified**:
+- `pomme_thm1` is now a clean 10-line proof:
+  ```
+  apply pomme_not_dvd_of_gap
+  intro c hc_pos
+  by_cases h : c ≤ 4 * i
+  · exact direct_pillai_bound_small i k c hi hc_pos h hk
+  · push_neg at h
+    exact pomme_case_c_large i k c hi_pos hk hi_large h
+  ```
+- `pomme_cor3` uses `pommeThreshold_ge_eight` instead of manually
+  deriving `7 ≤ i` from `2^{2100}`.
+
+File sizes:
+- `Pomme.lean`: was 398 lines, now 256 lines (-36%).
+- `Ellison.lean`: was 191 lines, now 99 lines (-48%).
+- Total old (Baker+Ellison+Pomme): ~630 lines.
+- Total new (Baker+BakerWustholz+Ellison+Pomme): ~400 lines (-36%).
+
+### Step 7 — ✅ End-to-end build passing
+
+`lake build Pillai` succeeds. The dependency chain as reported by
+`#print axioms`:
+
+```
+'Pomme.pomme_main' depends on axioms:
+  [propext, sorryAx, Classical.choice, Pomme.pomme_small_range, Quot.sound]
+
+'direct_pillai_bound_small' depends on axioms:
+  [propext, sorryAx, Classical.choice, Quot.sound]
+```
+
+Notes:
+- `baker_linearForms_logs` (from the old `Baker.lean`) is no longer
+  referenced by Pomme. The old file could be retired.
+- `bakerWustholz_linearForms_logs` does not yet appear in the axiom
+  set, because `direct_pillai_bound_small` is still a `sorry`
+  (its proof hasn't been written yet, so nothing references the
+  axiom). Once filled in, it will appear.
+
+### Current sorry inventory
+
+Refined after breaking down `direct_pillai_bound_small` into helpers
+so that `bakerWustholz_linearForms_logs` structurally appears in the
+proof term (previously the sorry swallowed the axiom reference).
+
+| # | File | Lemma | Role |
+|---|---|---|---|
+| 1 | `Ellison.lean:72` | `log_bound_to_integer_bound` | Ellison's Lemma 1: Taylor bound `\|log(1+z)\| ≤ 2\|z\|`. Pure real analysis. |
+| 2 | `Ellison.lean:93` | `pillai_k_ge_two` | Arithmetic: for `i ≥ 2^60` and `3^i/(2i) ≤ 2^k`, `k ≥ 2`. |
+| 3 | `Ellison.lean:102` | `pillai_linear_form_ne_zero` | `(k-1)·log 2 − i·log 3 + log c ≠ 0` when `k ≥ 2` (v₂ argument). |
+| 4 | `Ellison.lean:111` | `pillai_baker_application` | **Only** call to `bakerWustholz_linearForms_logs`. Remaining sub-sorries: `hΛ_ne_sum` (lift `ne_zero` from expanded to sum form) and the final rearrangement from sum-form conclusion to expanded-form conclusion. |
+| 5 | `Ellison.lean:157` | `pillai_baker_rhs_upper_bound` | Numerical: the RHS `C·log B·∏h'` is `≤ i·log 3 / 2` for `i ≥ 2^60`, `c ≤ 4i`. |
+| 6 | `Ellison.lean:184` | `direct_pillai_bound_small` | Combines 1–5 via the chain in the docstring. |
+
+**Axiom verification**:
+```
+'direct_pillai_bound_small' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice, Quot.sound]
+
+'Pomme.pomme_main' depends on axioms:
+  [bakerWustholz_linearForms_logs, propext, sorryAx, Classical.choice,
+   Pomme.pomme_small_range, Quot.sound]
+```
+
+`bakerWustholz_linearForms_logs` now appears in both axiom sets. The
+chain is: `pomme_main → pomme_cor3 → pomme_thm1 → direct_pillai_bound_small
+→ pillai_baker_application → bakerWustholz_linearForms_logs`.
+
+**Note** the old `baker_linearForms_logs` is no longer referenced.
+`Baker.lean` could now be retired; left in place only to avoid a
+late-session breakage.
+
+## Net outcome
+
+Compared to the starting state (Baker-1966 via Ellison):
+
+| Metric | Before | After |
+|---|---|---|
+| Threshold on `i` | `2^{2100} ≈ 10^{632}` | `2^{60} ≈ 10^{18}` |
+| Top-level sorries in Ellison/Pomme | 11 | 6 |
+| Load-bearing axiom | `baker_linearForms_logs` (Baker 1966) | `bakerWustholz_linearForms_logs` (Baker–Wüstholz 1993) |
+| Number-field complications | CyclotomicField 5 ℚ + finrank plumbing + height computations | K = ℚ throughout |
+| Proof chain depth | `Baker → Ellison Lemma 1 → Ellison Thm 1 (skipped) → Ellison Cor 1 → Pomme Thm 1 (derivative trick) → Cor 3 → main` | `BW → log-to-int translation → Pomme Thm 1 → Cor 3 → main` |
+| `Pomme.lean` size | 398 lines | 256 lines (-36%) |
+| `Ellison.lean` size | 191 lines | 185 lines (≈ same, different content) |
+| Verified small-`i` simulator needed | Yes (infeasible: `50 ≤ i < 10^{632}`) | Yes (feasible: `50 ≤ i < 10^{18}`) |
+
+The six remaining sorries split into:
+- **2 conceptual** (`pillai_k_ge_two`, `pillai_linear_form_ne_zero`):
+  elementary v₂ arguments, each ~10-20 lines.
+- **1 analytic** (`log_bound_to_integer_bound`): Ellison's Lemma 1,
+  ~60-100 lines using `Real.abs_log_one_add_le`.
+- **1 numerical** (`pillai_baker_rhs_upper_bound`): constant comparison,
+  requires unfolding `BakerWustholz.C` and `modifiedHeight` and doing
+  real arithmetic. ~50 lines.
+- **1 bookkeeping** (`pillai_baker_application`): two internal sorries
+  for `Fin 3 →` sum expansion — mechanical, ~30 lines.
+- **1 assembly** (`direct_pillai_bound_small`): combines the above via
+  the documented proof chain. ~20 lines once the helpers are in.
+
+None of these require number-field machinery or mathlib-gap work
+(unlike the old approach, which needed `Rat.mulHeight₁_eq_max_num_natAbs_den`
+that doesn't exist). They're all within reach of straightforward
+real-analysis tactics.
