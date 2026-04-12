@@ -109,4 +109,43 @@ theorem run_right_append (c : Config n) (T : List Sym) (k : Nat)
     -- Simplify: run tm (step tm c) k = run tm c (k+1)
     rw [← run_succ]
 
+/-- **Step left-locality.** If the left strip is non-empty, appending
+a tail to it commutes with a single TM step. -/
+theorem step_left_append (c : Config n) (T : List Sym) (h : c.left ≠ []) :
+    step tm { c with left := c.left ++ T } =
+    { step tm c with left := (step tm c).left ++ T } := by
+  obtain ⟨st, L, hd, R⟩ := c
+  obtain ⟨l, ls, rfl⟩ : ∃ l ls, L = l :: ls := by
+    cases L with
+    | nil => exact absurd rfl h
+    | cons l ls => exact ⟨l, ls, rfl⟩
+  simp only [step, List.cons_append]
+  rcases hst : st with _ | q
+  · rfl
+  rcases htr : tm.tr q hd with _ | ⟨q', w, d⟩
+  · simp only [step, hst, htr, List.cons_append]
+  rcases d
+  · simp only [step, hst, htr, List.cons_append, listTail, listHead]
+  · simp only [step, hst, htr, List.cons_append, listTail, listHead]
+
+/-- **Run left-locality.** If the left strip stays non-empty for the
+first `k` steps, appending `T` to it commutes with `run tm · k`. -/
+theorem run_left_append (c : Config n) (T : List Sym) (k : Nat)
+    (h : ∀ m, m < k → (run tm c m).left ≠ []) :
+    run tm { c with left := c.left ++ T } k =
+    { run tm c k with left := (run tm c k).left ++ T } := by
+  induction k generalizing c with
+  | zero => rfl
+  | succ k ih =>
+    rw [run_succ]
+    have h0 : c.left ≠ [] := h 0 (Nat.zero_lt_succ k)
+    rw [step_left_append tm c T h0]
+    have h' : ∀ m, m < k → (run tm (step tm c) m).left ≠ [] := by
+      intro m hm
+      have : (run tm c (m + 1)).left ≠ [] := h (m + 1) (by omega)
+      rw [run_succ] at this
+      exact this
+    rw [ih (step tm c) h']
+    rw [← run_succ]
+
 end BusyLean

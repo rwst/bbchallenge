@@ -374,17 +374,64 @@ The full macro cycle `S(n) → S(n')` composes these. The progress
 invariant uses this decomposition together with `Hensel.pomme_main`
 to close. -/
 
-/-- **Terminal restart rule.** When the shift chain exhausts `b` (reaching
+/-
+**Terminal restart rule.** When the shift chain exhausts `b` (reaching
 `Smacro 2 c 0`), the machine converts `zebra c` back to `ones (2c+8)`,
 restarting as `S (2c+8)`.
 
 Empirically verified for all `c ∈ {0,4,11,…,16,29,33,35,…,52,105}`:
   `Smacro(2,c,0) → S(2c+8)` in `6c+23` steps.
 
-Example: `Smacro(2,16,0) → S(40)` in 119 = 6·16+23 steps.
+Decomposition (verified by simulation):
+  Phase 1 (4c steps):  forward sweep, converting zebra pairs to ones
+  Phase 2 (17 steps):  boundary processing
+  Phase 3 (2c+6 steps): A_shift consuming accumulated left ones
+-/
+-- Building blocks for terminal_restart (all proved):
 
-The proof would follow by induction on `c`: each `(0,1)` pair in the
-zebra block is processed in 6 TM steps, converting it to 2 `ones`. -/
+private def pair_cfg : Config 6 :=
+  { state := some stA, left := [], head := false,
+    right := [true, true, false, true] }
+
+/-- Pair step: 4 TM steps convert one `(0,1)` pair, proved by right-locality. -/
+lemma pair_step (T : List Sym) :
+    run tm { state := some stA, left := [], head := false,
+             right := true :: true :: false :: true :: T } 4 =
+    { state := some stA, left := [true, true], head := false,
+      right := true :: true :: T } := by
+  have hne : ∀ m, m < 4 → (run tm pair_cfg m).right ≠ [] := by decide
+  have hbase : run tm pair_cfg 4 =
+    { state := some stA, left := [true, true], head := false,
+      right := [true, true] } := by decide
+  have key := run_right_append tm pair_cfg T 4 hne
+  rw [hbase] at key; exact key
+
+/-- Processing: 17 steps convert `{A, L, 0, [1,1,0,1]}` to
+`{A, ones 5 ++ L, 1, [1,1,0,1]}`, proved by left-locality. -/
+private def pair_cfg1 : Config 6 :=
+  { state := some stB, left := [true], head := true,
+    right := [true, false, true] }
+
+lemma processing (L : List Sym) :
+    run tm { state := some stA, left := L, head := false,
+             right := [true, true, false, true] } 17 =
+    { state := some stA, left := ones 5 ++ L, head := true,
+      right := [true, true, false, true] } := by
+  -- Step 0 goes right (doesn't read left), so handle it manually:
+  rw [show (17 : ℕ) = 1 + 16 from rfl, run_add, run_one]
+  simp only [step, tm, listHead, listTail]
+  -- Now left = true :: L, which is nonempty. Apply left-locality for 16 steps.
+  have hne : ∀ m, m < 16 → (run tm pair_cfg1 m).left ≠ [] := by decide
+  have hbase : run tm pair_cfg1 16 =
+    { state := some stA, left := [true, true, true, true, true],
+      head := true, right := [true, true, false, true] } := by decide
+  by_cases hL : L = []
+  · subst hL; exact hbase
+  · have key := run_left_append tm pair_cfg1 L 16 hne
+    rw [hbase] at key; simp only [List.nil_append] at key; exact key
+
+/-- Terminal restart. The single remaining gap is a left-nonempty
+condition during the forward sweep (needs its own induction). -/
 theorem terminal_restart (c : ℕ) :
     run tm (Smacro 2 c 0) (6 * c + 23) = S (2 * c + 8) := by
   sorry
