@@ -430,30 +430,92 @@ lemma processing (L : List Sym) :
   · have key := run_left_append tm pair_cfg1 L 16 hne
     rw [hbase] at key; simp only [List.nil_append] at key; exact key
 
-/-- Terminal restart. The single remaining gap is a left-nonempty
-condition during the forward sweep (needs its own induction). -/
+/-- Pair step with arbitrary left (step-0 workaround + left-locality). -/
+private lemma pair_step_left (L T : List Sym) :
+    run tm { state := some stA, left := L, head := false,
+             right := true :: true :: false :: true :: T } 4 =
+    { state := some stA, left := true :: true :: L, head := false,
+      right := true :: true :: T } := by
+  -- Step 0: A reads 0 → 1RB (moves right, left untouched except push).
+  rw [show (4 : ℕ) = 1 + 3 from rfl, run_add, run_one]
+  simp only [step, tm, listHead, listTail]
+  -- Goal: run tm {B, 1::L, 1, [1,0,1]++T} 3 = {A, [1,1]++L, 0, [1,1]++T}
+  -- Use right-locality: base config {B, [1], 1, [1,0,1]}, tail T.
+  -- But left=1::L, not [1]. Handle L separately.
+  -- Actually, from {B, 1::L, 1, 1::0::1::T}, run 3 steps:
+  -- Step 1: B reads 1 → 1RE. {E, 1::1::L, 1, 0::1::T}
+  -- Step 2: E reads 1 → 0RD. {D, 0::1::1::L, 0, 1::T}
+  -- Step 3: D reads 0 → 1LA. {A, 1::1::L, 0, 1::1::T}  (reads listHead from left = 0, writes 1 to right)
+  -- Wait: D reads head=0, writes 1, moves L.
+  --   new left = listTail (0::1::1::L) = 1::1::L
+  --   new head = listHead (0::1::1::L) false = 0
+  --   new right = 1 :: (1::T)
+  -- So: {A, 1::1::L, 0, 1::1::T}. ✓
+  simp [run, step, tm, listHead, listTail]
+
+/-- **Generalized terminal restart** with `k` extra left ones. By induction on `c`:
+  * Base (c=0): `processing` + `A_shift`.
+  * Step (c+1→c): `pair_step_left` peels one zebra pair, adding 2 to left, then IH. -/
+theorem terminal_restart_left (c k : ℕ) :
+    run tm { state := some stA, left := ones k, head := false,
+             right := ones 2 ++ zebra c ++ [false, true] } (6 * c + k + 23) =
+    S (2 * c + k + 8) := by
+  induction c generalizing k with
+  | zero =>
+    -- 0 + k + 23 steps. processing(17) + A_shift(k+6).
+    simp only [zebra_zero, List.nil_append, List.append_nil,
+               show (ones 2 : List Sym) ++ [false, true] = [true, true, false, true] from rfl]
+    rw [show 6 * 0 + k + 23 = 17 + (k + 6) from by omega, run_add]
+    rw [processing (ones k)]
+    -- Rewrite left: ones 5 ++ ones k = ones (k + 5)
+    rw [show ones 5 ++ ones k = ones (k + 5) from by
+          rw [show k + 5 = 5 + k from by omega, ← ones_append]]
+    -- A_shift(k+5) takes k+6 steps
+    conv => lhs; rw [show ones (k + 5) = ones (k + 5) ++ [] from (List.append_nil _).symm]
+    rw [show k + 6 = k + 5 + 1 from by omega, A_shift (k + 5) []]
+    -- Close: {A, [], 0, ones(k+6) ++ [1,1,0,1]} = S(k+8)
+    simp only [S, Smacro, zebra_zero, List.nil_append, List.append_nil,
+               listHead, listTail,
+               show 2 * 0 + k + 8 = k + 8 from by omega,
+               show k + 5 + 1 = k + 6 from by omega]
+    congr 1
+    -- ones(k+6) ++ [1,1,0,1] = ones(k+8) ++ [0,1]
+    -- i.e. 1^{k+6} 1 1 0 1 = 1^{k+8} 0 1
+    change ones (k + 6) ++ [true, true, false, true] = ones (k + 8) ++ [false, true]
+    rw [show k + 8 = k + 6 + 2 from by omega, ← ones_append]
+    simp [ones, repeatSym, List.append_assoc]
+  | succ c ih =>
+    -- Peel one zebra pair via pair_step_left, then apply IH.
+    -- Unfold ones 2 and zebra (c+1) to get the right :: pattern for pair_step_left.
+    simp only [zebra_succ, show (ones 2 : List Sym) = [true, true] from rfl,
+               List.cons_append, List.append_assoc, List.nil_append]
+    rw [show 6 * (c + 1) + k + 23 = 4 + (6 * c + (k + 2) + 23) from by omega, run_add]
+    rw [pair_step_left (ones k) (zebra c ++ [false, true])]
+    -- Reassemble left as ones (k+2).
+    rw [show (true :: true :: ones k : List Sym) = ones (k + 2) from by
+          simp [ones, repeatSym, List.replicate_succ, show k + 2 = k + 1 + 1 from by omega]]
+    -- Right is `true :: true :: (zebra c ++ [0,1])`. Rewrite to match IH.
+    rw [show (true :: true :: (zebra c ++ [false, true]) : List Sym) =
+            ones 2 ++ zebra c ++ [false, true] from by
+          simp [ones, repeatSym, List.append_assoc]]
+    rw [ih (k + 2)]
+    congr 1; omega
+
+/-- Terminal restart: `Smacro(2,c,0) → S(2c+8)` in `6c+23` steps. -/
 theorem terminal_restart (c : ℕ) :
     run tm (Smacro 2 c 0) (6 * c + 23) = S (2 * c + 8) := by
-  sorry
+  have h := terminal_restart_left c 0
+  simp only [ones, repeatSym, List.replicate, List.nil_append,
+             show 6 * c + 0 + 23 = 6 * c + 23 from by omega,
+             show 2 * c + 0 + 8 = 2 * c + 8 from by omega] at h
+  convert h using 2
+  simp [Smacro, zebra, ones, repeatSym]
 
-/-- Restatement of the macro cycle as a composition of proved building
-blocks. From `S n` with `n ≥ 8`, the machine reaches `S (2c+8)` where
-`c` is determined by the shift-chain decomposition of `n−8`:
-  * launch (22 steps): `S n → Smacro 2 4 (n−8)`
-  * shift 4→16 (222 steps, if `n−8 ≥ 22`): `→ Smacro 2 16 (n−30)`
-  * shift 16→52 (1974 steps, if `n−30 ≥ 70`): `→ Smacro 2 52 (n−100)`
-  * ... more shifts until `b < threshold` ...
-  * terminal restart (`6c+23` steps): `Smacro 2 c 0 → S (2c+8)` -/
-theorem macro_cycle_simple (n : ℕ) (hn : 8 ≤ n) (hn2 : n - 8 < 22) :
-    ∃ k, 0 < k ∧ run tm (S n) k = S (2 * (n - 8) + 24) := by
-  -- Simplest case: launch + terminal restart, no shifts.
-  -- S(n) →[22] Smacro 2 4 (n-8) →[terminal] S(2·(n-8)+16)
-  -- But terminal_restart gives S(2·4+8) = S(16) when c=4, b=n-8.
-  -- Need Smacro(2,4,n-8) with n-8 < 22 to terminal-restart.
-  -- This requires the terminal rule for (2,4,b) with b < 22, which
-  -- is NOT `terminal_restart` (that handles c arbitrary, b=0).
-  -- Instead, (2,4,b) with small b goes through several sub-steps.
-  sorry
+-- `macro_cycle_simple` was removed: the formula was incorrect. The full
+-- macro cycle `S(n) → S(n')` is complex because the terminal cases for
+-- `Smacro(2,4,b)` with small `b` have varied behavior (some even halt
+-- for specific odd `b`). The correct composition requires tracking
+-- parity and exact b values through the shift chain.
 
 /-! ### 5. Initial segment -/
 
