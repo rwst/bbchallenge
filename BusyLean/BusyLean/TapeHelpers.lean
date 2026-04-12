@@ -134,4 +134,26 @@ theorem replicate_append {α : Type} (a b : Nat) (x : α) :
     listTail (ones m ++ false :: L) = if m = 0 then L else ones (m-1) ++ false :: L := by
   cases m with | zero => rfl | succ m => rfl
 
+/-! ### Zebra patterns (alternating 01) -/
+
+/-- Alternating `(01)^c` pattern: `[false, true, false, true, …]` of length `2c`. -/
+def zebra : Nat → List Sym
+  | 0 => []
+  | c + 1 => false :: true :: zebra c
+
+@[simp] theorem zebra_zero : zebra 0 = [] := rfl
+@[simp] theorem zebra_succ (c : Nat) :
+    zebra (c + 1) = false :: true :: zebra c := rfl
+
+theorem zebra_append (a b : Nat) : zebra a ++ zebra b = zebra (a + b) := by
+  induction a with
+  | zero => simp
+  | succ a ih =>
+    simp only [zebra_succ, List.cons_append, ih, show a + 1 + b = (a + b) + 1 from by omega]
+
+@[simp] theorem zebra_length (c : Nat) : (zebra c).length = 2 * c := by
+  induction c with
+  | zero => rfl
+  | succ c ih => simp [zebra_succ, ih]; omega
+
 end BusyLean

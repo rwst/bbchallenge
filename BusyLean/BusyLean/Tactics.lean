@@ -6,6 +6,7 @@ import BusyLean.Defs
 import BusyLean.RunLemmas
 import BusyLean.TapeHelpers
 import BusyLean.Notation
+import BusyLean.Multistep
 import Lean.Elab.Tactic
 
 /-!
@@ -547,5 +548,125 @@ scoped macro "tm_ind_zero" ih:ident st:ident "[" lemmas:Lean.Parser.Tactic.simpL
     conv => lhs; enter [2, 1]; change some $st
     rw [$ih:ident]
     all_goals simp only [ones_true_cons, ones_cons_append, zeros_false_cons, zeros_cons_append]))
+
+/-! ### EvStep chaining tactics (BusyCoq's follow/finish for →*) -/
+
+section EvStepTactics
+open Lean Elab Tactic Meta
+
+/-- Check if an expression is `EvStep tm A B`. Returns `(tm, A, B)`.
+    Strips metadata wrappers (introduced by `have`, `show`, etc.). -/
+private def parseEvStep (e : Expr) : Option (Expr × Expr × Expr) :=
+  let e := e.consumeMData
+  if e.isAppOfArity ``EvStep 4 then
+    some (e.getArg! 1, e.getArg! 2, e.getArg! 3)
+  else none
+
+/-- Check if an expression is `Multistep tm k A B`. Returns `(tm, k, A, B)`.
+    Strips metadata wrappers. -/
+private def parseMultistep (e : Expr) : Option (Expr × Expr × Expr × Expr) :=
+  let e := e.consumeMData
+  if e.isAppOfArity ``Multistep 5 then
+    some (e.getArg! 1, e.getArg! 2, e.getArg! 3, e.getArg! 4)
+  else none
+
+/-- Check if an expression is `run tm A k = B`. Returns `(tm, A, k, B)`.
+    Strips metadata wrappers. -/
+private def parseRunEq (e : Expr) : Option (Expr × Expr × Expr × Expr) :=
+  let e := e.consumeMData
+  match e.eq? with
+  | some (_, lhs, rhs) =>
+    let lhs := lhs.consumeMData
+    if lhs.isAppOfArity ``run 4 then
+      some (lhs.getArg! 1, lhs.getArg! 2, lhs.getArg! 3, rhs)
+    else none
+  | none => none
+
+/-- `evstep_follow h` — apply a multistep lemma to an `→*` goal.
+
+    Accepts hypotheses of the form:
+    - `h : A -[tm]->* B` (EvStep)
+    - `h : A -[tm]{k}-> B` (Multistep, i.e. `run tm A k = B`)
+    - `h : run tm A k = B` (raw run equality)
+
+    Given goal `A -[tm]->* C`, reduces it to `B -[tm]->* C`.
+
+    This is the Lean equivalent of BusyCoq's `follow` tactic. -/
+elab "evstep_follow " h:term : tactic => do
+  let goal ← getMainGoal
+  goal.withContext do
+  let goalType ← goal.getType
+  -- Goal must be EvStep tm A C
+  let some (_, goalA, _) := parseEvStep goalType
+    | throwError "evstep_follow: goal is not of the form `A -[tm]->* C`"
+  -- Elaborate h in the goal's local context
+  let hExpr ← Term.elabTerm h none
+  let hType ← inferType hExpr
+  let hType := hType.consumeMData
+  -- Lift h to an EvStep proof
+  let evH ←
+    if let some (_, hA, _) := parseEvStep hType then
+      unless ← isDefEq goalA hA do
+        throwError "evstep_follow: source config doesn't match goal"
+      pure hExpr
+    else if let some (_, _, hA, _) := parseMultistep hType then
+      unless ← isDefEq goalA hA do
+        throwError "evstep_follow: source config doesn't match goal"
+      mkAppM ``EvStep.from_multistep #[hExpr]
+    else if (parseRunEq hType).isSome then
+      mkAppM ``EvStep.from_multistep #[hExpr]
+    else
+      throwError "evstep_follow: hypothesis must be EvStep, Multistep, or a run equality"
+  -- Apply: the goal is `A →* C`, and evH proves `A →* B`.
+  -- We need `EvStep.trans evH ?_` where `?_` : `B →* C` becomes the new goal.
+  -- Use `refine` via evalTactic to let elaboration handle unification.
+  let hSyn ← Term.exprToSyntax evH
+  evalTactic (← `(tactic| refine EvStep.trans $hSyn ?_))
+
+/-- `closeConfigEq_` — close `A = B` goals for Config structs with arithmetic parameters.
+    Tries: rfl, congr+omega, simp+congr+omega. Used internally by `evstep_finish`. -/
+elab "closeConfigEq_" : tactic => do
+  -- Try rfl
+  try evalTactic (← `(tactic| rfl)); return catch _ => pure ()
+  -- Try congr 1 + (rfl | omega | congr 1; omega) on each field
+  -- The nested `congr 1` handles `ones (n+3) = ones (3+n)` → `n+3 = 3+n`.
+  try evalTactic (← `(tactic|
+    (congr 1 <;> (first | rfl | omega | (congr 1 <;> omega))))); return
+  catch _ => pure ()
+  -- Try with simp to normalize tape structure before omega
+  try evalTactic (← `(tactic|
+    (simp only [ones_append, zeros_append, zebra_append,
+                List.append_assoc, List.cons_append, List.nil_append, List.append_nil,
+                mkConfigFromTape, mkConfigFromTape_cons, mkConfigFromTape_nil,
+                listHead, listTail]
+     congr 1 <;> (first | rfl | omega | (congr 1 <;> omega))))); return
+  catch _ => pure ()
+  throwError "closeConfigEq_: failed"
+
+/-- `evstep_finish` — close an `→*` goal by reflexivity or simple normalization.
+
+    Closes goals of the form `A -[tm]->* B` where `A` and `B` are definitionally equal,
+    or equal after `simp`/`omega` on the parameters.
+
+    This is the Lean equivalent of BusyCoq's `finish` tactic. -/
+elab "evstep_finish" : tactic => do
+  let goal ← getMainGoal
+  let goalType ← goal.getType
+  let some (_, goalA, goalB) := parseEvStep goalType
+    | throwError "evstep_finish: goal is not of the form `A -[tm]->* B`"
+  -- Try EvStep.refl directly (A = B definitionally)
+  try evalTactic (← `(tactic| exact EvStep.refl)); return
+  catch _ => pure ()
+  -- Try: provide witness k=0, reduce to A=B, close with closeConfigEq_
+  let saved ← saveState
+  let ok ← try
+    evalTactic (← `(tactic|
+      (refine ⟨0, ?_⟩; simp only [Multistep, run_zero]; closeConfigEq_)))
+    pure true
+  catch _ => do saved.restore; pure false
+  if ok then return
+  throwError "evstep_finish: could not close the goal (configs not equal after normalization)"
+
+end EvStepTactics
 
 end BusyLean

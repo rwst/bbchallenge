@@ -6,13 +6,14 @@ Lightweight Lean 4 library for Busy Beaver proofs. Binary alphabet, zipper tape,
 
 ```
 Defs.lean          Core types: TM, Config, Sym, Dir, step, run, initConfig
-TapeHelpers.lean   ones, zeros, replicate lemmas, listHead/listTail simp
+TapeHelpers.lean   ones, zeros, zebra, replicate lemmas, listHead/listTail simp
 RunLemmas.lean     run_add, run_halted, step/run left/right locality
-Notation.lean      listRepeat (×× n), stA..stF, mkConfig (⟪ q | l | h | r ⟫)
+Notation.lean      listRepeat (×× n), stA..stF, mkConfig, mkConfigFromTape
 Parser.lean        tm! "1RB1RA_..." macro (kernel-reducible)
-Tactics.lean       tm_exec, tm_follow, tm_chain, tm_step, tm_ind_succ, tm_ind_zero
+Tactics.lean       tm_exec, tm_follow, tm_chain, tm_step, tm_ind_succ, tm_ind_zero,
+                   evstep_follow, evstep_finish, closeConfigEq_
 Nonhalt.lean       nonhalt_of_progress, not_halts_of_progress
-Multistep.lean     Multistep/Progress/EvStep relations with notation
+Multistep.lean     Multistep/Progress/EvStep relations, notation, Trans instances
 ClosedSet.lean     ClosedSet structure + closed_set tactic
 Transition.lean    halted_of_step, transReachable, nonhalt_of_unreachable
 BackwardReasoning.lean  SymConfig, matchingConfig?, backwardReason, nonhalt_of_backward
@@ -34,7 +35,9 @@ Config n = { state : Option (Fin n), left : List Sym, head : Sym, right : List S
 
 - `left` is reversed: `left[0]` is immediately left of head
 - `ones k` = `List.replicate k true`, `zeros k` = `List.replicate k false`
+- `zebra c` = `[false, true, false, true, …]` of length `2c` (alternating 01 pattern)
 - `listHead l default` / `listTail l` handle empty lists (read blank / stay empty)
+- `mkConfigFromTape n st L R` — extracts head from tape list `R`, defaulting to `false`
 
 ## Proving TM behavior
 
@@ -117,6 +120,30 @@ A -[tm]{k}-> B    -- run tm A k = B (Decidable)
 A -[tm]->+ B      -- ∃ k > 0, run tm A k = B ∧ ¬ B.halted
 A -[tm]->* B      -- ∃ k, run tm A k = B
 ```
+
+All three support `calc` chaining via `Trans` instances, including mixed types
+(e.g., `Multistep` followed by `EvStep`).
+
+### EvStep chaining (BusyCoq's follow/finish)
+
+For proofs that compose many `→*` steps (e.g., mxdys-style macro decomposition):
+
+```lean
+-- evstep_follow: chain →* steps
+theorem IncsOv3 (a b : ℕ) : S3 a b -[tm]->* S1 0 2 (2+a*2+b) := by
+  evstep_follow (Incs3 a b)    -- applies Incs3, reduces goal
+  evstep_follow (Ov3 (a*2+b))  -- applies Ov3
+  evstep_finish                 -- closes A →* A (or A →* B when A = B up to omega)
+
+-- Or with calc blocks (via Trans instances):
+theorem IncsOv3' (a b : ℕ) : S3 a b -[tm]->* S1 0 2 (2+a*2+b) :=
+  calc S3 a b
+      _ -[tm]->* S3 0 (a*2+b)         := Incs3 a b
+      _ -[tm]->* S1 0 2 (2+a*2+b)     := Ov3 (a*2+b)
+```
+
+`evstep_follow h` accepts: `EvStep`, `Multistep`, or raw `run tm A k = B` hypotheses.
+`evstep_finish` tries: `EvStep.refl`, then `congr 1 <;> omega` on struct fields.
 
 ## Style conventions
 

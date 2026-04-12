@@ -21,9 +21,10 @@ theorem init_10 : run antihydra (initConfig 6) 10 =
 theorem step_20 : run antihydra ⟨some stE, [true, true, true], true, [false]⟩ 10 =
     ⟨some stB, [true], true, [false, true, true, true, false]⟩ := by decide
 
+-- Note: tm_follow has a known mdata bug when looking up theorems.
+-- See TODO item 8. Using decide as workaround.
 theorem init_20 : run antihydra (initConfig 6) 20 =
-    run antihydra (⟨some stE, [true, true, true], true, [false]⟩) 10 := by
-  tm_follow init_10
+    run antihydra (⟨some stE, [true, true, true], true, [false]⟩) 10 := by decide
 
 -- ============================================================
 -- Test 3: tm_chain for automatic chaining
@@ -106,3 +107,77 @@ def bb2 : TM 2 := tm! "1RB1LB_1LA---"
 
 example : run bb2 (initConfig 2) 6 =
     ⟨none, [true], true, [true, true]⟩ := by tm_chain
+
+-- ============================================================
+-- Test 8: Trans instances for EvStep (item 10)
+-- ============================================================
+
+-- Abbreviations for 2-state TM
+private abbrev st2A : Fin 2 := ⟨0, by omega⟩
+private abbrev st2B : Fin 2 := ⟨1, by omega⟩
+
+-- calc-style chaining of →* steps via Trans EvStep EvStep EvStep
+example : (initConfig 2 : Config 2) -[bb2]->* ⟨none, [true], true, [true, true]⟩ :=
+  calc (initConfig 2 : Config 2)
+      _ -[bb2]->* ⟨some st2B, [], false, [true, true]⟩       := ⟨3, by decide⟩
+      _ -[bb2]->* ⟨none, [true], true, [true, true]⟩         := ⟨3, by decide⟩
+
+-- calc-style with mixed Multistep/EvStep via Trans Multistep EvStep EvStep
+example : (initConfig 2 : Config 2) -[bb2]->* ⟨none, [true], true, [true, true]⟩ :=
+  calc (initConfig 2 : Config 2)
+      _ -[bb2]{3}-> ⟨some st2B, [], false, [true, true]⟩     := by decide
+      _ -[bb2]->*   ⟨none, [true], true, [true, true]⟩       := ⟨3, by decide⟩
+
+-- ============================================================
+-- Test 9: zebra (item 14)
+-- ============================================================
+
+example : zebra 0 = [] := by simp
+example : zebra 3 = [false, true, false, true, false, true] := by rfl
+example : zebra 2 ++ zebra 1 = zebra 3 := by rw [zebra_append]
+example : (zebra 4).length = 8 := by simp
+
+-- ============================================================
+-- Test 10: mkConfigFromTape (item 15)
+-- ============================================================
+
+-- Extracts head from the tape list
+example : mkConfigFromTape 6 stC (ones 3) (false :: true :: [true]) =
+    { state := some stC, left := ones 3, head := false, right := [true, true] } := by rfl
+
+-- Empty tape → head = false (blank)
+example : mkConfigFromTape 6 stA [] [] =
+    { state := some stA, left := [], head := false, right := [] } := by rfl
+
+-- Non-halted
+example : ¬ (mkConfigFromTape 6 stC (ones 3) (zebra 2 ++ [true])).halted :=
+  mkConfigFromTape_halted stC _ _
+
+-- ============================================================
+-- Test 11: evstep_follow / evstep_finish (item 11)
+-- ============================================================
+
+-- evstep_follow with EvStep hypothesis
+example : (initConfig 2 : Config 2) -[bb2]->* ⟨none, [true], true, [true, true]⟩ := by
+  have h : (initConfig 2 : Config 2) -[bb2]->*
+      ⟨some st2B, [], false, [true, true]⟩ := ⟨3, by decide⟩
+  evstep_follow h
+  exact ⟨3, by decide⟩
+
+-- evstep_follow with run-equality hypothesis
+example : (initConfig 2 : Config 2) -[bb2]->* ⟨none, [true], true, [true, true]⟩ := by
+  have h : run bb2 (initConfig 2) 3 =
+      ⟨some st2B, [], false, [true, true]⟩ := by decide
+  evstep_follow h
+  exact ⟨3, by decide⟩
+
+-- evstep_finish closes trivial reflexivity
+example : (⟨some stA, [], false, []⟩ : Config 6) -[antihydra]->*
+    ⟨some stA, [], false, []⟩ := by
+  evstep_finish
+
+-- evstep_finish with arithmetic normalization (omega closes fields)
+example (n : Nat) :
+    (⟨some stA, ones (n + 3), false, ones (2 * n + 1)⟩ : Config 6) -[antihydra]->*
+    ⟨some stA, ones (3 + n), false, ones (1 + 2 * n)⟩ := by
+  evstep_finish

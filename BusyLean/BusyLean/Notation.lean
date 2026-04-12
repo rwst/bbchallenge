@@ -140,4 +140,35 @@ scoped notation "⟪! " q " | " l " | " h " | " r " ⟫" =>
     (h : Sym) (r : List Sym) :
     (mkConfig n q l h r).left = l.reverse := rfl
 
+/-! ### Config constructor from full tape list -/
+
+/-- Build a `Config n` from state and left/right tape lists, extracting the head
+    from the right tape. When the right tape is empty, the head defaults to `false`
+    (blank), matching the infinite-blank-tape convention.
+
+    This is the natural constructor for BusyCoq-style configurations like
+    `S1(a,b,c) = {state C, left = ones(1+2a), tape = zebra b ++ ones(2c) ++ [0,1]}`. -/
+@[inline]
+def mkConfigFromTape (n : Nat) (st : Fin n) (L R : List Sym) : Config n :=
+  { state := some st, left := L, head := listHead R false, right := listTail R }
+
+@[simp] theorem mkConfigFromTape_cons {n : Nat} (st : Fin n) (L : List Sym)
+    (h : Sym) (R : List Sym) :
+    mkConfigFromTape n st L (h :: R) =
+    { state := some st, left := L, head := h, right := R } := rfl
+
+@[simp] theorem mkConfigFromTape_nil {n : Nat} (st : Fin n) (L : List Sym) :
+    mkConfigFromTape n st L [] =
+    { state := some st, left := L, head := false, right := [] } := rfl
+
+@[simp] theorem mkConfigFromTape_state {n : Nat} (st : Fin n) (L R : List Sym) :
+    (mkConfigFromTape n st L R).state = some st := rfl
+
+@[simp] theorem mkConfigFromTape_left {n : Nat} (st : Fin n) (L R : List Sym) :
+    (mkConfigFromTape n st L R).left = L := rfl
+
+@[simp] theorem mkConfigFromTape_halted {n : Nat} (st : Fin n) (L R : List Sym) :
+    ¬ (mkConfigFromTape n st L R).halted := by
+  simp [Config.halted, mkConfigFromTape]
+
 end BusyLean

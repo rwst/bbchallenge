@@ -98,4 +98,39 @@ theorem EvStep.trans (h1 : A -[tm]->* B) (h2 : B -[tm]->* C) : A -[tm]->* C := b
   obtain ⟨k, hBC⟩ := h2
   exact ⟨j + k, hAB.trans hBC⟩
 
+/-! ### Trans instances for calc chaining -/
+
+/-- `Trans` for `EvStep`: chain `A →* B` and `B →* C` into `A →* C` in calc blocks. -/
+instance EvStep.instTrans : Trans (EvStep tm) (EvStep tm) (EvStep tm) where
+  trans := EvStep.trans
+
+/-- `Trans` for `Multistep` → `EvStep`: chain `A -{k}-> B` and `B →* C` into `A →* C`. -/
+instance Multistep.instTransEvStep :
+    Trans (Multistep tm k) (EvStep tm) (EvStep tm) where
+  trans h1 h2 := (EvStep.from_multistep h1).trans h2
+
+/-- `Trans` for `EvStep` → `Multistep`: chain `A →* B` and `B -{k}-> C` into `A →* C`. -/
+instance EvStep.instTransMultistep :
+    Trans (EvStep tm) (Multistep tm k) (EvStep tm) where
+  trans h1 h2 := h1.trans (EvStep.from_multistep h2)
+
+/-- `Trans` for `Multistep`: chain `A -{j}-> B` and `B -{k}-> C` into `A -{j+k}-> C`. -/
+instance Multistep.instTrans :
+    Trans (Multistep tm j) (Multistep tm k) (Multistep tm (j + k)) where
+  trans := Multistep.trans
+
+/-- `Trans` for `Progress` → `EvStep`: chain `A →+ B` and `B →* C` into `A →* C`. -/
+instance Progress.instTransEvStep :
+    Trans (Progress tm) (EvStep tm) (EvStep tm) where
+  trans h1 h2 := by
+    obtain ⟨k, _, hk, _⟩ := h1
+    exact (EvStep.from_multistep hk).trans h2
+
+/-- `Trans` for `EvStep` → `Progress`: chain `A →* B` and `B →+ C` into `A →* C`. -/
+instance EvStep.instTransProgress :
+    Trans (EvStep tm) (Progress tm) (EvStep tm) where
+  trans h1 h2 := by
+    obtain ⟨k, _, hk, _⟩ := h2
+    exact h1.trans (EvStep.from_multistep hk)
+
 end BusyLean
