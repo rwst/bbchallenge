@@ -534,68 +534,81 @@ theorem tm_reaches_step65 : run tm (initConfig 6) 65 = Smacro 2 4 2 := by
 /-- Short alias. -/
 theorem tm_reaches_S10 : run tm (initConfig 6) 43 = S 10 := tm_reaches_step43
 
-/-! ### 6. Progress invariant and non-halting
+/-! ### 6. Antihydra-style nonhalting proof (Approach D)
 
-The progress invariant uses the Smacro decomposition above. The key
-theorem `macro_progress` says: from any `S n` with `n` sufficiently large
-(even parity, in a valid range), the machine reaches another `S n'` with
-`n' ≥ 8`. This composes `launch_rule` + shift chain + `terminal_restart`.
+**Architecture switch.** The earlier approach (general_shift + orbit
+progress) hit an obstacle: `gs_base` requires a multi-pass sweep
+induction that resists simple decomposition (left accumulation
+interacts with right processing throughout each pass). We switch to
+**Approach D**: define mxdys's mathematical model directly, prove the
+TM simulates it, and use `Hensel.pomme_main` to close — mirroring
+`Antihydra/Antihydra.lean`.
 
-The "sufficiently large / valid range" condition is derived from mxdys's
-closure inequality `(2·3^i + i + 5) / 2^{v₂(…)} ≥ 2i+14` proved in
-`Hensel.pomme_main`. See the detailed analysis in section 4. -/
+**What was tried and why it failed (Option 1):**
+  * `general_shift(c,b)`: uniform-in-b via `run_right_append` (proved).
+  * `gs_base(c)`: base case needs a quadratic-cost multi-pass sweep
+    whose boundary cycle doesn't decompose into proved building blocks.
+  * Proved for c=0,1 by `decide`; general case open.
 
-/-- Progress predicate: `ValidS c` means `c = S n` for some `n ≥ 8` with
-even parity (the machine trajectory only visits even-length ones strips). -/
-def ValidS (c : Config 6) : Prop :=
-  ∃ n, 8 ≤ n ∧ n % 2 = 0 ∧ c = S n
+**Alternative approaches considered:**
+  * Option 2: reverse-engineer mxdys's encoding (partially done).
+  * Option 3: Smacro progress directly (same closure inequality).
+  * Option E: prove n'>n (equivalent to Pomme).
+  * Option F: coarser invariant (impossible: S(28), S(98) halt).
 
-/-- **Macro progress.** From any `S n` with `n ≥ 8` and `n` even, the
-machine reaches another `S n'` with `n' ≥ 8` and `n'` even, in finitely
-many steps.
+**Proved building blocks (all reusable):**
+  `launch_rule`, `shift_4_16`, `shift_16_52`, `terminal_restart`,
+  `CB_sweep`, `CD_sweep`, `pair_step`, `pair_step_left`, `processing`,
+  `A_shift`, all locality lemmas in BusyLean.
+-/
 
-This is the Smacro-level replacement for mxdys's R1/R2 rules. The proof
-composes:
-1. `launch_rule`: `S n →[22] Smacro 2 4 (n−8)`
-2. Shift chain: `Smacro 2 4 b →[222] Smacro 2 16 (b−22)` etc.
-3. `terminal_restart`: `Smacro 2 c 0 →[6c+23] S (2c+8)`
+/-- mxdys's R1 rule: `S(n) → S((n + 6·3^i + i + 4)/2)`. -/
+def applyR1 (n i : ℕ) : ℕ := (n + 6 * 3 ^ i + i + 4) / 2
 
-The closure (that `n'` satisfies the validity conditions) is where
-`Hensel.pomme_main` is consumed: it ensures the shift chain never
-produces a remainder `b` that leads to a halting terminal case. -/
-theorem macro_progress (n : ℕ) (hn : 8 ≤ n) (heven : n % 2 = 0) :
-    ∃ k n', 0 < k ∧ run tm (S n) k = S n' ∧ 8 ≤ n' ∧ n' % 2 = 0 := by
+/-- mxdys's R2 rule: `S(n) → S(12·3^i − 1)`. -/
+def applyR2 (i : ℕ) : ℕ := 12 * 3 ^ i - 1
+
+/-- The tape configuration corresponding to mxdys's `S(n)`.
+**This is the key remaining unknown.** From simulation data:
+  * `MxdysConfig 18` = Smacro 0 0 10  (step 43)
+  * `MxdysConfig 39` = Smacro 2 4 2   (step 65)
+  * `MxdysConfig 107` = Smacro 2 11 0 (step 257)
+  * `MxdysConfig 138` = Smacro 0 0 30 (step 346)
+The encoding is nonlinear and involves the full Smacro(a,c,b) triple.
+Once identified, all simulation proofs reduce to composing the proved
+shift/terminal building blocks. -/
+def MxdysConfig (n : ℕ) : Config 6 := sorry
+
+/-- **Simulation (R1).** The TM implements mxdys's R1 rule. -/
+theorem tm_simulates_R1 (n i : ℕ)
+    (hpar : n % 2 = i % 2)
+    (hlo : 2 * 3 ^ i ≤ n + i + 2) (hhi : n + i + 6 ≤ 6 * 3 ^ i) :
+    ∃ k, 0 < k ∧ run tm (MxdysConfig n) k = MxdysConfig (applyR1 n i) := by
   sorry
 
-/-- Each valid macro state advances to another valid macro state
-without halting. Wired to `macro_progress`. -/
-theorem ValidS_progress (c : Config 6) (hc : ValidS c) :
-    ∃ k, 0 < k ∧ ValidS (run tm c k) ∧ (run tm c k).state ≠ none := by
-  obtain ⟨n, hn, heven, rfl⟩ := hc
-  obtain ⟨k, n', hk, hrun, hn', heven'⟩ := macro_progress n hn heven
-  exact ⟨k, hk, ⟨n', hn', heven', hrun⟩, by rw [hrun]; simp [S, Smacro]⟩
+/-- **Simulation (R2).** The TM implements mxdys's R2 rule. -/
+theorem tm_simulates_R2 (n i : ℕ)
+    (hpar : n % 2 = (i + 1) % 2)
+    (hlo : 2 * 3 ^ i ≤ n + i) (hhi : n + i + 10 ≤ 6 * 3 ^ i) :
+    ∃ k, 0 < k ∧ run tm (MxdysConfig n) k = MxdysConfig (applyR2 i) := by
+  sorry
 
-/-- The machine reaches a valid `S`-configuration in finitely many steps.
-We reach `S 10` (which has `10 ≥ 8` and `10 % 2 = 0`) at step 43 from
-the blank tape. -/
-theorem ValidS_initial : ∃ k, ValidS (run tm (initConfig 6) k) := by
-  exact ⟨43, 10, by omega, by omega, tm_reaches_S10⟩
+/-- Reaching mxdys start state. -/
+theorem tm_reaches_mxdys18 : run tm (initConfig 6) 43 = MxdysConfig 18 := by
+  sorry
+
+/-- **Closure from Pomme.** After applying R1 or R2, the result is still
+in a valid window. This is where `Hensel.pomme_main` is consumed. -/
+theorem closure_R2 (n i : ℕ) (hi : 50 ≤ i)
+    (hpar : n % 2 = (i + 1) % 2) (hhi : n + i + 10 ≤ 6 * 3 ^ i) :
+    ∃ i', (applyR2 i) % 2 = i' % 2 ∧
+          2 * 3 ^ i' ≤ applyR2 i + i' + 2 ∧ applyR2 i + i' + 6 ≤ 6 * 3 ^ i' ∨
+          (applyR2 i) % 2 = (i' + 1) % 2 ∧
+          2 * 3 ^ i' ≤ applyR2 i + i' ∧ applyR2 i + i' + 10 ≤ 6 * 3 ^ i' := by
+  sorry
 
 /-- **Main non-halting theorem.** -/
 theorem tm_not_halts : ∀ m, ¬ (run tm (initConfig 6) m).halted := by
-  -- Prefix: first 43 steps are halt-free (by `decide`).
-  have hpre : ∀ j ≤ 43, (run tm (initConfig 6) j).state ≠ none := by decide
-  -- From step 43 onward: the progress invariant takes over.
-  have hk₀ : ValidS (run tm (initConfig 6) 43) :=
-    ⟨10, by omega, by omega, tm_reaches_S10⟩
-  intro m
-  by_cases h : m ≤ 43
-  · exact fun hhalt => hpre m h hhalt
-  · push_neg at h
-    intro hhalt
-    have key := nonhalt_of_progress tm ValidS ValidS_progress _ hk₀ (m - 43)
-    apply key
-    rw [show m = 43 + (m - 43) from by omega, run_add] at hhalt
-    exact hhalt
+  sorry
 
 end Mxdys
