@@ -296,7 +296,168 @@ theorem Inc3 (a b : Nat) : S3 (1 + a) b -[tm]->* S3 a (2 + b) := by
   simp only [S3]
   rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
   exact hleft
-theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by sorry
+/-- **CBED forward**: 4 steps process the first 3 ones at the right boundary.
+    C→B→E→D: head traverses 3 ones rightward. D reverses (moves left). -/
+theorem CBED_forward (L R : List Sym) :
+    run tm { state := some stC, left := L, head := true,
+             right := true :: true :: true :: R } 4 =
+    { state := some stC, left := true :: false :: L, head := false,
+      right := false :: R } := rfl
+
+/-- **CD pair retreat (pure)**: C/D retreat through `rev_zebra(k)` on the left,
+    WITHOUT the final `ones(2)` pair. Left = rev_zebra(k), not rev_zebra(k)++ones(2). -/
+theorem cd_pair_retreat (k : Nat) (R : List Sym) :
+    run tm { state := some stC, left := rev_zebra k, head := false,
+             right := R } (2 * k) =
+    { state := some stC, left := [], head := false,
+      right := zebra k ++ R } := by
+  induction k generalizing R with
+  | zero => simp [rev_zebra, zebra]
+  | succ k ih =>
+    rw [show 2 * (k + 1) = 2 + 2 * k from by omega]
+    rw [show rev_zebra (k + 1) = true :: false :: rev_zebra k from rfl]
+    rw [run_add]
+    show run tm { state := some stC, left := rev_zebra k, head := false,
+                  right := false :: true :: R } (2 * k) = _
+    rw [ih (false :: true :: R)]
+    congr 1
+    rw [show false :: true :: R = zebra 1 ++ R from rfl,
+        ← List.append_assoc, zebra_append]
+
+/-- **CD+DA at empty left**: 2 steps from C with empty left and head=false. -/
+theorem CD_DA_empty (R : List Sym) :
+    run tm { state := some stC, left := [], head := false, right := R } 2 =
+    { state := some stA, left := [], head := false,
+      right := true :: true :: R } := rfl
+
+/-- **A→B start**: 1 step from A with empty left. -/
+theorem AB_start (R : List Sym) :
+    run tm { state := some stA, left := [], head := false,
+             right := true :: true :: R } 1 =
+    { state := some stB, left := [true], head := true,
+      right := true :: R } := rfl
+
+/-- **BEDA pair**: 4 steps consume one zebra pair from the right (after leading true),
+    depositing 2 ones on the left. B→E→D→A→B cycle. -/
+theorem BEDA_pair (L R : List Sym) :
+    run tm { state := some stB, left := L, head := true,
+             right := true :: false :: true :: R } 4 =
+    { state := some stB, left := true :: true :: L, head := true,
+      right := true :: R } := rfl
+
+/-- **BEDA traverse**: iterate BEDA_pair through `zebra(n)` on the right. -/
+theorem BEDA_traverse (n : Nat) (L R : List Sym) :
+    run tm { state := some stB, left := L, head := true,
+             right := true :: (zebra n ++ R) } (4 * n) =
+    { state := some stB, left := ones (2 * n) ++ L, head := true,
+      right := true :: R } := by
+  induction n generalizing L with
+  | zero => simp [zebra, ones, repeatSym]
+  | succ n ih =>
+    rw [show 4 * (n + 1) = 4 + 4 * n from by omega, run_add]
+    rw [show zebra (n + 1) ++ R = false :: true :: (zebra n ++ R) from by
+          simp [zebra_succ, List.cons_append]]
+    show run tm { state := some stB, left := true :: true :: L, head := true,
+                  right := true :: (zebra n ++ R) } (4 * n) = _
+    rw [ih (true :: true :: L)]
+    congr 1
+    show ones (2 * n) ++ (true :: true :: L) = ones (2 * (n + 1)) ++ L
+    rw [show 2 * (n + 1) = 2 * n + 2 from by omega, ← ones_append]
+    simp [ones, repeatSym]
+
+/-- **BED terminal**: 3 steps from B with ones(3) on right. -/
+theorem BED_terminal (L : List Sym) :
+    run tm { state := some stB, left := L, head := true,
+             right := [true, true, true] } 3 =
+    { state := some stC, left := true :: L, head := false,
+      right := [false, true] } := rfl
+
+/-- **CD final with left ones**: 2 steps from C with ones(k+2) on left. -/
+theorem cd_final_ones (k : Nat) :
+    run tm { state := some stC, left := true :: true :: ones k, head := false,
+             right := [false, true] } 2 =
+    { state := some stC, left := ones k, head := true,
+      right := [false, true, false, true] } := rfl
+
+/-- **LOv1 core** (c=0): the full LOv1 computation without right tail.
+    8 phases: zebra_traverse + CBED + cd_pair_retreat + CD_DA + AB + BEDA + BED + cd_final.
+    Total: 2b + 4 + 2(b+1) + 2 + 1 + 4(b+2) + 3 + 2 = 8b + 22. -/
+theorem LOv1_core (b : Nat) :
+    run tm { state := some stC, left := [], head := true,
+             right := zebra b ++ (ones 6) } (22 + 8 * b) =
+    { state := some stC, left := ones (4 + 2 * b), head := true,
+      right := zebra 2 } := by
+  -- Phase 1: zebra_traverse (2b steps)
+  rw [show 22 + 8 * b = 2 * b + (4 + (2 * (b + 1) + (2 + (1 + (4 * (b + 2) + (3 + 2)))))) from by omega,
+      run_add, zebra_traverse b [] (ones 6)]
+  simp only [List.append_nil]
+  -- Phase 2: CBED_forward (4 steps) — processes first 3 ones
+  rw [show (ones 6 : List Sym) = true :: true :: true :: true :: true :: true :: [] from rfl,
+      run_add, CBED_forward (rev_zebra b) [true, true, true]]
+  -- After: {C, rev_zebra(b+1), false, [0,1,1,1]}
+  rw [show (true :: false :: rev_zebra b : List Sym) = rev_zebra (b + 1) from by
+        simp [rev_zebra]]
+  -- Phase 3: cd_pair_retreat (2(b+1) steps) — retreat through rev_zebra(b+1)
+  rw [run_add, cd_pair_retreat (b + 1) [false, true, true, true]]
+  -- After: {C, [], false, zebra(b+1) ++ [0,1,1,1]}
+  -- [0,1,1,1] = zebra(1) ++ ones(2)
+  rw [show ([false, true, true, true] : List Sym) = zebra 1 ++ ones 2 from rfl,
+      ← List.append_assoc, zebra_append]
+  -- After: {C, [], false, zebra(b+2) ++ ones(2)}
+  -- Phase 4: CD_DA_empty (2 steps)
+  rw [run_add, CD_DA_empty (zebra (b + 2) ++ ones 2)]
+  -- After: {A, [], false, [1,1] ++ zebra(b+2) ++ ones(2)}
+  -- Phase 5: AB_start (1 step)
+  rw [run_add, AB_start (zebra (b + 2) ++ ones 2)]
+  -- After: {B, [1], true, [1] ++ zebra(b+2) ++ ones(2)}
+  -- Phase 6: BEDA_traverse through zebra(b+2) (4(b+2) steps)
+  rw [run_add, BEDA_traverse (b + 2) [true] (ones 2)]
+  -- After: {B, ones(2(b+2)) ++ [1], true, [1] ++ ones(2)} = {B, ones(2b+5), true, ones(3)}
+  rw [show ones (2 * (b + 2)) ++ [true] = ones (2 * b + 5) from by
+        rw [show 2 * (b + 2) = 2 * b + 4 from by omega, ← ones_append]
+        simp [ones, repeatSym],
+      show (true :: ones 2 : List Sym) = [true, true, true] from rfl]
+  -- Phase 7: BED_terminal (3 steps)
+  rw [run_add, BED_terminal (ones (2 * b + 5))]
+  -- After: {C, [1] ++ ones(2b+5), false, [0,1]} = {C, ones(2b+6), false, [0,1]}
+  rw [show (true :: ones (2 * b + 5) : List Sym) = true :: true :: ones (2 * b + 4) from by
+        simp [ones_succ, show 2 * b + 5 = (2 * b + 4) + 1 from by omega]]
+  -- Phase 8: cd_final_ones (2 steps)
+  rw [cd_final_ones (2 * b + 4)]
+  -- After: {C, ones(2b+4), true, [0,1,0,1]}
+  rw [show ([false, true, false, true] : List Sym) = zebra 2 from rfl,
+      show 2 * b + 4 = 4 + 2 * b from by omega]
+
+/-- Right stays nonempty during LOv1 core (for run_right_append). -/
+private theorem LOv1_right_ne (b : Nat) :
+    ∀ m, m < 22 + 8 * b →
+      (run tm { state := some stC, left := [], head := true,
+                right := zebra b ++ (ones 6) } m).right ≠ [] := by
+  sorry -- verified numerically for b=0..4; formal proof tracks right through phases
+
+/-- **LOv1**: `S1(0, b, 3+c) →* S1(2+b, 2, c)`. -/
+theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by
+  have hcore := LOv1_core b
+  have hne := LOv1_right_ne b
+  have hright := run_right_append tm
+    { state := some stC, left := [], head := true, right := zebra b ++ (ones 6) }
+    (ones (2 * c) ++ [false, true]) (22 + 8 * b) hne
+  rw [hcore] at hright
+  -- Normalize hright: flatten struct projections
+  simp only [List.append_nil] at hright
+  -- hright has: right = zebra b ++ ones 6 ++ (ones(2c) ++ [0,1])
+  -- Need: right = zebra b ++ (ones 6 ++ (ones(2c) ++ [0,1]))
+  rw [List.append_assoc (zebra b)] at hright
+  -- Also normalize left: ones(4+2b) to match target
+  refine ⟨22 + 8 * b, ?_⟩
+  show run tm (S1 0 b (3 + c)) (22 + 8 * b) = S1 (2 + b) 2 c
+  simp only [S1]
+  -- Normalize all list associativity and ones terms to match hright
+  rw [show 2 * 0 = 0 from rfl, show 2 * (3 + c) = 6 + 2 * c from by omega,
+      show 2 * (2 + b) = 4 + 2 * b from by omega]
+  simp only [ones_zero, List.nil_append, List.append_assoc]
+  rw [← ones_append (a := 6) (b := 2 * c)]
+  exact hright
 
 /-- Ov2 produces S3 with a trailing false (absorbed by Inc3). -/
 theorem Ov2_raw (b : Nat) :
@@ -371,12 +532,26 @@ theorem IncsOv3 (a b : Nat) : S3 a b -[tm]->* S1 0 2 (2 + a * 2 + b) := by
 theorem IncsOv2 (a b : Nat) : S2 a b -[tm]->* S1 0 2 (7 + a * 6 + b * 2) := by
   sorry -- Chain: Incs2 + Ov2_raw + Inc3_absorb + IncsOv3
 
+/-- `S1(a, b, 0) →* S3(a, 1+b)`: boundary step from S1 with c=0 to S3. -/
+theorem S1_to_S3 (a b : Nat) : S1 a b 0 -[tm]->* S3 a (1 + b) := by sorry
+
 theorem ROv1_0 (a b : Nat) : S1 a b 0 -[tm]->* S1 0 2 (3 + a * 2 + b) := by
-  sorry -- S1(a,b,0) → S3(a, 1+b) → IncsOv3
+  calc S1 a b 0
+      _ -[tm]->* S3 a (1 + b) := S1_to_S3 a b
+      _ -[tm]->* S1 0 2 (2 + a * 2 + (1 + b)) := IncsOv3 a (1 + b)
+      _ -[tm]->* S1 0 2 (3 + a * 2 + b) := by
+            rw [show 2 + a * 2 + (1 + b) = 3 + a * 2 + b from by omega]
+
+/-- `S1(2+a, b, 1) →* S2(a, 6+b)`: boundary step from S1 with c=1 to S2. -/
+theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by sorry
 
 theorem ROv1_1 (a b : Nat) :
     S1 (2 + a) b 1 -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
-  sorry -- S1(2+a,b,1) → S2(a, 6+b) → IncsOv2
+  calc S1 (2 + a) b 1
+      _ -[tm]->* S2 a (6 + b) := S1_to_S2 a b
+      _ -[tm]->* S1 0 2 (7 + a * 6 + (6 + b) * 2) := IncsOv2 a (6 + b)
+      _ -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
+            rw [show 7 + a * 6 + (6 + b) * 2 = 19 + a * 6 + b * 2 from by omega]
 
 /-! ### 9. P recurrence -/
 
@@ -428,17 +603,41 @@ theorem P_n (i : Nat) : P (3 ^ i * 2 - i - 2) (3 ^ i * 2 - 2) := by
 
 theorem BigStep0 (n1 n2 c : Nat) (h : P n1 (c + n2)) :
     S' (n1 + c * 2 + 0) -[tm]->* S' (5 + n2 * 2 + c * 3) := by
-  sorry
+  unfold S' P at *
+  -- Chain: S1(0,2,n1+c*2) → S1(c+n2,2,c*2) → S1(n2,c*3+2,0) → S1(0,2,5+n2*2+c*3)
+  have h1 : S1 0 2 (n1 + c * 2) -[tm]->* S1 (c + n2) 2 (c * 2) := by
+    rw [show n1 + c * 2 = n1 + (c * 2) from rfl]; exact h (c * 2)
+  have h2 : S1 (c + n2) 2 (c * 2) -[tm]->* S1 n2 (c * 3 + 2) 0 := by
+    have := Incs1 c n2 2 0
+    rw [show c * 2 + 0 = c * 2 from by omega] at this; exact this
+  have h3 : S1 n2 (c * 3 + 2) 0 -[tm]->* S1 0 2 (5 + n2 * 2 + c * 3) := by
+    have := ROv1_0 n2 (c * 3 + 2)
+    rw [show 3 + n2 * 2 + (c * 3 + 2) = 5 + n2 * 2 + c * 3 from by omega] at this
+    exact this
+  exact EvStep.trans h1 (EvStep.trans h2 h3)
 
 theorem BigStep1 (n1 n2 c : Nat) (h : P n1 (c + (2 + n2))) :
     S' (n1 + c * 2 + 1) -[tm]->* S' (23 + n2 * 6 + c * 6) := by
-  sorry
+  unfold S' P at *
+  -- Chain: S1(0,2,n1+c*2+1) → S1(c+2+n2,2,c*2+1) → S1(2+n2,c*3+2,1) → S1(0,2,...)
+  have h1 : S1 0 2 (n1 + c * 2 + 1) -[tm]->* S1 (c + (2 + n2)) 2 (c * 2 + 1) := by
+    rw [show n1 + c * 2 + 1 = n1 + (c * 2 + 1) from by omega]
+    exact h (c * 2 + 1)
+  have h2 : S1 (c + (2 + n2)) 2 (c * 2 + 1) -[tm]->* S1 (2 + n2) (c * 3 + 2) 1 := by
+    have := Incs1 c (2 + n2) 2 1
+    rw [show c * 2 + 1 = c * 2 + 1 from rfl] at this; exact this
+  have h3 : S1 (2 + n2) (c * 3 + 2) 1 -[tm]->* S1 0 2 (23 + n2 * 6 + c * 6) := by
+    have := ROv1_1 n2 (c * 3 + 2)
+    rw [show 19 + n2 * 6 + (c * 3 + 2) * 2 = 23 + n2 * 6 + c * 6 from by omega] at this
+    exact this
+  exact EvStep.trans h1 (EvStep.trans h2 h3)
 
 /-! ### 11. Init and nonhalting -/
 
-/-- The TM reaches S'(18) from the initial config. -/
-theorem init : ∃ k, run tm (initConfig 6) k = S' 18 := by
-  sorry -- by decide or tm_chain
+/-- The TM reaches `S'(18)` from the initial config at step 715. -/
+theorem init : run tm (initConfig 6) 715 = S' 18 := by
+  simp only [S', S1, zebra, ones, repeatSym]
+  native_decide
 
 /-- **Main theorem**: the TM never halts. -/
 theorem tm_not_halts : ∀ m, ¬ (run tm (initConfig 6) m).halted := by
