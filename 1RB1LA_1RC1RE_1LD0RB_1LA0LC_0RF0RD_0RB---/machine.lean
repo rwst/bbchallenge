@@ -260,13 +260,12 @@ theorem launch_rule (b : ℕ) :
         right := ones 8 ++ (ones b ++ [false, true]) } := by
     show _ = _
     unfold Smacro
-    simp [zebra, show b + 8 = 8 + b from by omega, ← ones_append,
-          List.append_assoc]
+    simp [zebra, show b + 8 = 8 + b from by omega, ← ones_append]
   have e2 : (Smacro 2 4 b : Config 6) =
       { state := some stA, left := [], head := false,
         right := ones 2 ++ zebra 4 ++ (ones b ++ [false, true]) } := by
     unfold Smacro
-    simp [List.append_assoc]
+    simp
   rw [e1, e2]
   exact key
 
@@ -288,13 +287,12 @@ theorem shift_4_16 (b : ℕ) :
       { state := some stA, left := [], head := false,
         right := (ones 2 ++ zebra 4 ++ ones 22) ++ (ones b ++ [false, true]) } := by
     unfold Smacro
-    simp [show b + 22 = 22 + b from by omega, ← ones_append,
-          List.append_assoc]
+    simp [show b + 22 = 22 + b from by omega, ← ones_append]
   have e2 : (Smacro 2 16 b : Config 6) =
       { state := some stA, left := [], head := false,
         right := (ones 2 ++ zebra 16) ++ (ones b ++ [false, true]) } := by
     unfold Smacro
-    simp [List.append_assoc]
+    simp
   rw [e1, e2]
   exact key
 
@@ -315,13 +313,12 @@ theorem shift_16_52 (b : ℕ) :
       { state := some stA, left := [], head := false,
         right := (ones 2 ++ zebra 16 ++ ones 70) ++ (ones b ++ [false, true]) } := by
     unfold Smacro
-    simp [show b + 70 = 70 + b from by omega, ← ones_append,
-          List.append_assoc]
+    simp [show b + 70 = 70 + b from by omega, ← ones_append]
   have e2 : (Smacro 2 52 b : Config 6) =
       { state := some stA, left := [], head := false,
         right := (ones 2 ++ zebra 52) ++ (ones b ++ [false, true]) } := by
     unfold Smacro
-    simp [List.append_assoc]
+    simp
   rw [e1, e2]
   exact key
 
@@ -402,10 +399,38 @@ theorem IsValidN_closure_R1 (n i : ℕ)
 theorem IsValidN_closure_R2 (n i : ℕ)
     (hi : 50 ≤ i)
     (hpar : n % 2 = (i + 1) % 2)
-    (hlo : 2 * 3 ^ i ≤ n + i)
     (hhi : n + i + 10 ≤ 6 * 3 ^ i) :
     IsValidN (12 * 3 ^ i - 1) := by
-  sorry
+  -- Target: n' = 12·3^i − 1 = 4·3^{i+1} − 1. Use witness j = i + 1.
+  -- Parity: n' = 4·3^{i+1} − 1, 4·3^{i+1} is even so n' is odd.
+  -- R1 window for j: [2·3^j − j − 2, 6·3^j − j − 6] with n' ≡ j (mod 2).
+  -- 2·3^j = 6·3^i, so n' = 4·3^j − 1 ≥ 2·3^j − j − 2 iff 2·3^j ≥ j + 1.
+  -- n' ≤ 6·3^j − j − 6 iff 4·3^j − 1 ≤ 6·3^j − j − 6 iff 2·3^j ≥ j + 5.
+  -- Both hold for j = i + 1 ≥ 51.
+  refine ⟨i + 1, by omega, ?_⟩
+  have h3i : 3 ^ i ≥ 1 := Nat.one_le_of_lt (Nat.one_lt_pow (by omega) (by omega))
+  have h12 : 12 * 3 ^ i ≥ 12 := by omega
+  -- Choose R1 or R2 based on parity of i+1.
+  -- n' is odd (4·3^{i+1} − 1 = even − 1). (i+1) % 2 varies.
+  -- If i even: i+1 odd, n' odd = (i+1) mod 2 → R1 matches.
+  -- If i odd: i+1 even, n' odd ≠ (i+1) mod 2. Then (i+2) mod 2 = i mod 2 = 1 = n' mod 2 → R2.
+  -- Useful Nat subtraction elimination:
+  have hsub1 : 12 * 3 ^ i - 1 + (i + 1) + 2 = 12 * 3 ^ i + i + 2 := by omega
+  have hsub2 : 12 * 3 ^ i - 1 + (i + 1) + 6 = 12 * 3 ^ i + i + 6 := by omega
+  have hsub3 : 12 * 3 ^ i - 1 + (i + 1) = 12 * 3 ^ i + i := by omega
+  have hsub4 : 12 * 3 ^ i - 1 + (i + 1) + 10 = 12 * 3 ^ i + i + 10 := by omega
+  have hpar12 : (12 * 3 ^ i) % 2 = 0 := by omega
+  by_cases hie : i % 2 = 0
+  · left
+    refine ⟨?_, ?_, ?_⟩
+    · omega  -- (12·3^i − 1) % 2 = 1 = (i+1) % 2 when i even
+    · rw [pow_succ, hsub1]; nlinarith
+    · rw [pow_succ, hsub2]; nlinarith
+  · right
+    refine ⟨?_, ?_, ?_⟩
+    · omega  -- (12·3^i − 1) % 2 = 1 = (i+2) % 2 when i odd
+    · rw [pow_succ, hsub3]; nlinarith
+    · rw [pow_succ, hsub4]; nlinarith
 
 /-- Each valid macro state advances (in finitely many TM steps) to
 another valid macro state without halting. -/
@@ -416,14 +441,11 @@ theorem ValidS_progress (c : Config 6) (hc : ValidS c) :
   · -- R1 branch
     obtain ⟨k, hk_pos, hrun⟩ := tm_R1 n i hpar hlo hhi
     refine ⟨k, hk_pos, ⟨_, IsValidN_closure_R1 n i hi hpar hlo hhi, hrun⟩, ?_⟩
-    -- non-halt: after R1 we are in an `S ·` macro state whose tape is
-    -- recognisably non-halted (state ≠ none). Will follow from the
-    -- definition of `S` once it is filled in.
-    sorry
+    rw [hrun]; simp [S, Smacro]
   · -- R2 branch
     obtain ⟨k, hk_pos, hrun⟩ := tm_R2 n i hpar hlo hhi
-    refine ⟨k, hk_pos, ⟨_, IsValidN_closure_R2 n i hi hpar hlo hhi, hrun⟩, ?_⟩
-    sorry
+    refine ⟨k, hk_pos, ⟨_, IsValidN_closure_R2 n i hi hpar hhi, hrun⟩, ?_⟩
+    rw [hrun]; simp [S, Smacro]
 
 /-- The machine reaches a valid `S`-configuration in finitely many steps.
 
