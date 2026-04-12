@@ -147,22 +147,22 @@ theorem cd_final_step (R : List Sym) :
 /-! ### 4. Inductive sweep lemmas -/
 
 /-- **Zebra traverse**: `2b` TM steps traverse `zebra(b)` on the right,
-    depositing `rev_zebra(b)` on the left. -/
-theorem zebra_traverse (b : Nat) (L T : List Sym) :
+    depositing `rev_zebra(b)` on the left. Works for arbitrary right tail `R`. -/
+theorem zebra_traverse (b : Nat) (L R : List Sym) :
     run tm { state := some stC, left := L, head := true,
-             right := zebra b ++ ((ones 4) ++ T) } (2 * b) =
+             right := zebra b ++ R } (2 * b) =
     { state := some stC, left := rev_zebra b ++ L, head := true,
-      right := (ones 4) ++ T } := by
+      right := R } := by
   induction b generalizing L with
   | zero => simp [rev_zebra, zebra]
   | succ b ih =>
     rw [show 2 * (b + 1) = 2 + 2 * b from by omega]
-    rw [show zebra (b + 1) ++ ((ones 4) ++ T) =
-            false :: true :: (zebra b ++ ((ones 4) ++ T)) from by
+    rw [show zebra (b + 1) ++ R =
+            false :: true :: (zebra b ++ R) from by
           simp [zebra_succ, List.cons_append]]
     rw [run_add]
     show run tm { state := some stC, left := true :: false :: L, head := true,
-                  right := zebra b ++ ((ones 4) ++ T) } (2 * b) = _
+                  right := zebra b ++ R } (2 * b) = _
     rw [ih (true :: false :: L)]
     congr 1
     show rev_zebra b ++ (true :: false :: L) = rev_zebra (b + 1) ++ L
@@ -203,7 +203,7 @@ theorem Inc1_core_base (b : Nat) (T : List Sym) :
     { state := some stC, left := [], head := true,
       right := zebra (3 + b) ++ T } := by
   rw [show 4 * b + 8 = 2 * b + (4 + 2 * (b + 1 + 1)) from by omega, run_add]
-  rw [zebra_traverse b (ones 2) T]
+  rw [zebra_traverse b (ones 2) ((ones 4) ++ T)]
   rw [show 4 + 2 * (b + 1 + 1) = 4 + 2 * (b + 1 + 1) from rfl, run_add]
   rw [ones_process (rev_zebra b ++ (ones 2)) T]
   rw [show (true :: false :: (rev_zebra b ++ (ones 2)) : List Sym) =
@@ -214,16 +214,88 @@ theorem Inc1_core_base (b : Nat) (T : List Sym) :
   rw [← List.append_assoc, zebra_append]
   congr 1; congr 1; omega
 
+/-- Left tape stays nonempty during Inc1 core run (needed for `run_left_append`).
+    Proof: left only grows during forward sweep, then shrinks during retreat
+    but stays nonempty until the very last step. -/
+private theorem Inc1_left_ne (b : Nat) (T : List Sym) :
+    ∀ m, m < 4 * b + 8 →
+      (run tm { state := some stC, left := (ones 2), head := true,
+                right := zebra b ++ ((ones 4) ++ T) } m).left ≠ [] := by
+  sorry -- TODO: track left through zebra_traverse + ones_process + cd_retreat phases
+
 /-- **Inc1**: `S1(1+a, b, 2+c) →* S1(a, 3+b, c)`.
-    The main atomic rule, proved by Inc1_core_base + locality. -/
+    Proved by Inc1_core_base + run_left_append. -/
 theorem Inc1 (a b c : Nat) :
     S1 (1 + a) b (2 + c) -[tm]->* S1 a (3 + b) c := by
-  sorry -- TODO: run_left_append + run_right_append from Inc1_core_base
+  have hcore := Inc1_core_base b (ones (2 * c) ++ [false, true])
+  have hne := Inc1_left_ne b (ones (2 * c) ++ [false, true])
+  have hleft := run_left_append tm
+    { state := some stC, left := (ones 2), head := true,
+      right := zebra b ++ ((ones 4) ++ (ones (2 * c) ++ [false, true])) }
+    (ones (2 * a)) (4 * b + 8) hne
+  rw [hcore] at hleft
+  simp only [List.nil_append] at hleft
+  refine ⟨4 * b + 8, ?_⟩
+  show run tm (S1 (1 + a) b (2 + c)) (4 * b + 8) = S1 a (3 + b) c
+  simp only [S1]
+  -- Normalize left: ones(2*(1+a)) = ones 2 ++ ones(2*a)
+  rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
+  -- Normalize right (LHS): ones(2*(2+c)) ++ [0,1] = ones(4) ++ (ones(2c) ++ [0,1])
+  rw [show 2 * (2 + c) = 4 + 2 * c from by omega, ← ones_append, List.append_assoc]
+  -- Normalize right (RHS): zebra(3+b) ++ ones(2c) ++ [0,1] = zebra(3+b) ++ (ones(2c) ++ [0,1])
+  rw [List.append_assoc (zebra (3 + b))]
+  exact hleft
 
 /-! ### 6. Other atomic rules (TODO) -/
 
 theorem Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := by sorry
-theorem Inc3 (a b : Nat) : S3 (1 + a) b -[tm]->* S3 a (2 + b) := by sorry
+
+/-- Boundary step for Inc3: C reads true then B reads false (from empty right),
+    adding `[1,0]` to the left. -/
+theorem Inc3_boundary (L : List Sym) :
+    run tm { state := some stC, left := L, head := true, right := [] } 2 =
+    { state := some stC, left := true :: false :: L, head := false, right := [] } := rfl
+
+/-- Inc3 core (a=0): `{C, ones 2, true, zebra(b)}` → `{C, [], true, zebra(2+b)}`
+    in `4b+6` steps. Compose: zebra_traverse(2b) + boundary(2) + cd_retreat(2b+4). -/
+theorem Inc3_core_base (b : Nat) :
+    run tm { state := some stC, left := (ones 2), head := true,
+             right := zebra b } (4 * b + 6) =
+    { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
+  rw [show 4 * b + 6 = 2 * b + (2 + 2 * (b + 1 + 1)) from by omega, run_add]
+  rw [show (zebra b : List Sym) = zebra b ++ [] from by simp]
+  rw [zebra_traverse b (ones 2) []]
+  rw [show 2 + 2 * (b + 1 + 1) = 2 + 2 * (b + 1 + 1) from rfl, run_add]
+  rw [Inc3_boundary (rev_zebra b ++ (ones 2))]
+  rw [show (true :: false :: (rev_zebra b ++ (ones 2)) : List Sym) =
+          rev_zebra (b + 1) ++ (ones 2) from by
+        simp [rev_zebra, List.cons_append]]
+  rw [cd_retreat (b + 1) []]
+  congr 1
+  show zebra (b + 1 + 1) ++ ([] : List Sym) = zebra (2 + b)
+  simp [show b + 1 + 1 = 2 + b from by omega]
+
+/-- Left nonemptiness for Inc3 core. -/
+private theorem Inc3_left_ne (b : Nat) :
+    ∀ m, m < 4 * b + 6 →
+      (run tm { state := some stC, left := (ones 2), head := true,
+                right := zebra b } m).left ≠ [] := by
+  sorry -- TODO: same structure as Inc1_left_ne
+
+/-- **Inc3**: `S3(1+a, b) →* S3(a, 2+b)`. -/
+theorem Inc3 (a b : Nat) : S3 (1 + a) b -[tm]->* S3 a (2 + b) := by
+  have hcore := Inc3_core_base b
+  have hne := Inc3_left_ne b
+  have hleft := run_left_append tm
+    { state := some stC, left := (ones 2), head := true, right := zebra b }
+    (ones (2 * a)) (4 * b + 6) hne
+  rw [hcore] at hleft
+  simp only [List.nil_append] at hleft
+  refine ⟨4 * b + 6, ?_⟩
+  show run tm (S3 (1 + a) b) (4 * b + 6) = S3 a (2 + b)
+  simp only [S3]
+  rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
+  exact hleft
 theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by sorry
 
 /-- Ov2 produces S3 with a trailing false (absorbed by Inc3). -/
