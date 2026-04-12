@@ -6,3 +6,7 @@ import BusyLean.Notation
 import BusyLean.Tactics
 import BusyLean.Nonhalt
 import BusyLean.StreamDefs
+import BusyLean.Multistep
+import BusyLean.ClosedSet
+import BusyLean.Transition
+import BusyLean.BackwardReasoning

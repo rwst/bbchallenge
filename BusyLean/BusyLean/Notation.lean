@@ -60,6 +60,26 @@ theorem listRepeat_add {α : Type} (xs : List α) (a b : Nat) :
     have h : a + 1 + b = (a + b) + 1 := by omega
     simp [h, ih, List.append_assoc]
 
+/-- Commutativity: `xs ×× n ++ xs = xs ++ xs ×× n`. -/
+theorem listRepeat_concat_comm {α : Type} (xs : List α) (n : Nat) :
+    xs ×× n ++ xs = xs ++ xs ×× n := by
+  induction n with
+  | zero => simp
+  | succ n ih => simp [List.append_assoc, ih]
+
+@[simp] theorem listRepeat_length {α : Type} (xs : List α) (k : Nat) :
+    (xs ×× k).length = k * xs.length := by
+  induction k with
+  | zero => simp
+  | succ k ih => simp [ih, Nat.succ_mul, Nat.add_comm]
+
+/-- `[e] ×× n = List.replicate n e` -/
+@[simp] theorem listRepeat_singleton {α : Type} (e : α) (k : Nat) :
+    [e] ×× k = List.replicate k e := by
+  induction k with
+  | zero => rfl
+  | succ k ih => simp [listRepeat, ih, List.replicate]
+
 /-- `[true] ×× n = ones n` -/
 @[simp] theorem singleton_true_repeat (n : Nat) : [true] ×× n = ones n := by
   induction n with
