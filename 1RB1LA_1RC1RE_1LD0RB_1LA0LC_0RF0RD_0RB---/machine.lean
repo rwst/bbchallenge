@@ -569,7 +569,173 @@ example (b : Nat) :
     { state := some stC, left := rev_zebra b, head := true, right := [true] } := by
   es tm [zebra_traverse_ev]
 
-opaque Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := sorry
+/-- **Inc2 boundary**: 20 TM steps from `{C, L, true, [1]}` produce
+    `{C, [1,0,1,0]++L, false, [1]}`. Independent of `L`.
+    Split into 4 chunks of 5 steps for kernel reduction speed. -/
+theorem Inc2_boundary (L : List Sym) :
+    run tm { state := some stC, left := L, head := true, right := [true] } 20 =
+    { state := some stC, left := (true :: false :: true :: false :: L),
+      head := false, right := [true] } := by
+  rw [show (20 : Nat) = 5 + 5 + 5 + 5 from rfl, run_add, run_add, run_add]
+  have h1 : run tm { state := some stC, left := L, head := true, right := [true] } 5 =
+            { state := some stC, left := (true :: false :: false :: true :: false :: L),
+              head := false, right := [] } := rfl
+  rw [h1]
+  have h2 : run tm ({ state := some stC, left := (true :: false :: false :: true :: false :: L), head := false, right := [] } : Config 6) 5 =
+            { state := some stA, left := L, head := false,
+              right := [true, true, true, false, true] } := rfl
+  rw [h2]
+  have h3 : run tm ({ state := some stA, left := L, head := false, right := [true, true, true, false, true] } : Config 6) 5 =
+            { state := some stD, left := (true :: L), head := true,
+              right := [true, false, false, true] } := rfl
+  rw [h3]
+  have h4 : run tm ({ state := some stD, left := (true :: L), head := true, right := [true, false, false, true] } : Config 6) 5 =
+            { state := some stC, left := (true :: false :: true :: false :: L),
+              head := false, right := [true] } := rfl
+  exact h4
+
+/-- **Inc2 core base**: `{C, ones 2, true, zebra b ++ [true]}` →
+    `{C, [], true, zebra (3+b) ++ [true]}` in `4b + 26` steps.
+    3 phases: zebra_traverse + boundary + cd_retreat. -/
+private theorem Inc2_core_base (b : Nat) :
+    run tm { state := some stC, left := ones 2, head := true,
+             right := zebra b ++ [true] } (4 * b + 26) =
+    { state := some stC, left := [], head := true,
+      right := zebra (3 + b) ++ [true] } := by
+  -- 4*b + 26 = 2*b + (20 + 2*(b + 2 + 1))
+  rw [show 4 * b + 26 = 2 * b + (20 + 2 * (b + 2 + 1)) from by omega, run_add]
+  -- Phase 1: zebra_traverse b (ones 2) [true]
+  rw [zebra_traverse b (ones 2) [true]]
+  -- After phase 1: {C, rev_zebra b ++ ones 2, true, [true]}
+  rw [run_add]
+  -- Phase 2: Inc2_boundary on left = rev_zebra b ++ ones 2
+  rw [Inc2_boundary (rev_zebra b ++ ones 2)]
+  -- After phase 2: {C, [t,f,t,f] ++ rev_zebra b ++ ones 2, false, [true]}
+  -- = {C, rev_zebra (b+2) ++ ones 2, false, [true]}
+  rw [show (true :: false :: true :: false :: (rev_zebra b ++ ones 2) : List Sym) =
+          rev_zebra (b + 2) ++ ones 2 from by
+        simp [rev_zebra, List.cons_append]]
+  -- Phase 3: cd_retreat (b+2) [true]
+  rw [cd_retreat (b + 2) [true]]
+  -- Result: {C, [], true, zebra (b+3) ++ [true]} = {C, [], true, zebra (3+b) ++ [true]}
+  congr 1
+  rw [show b + 2 + 1 = 3 + b from by omega]
+
+/-- Chunk 1 of Inc2 boundary: 5 steps from `{C, L, true, [t]}`. -/
+private theorem Inc2_b_c1 (L : List Sym) :
+    run tm { state := some stC, left := L, head := true, right := [true] } 5 =
+    { state := some stC, left := (true :: false :: false :: true :: false :: L),
+      head := false, right := [] } := rfl
+
+/-- Chunk 2 of Inc2 boundary: next 5 steps. -/
+private theorem Inc2_b_c2 (L : List Sym) :
+    run tm ({ state := some stC, left := (true :: false :: false :: true :: false :: L),
+              head := false, right := [] } : Config 6) 5 =
+    { state := some stA, left := L, head := false,
+      right := [true, true, true, false, true] } := rfl
+
+/-- Chunk 3 of Inc2 boundary: next 5 steps. -/
+private theorem Inc2_b_c3 (L : List Sym) :
+    run tm ({ state := some stA, left := L, head := false,
+              right := [true, true, true, false, true] } : Config 6) 5 =
+    { state := some stD, left := (true :: L), head := true,
+      right := [true, false, false, true] } := rfl
+
+/-- Chunk 4 of Inc2 boundary: final 5 steps. -/
+private theorem Inc2_b_c4 (L : List Sym) :
+    run tm ({ state := some stD, left := (true :: L), head := true,
+              right := [true, false, false, true] } : Config 6) 5 =
+    { state := some stC, left := (true :: false :: true :: false :: L),
+      head := false, right := [true] } := rfl
+
+/-- Helper: during the 20-step Inc2 boundary, left is nonempty at every intermediate step. -/
+private theorem Inc2_boundary_left_ne (L : List Sym) (hL : L ≠ []) :
+    ∀ k, k < 20 →
+      (run tm { state := some stC, left := L, head := true, right := [true] } k).left ≠ [] := by
+  intro k hk
+  -- Decompose k into chunk index q (0..3) and offset r (0..4)
+  by_cases h0 : k < 5
+  · -- Chunk 0: k ∈ [0,5). Left starts as L (k=0), grows in cons form (k=1..4).
+    have : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 ∨ k = 4 := by omega
+    rcases this with rfl|rfl|rfl|rfl|rfl
+    · exact hL
+    · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+    · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+    · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+    · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+  · by_cases h1 : k < 10
+    · -- Chunk 1: k ∈ [5,10). Use Inc2_b_c1 to jump to step 5.
+      rw [show k = 5 + (k - 5) from by omega, run_add, Inc2_b_c1]
+      have : k - 5 = 0 ∨ k - 5 = 1 ∨ k - 5 = 2 ∨ k - 5 = 3 ∨ k - 5 = 4 := by omega
+      rcases this with h|h|h|h|h <;> rw [h]
+      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+    · by_cases h2 : k < 15
+      · -- Chunk 2: k ∈ [10,15). Use Inc2_b_c1 + Inc2_b_c2.
+        rw [show k = 5 + 5 + (k - 10) from by omega, run_add, run_add, Inc2_b_c1, Inc2_b_c2]
+        have : k - 10 = 0 ∨ k - 10 = 1 ∨ k - 10 = 2 ∨ k - 10 = 3 ∨ k - 10 = 4 := by omega
+        rcases this with h|h|h|h|h <;> rw [h]
+        · exact hL  -- step 10: left = L
+        · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · -- Chunk 3: k ∈ [15,20). Use chunks 1, 2, 3.
+        rw [show k = 5 + 5 + 5 + (k - 15) from by omega, run_add, run_add, run_add,
+            Inc2_b_c1, Inc2_b_c2, Inc2_b_c3]
+        have : k - 15 = 0 ∨ k - 15 = 1 ∨ k - 15 = 2 ∨ k - 15 = 3 ∨ k - 15 = 4 := by omega
+        rcases this with h|h|h|h|h <;> rw [h]
+        · -- step 15: left = t :: L
+          (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · -- step 16: left = L (back to L)
+          (try simp only [run, step, listHead, listTail]); exact hL
+        · -- step 17: left = f :: L
+          (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · -- step 18: left = t :: f :: L
+          (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+        · -- step 19: left = f :: t :: f :: L
+          (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+
+/-- **Inc2 left nonemptiness**: left tape stays nonempty during the `4b+26` steps. -/
+private theorem Inc2_left_ne (b : Nat) :
+    ∀ m, m < 4 * b + 26 →
+      (run tm { state := some stC, left := ones 2, head := true,
+                right := zebra b ++ [true] } m).left ≠ [] := by
+  intro m hm
+  by_cases hm1 : m < 2 * b
+  · exact zebra_traverse_left_ne b (ones 2) [true]
+      (by simp [ones, repeatSym]) m hm1
+  · by_cases hm2 : m < 2 * b + 20
+    · rw [show m = 2 * b + (m - 2 * b) from by omega, run_add]
+      rw [zebra_traverse b (ones 2) [true]]
+      have hne : rev_zebra b ++ ones 2 ≠ ([] : List Sym) :=
+        List.append_ne_nil_of_right_ne_nil _ (by simp [ones, repeatSym])
+      exact Inc2_boundary_left_ne (rev_zebra b ++ ones 2) hne (m - 2 * b) (by omega)
+    · rw [show m = (2 * b + 20) + (m - (2 * b + 20)) from by omega, run_add, run_add]
+      rw [zebra_traverse b (ones 2) [true]]
+      rw [Inc2_boundary (rev_zebra b ++ ones 2)]
+      rw [show (true :: false :: true :: false :: (rev_zebra b ++ ones 2) : List Sym) =
+              rev_zebra (b + 2) ++ ones 2 from by
+            simp [rev_zebra, List.cons_append]]
+      exact cd_retreat_left_ne' (b + 2) [true] (m - (2 * b + 20)) (by omega)
+
+/-- **Inc2**: `S2(1+a, b) →* S2(a, 3+b)`. Proved via `Inc2_core_base` + `run_left_append`. -/
+theorem Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := by
+  have hcore := Inc2_core_base b
+  have hne := Inc2_left_ne b
+  have hleft := run_left_append tm
+    { state := some stC, left := ones 2, head := true, right := zebra b ++ [true] }
+    (ones (2 * a)) (4 * b + 26) hne
+  rw [hcore] at hleft
+  simp only [List.nil_append] at hleft
+  refine ⟨4 * b + 26, ?_⟩
+  show run tm (S2 (1 + a) b) (4 * b + 26) = S2 a (3 + b)
+  simp only [S2]
+  rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
+  exact hleft
 
 /-- **LOv1 core** (c=0): the full LOv1 computation without right tail.
     8 phases: zebra_traverse + CBED + cd_pair_retreat + CD_DA + AB + BEDA + BED + cd_final.
