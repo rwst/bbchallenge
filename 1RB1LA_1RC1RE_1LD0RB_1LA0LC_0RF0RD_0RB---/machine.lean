@@ -323,7 +323,6 @@ theorem Inc1 (a b c : Nat) :
 /-! ### 6. Other atomic rules — proved after LOv1 section below -/
 
 -- Inc2 proved after shift rules are defined (see section 6b below)
-opaque Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := sorry
 
 /-- Boundary step for Inc3: C reads true then B reads false (from empty right),
     adding `[1,0]` to the left. -/
@@ -516,6 +515,18 @@ theorem cd_retreat_ev_left (k : Nat) (L R : List Sym) :
   simp only [List.nil_append] at hleft
   exact ⟨2 * (k + 1), hleft⟩
 
+/-- Variant of `cd_retreat_ev_left` with the cons form expected after `Meta.reduce`. -/
+theorem cd_retreat_ev_left_cons (k : Nat) (L R : List Sym) :
+    ({ state := some stC, left := rev_zebra k ++ (true :: true :: L), head := false,
+       right := R } : Config 6) -[tm]->*
+    { state := some stC, left := L, head := true, right := zebra (k + 1) ++ R } := by
+  have h := cd_retreat_ev_left k L R
+  have heq : (rev_zebra k ++ (ones 2) ++ L : List Sym) = rev_zebra k ++ (true :: true :: L) := by
+    show rev_zebra k ++ [true, true] ++ L = rev_zebra k ++ (true :: true :: L)
+    rw [List.append_assoc]; rfl
+  rw [← heq]
+  exact h
+
 theorem BEDA_traverse_ev (n : Nat) (L R : List Sym) :
     ({ state := some stB, left := L, head := true,
        right := true :: (zebra n ++ R) } : Config 6) -[tm]->*
@@ -543,6 +554,22 @@ theorem A_shift_ev (k : Nat) (L R : List Sym) :
     { state := some stA, left := listTail L, head := listHead L false,
       right := ones (k + 1) ++ R } :=
   ⟨k + 1, A_shift k L R⟩
+
+/-! ### 6b. Atomic rules proved via `es` tactic
+
+The es tactic uses Meta.reduce to take concrete TM steps in MetaM, then applies
+shift rules to absorb sweep phases. Currently works for simple single-shift cases;
+Inc2 etc. need additional algebraic normalization (e.g., `ones (2*(1+m)) = ones 2 ++ ones (2*m)`)
+which is not yet automated. -/
+
+-- Test: simplest case — apply one shift rule, no concrete stepping needed.
+example (b : Nat) :
+    ({ state := some stC, left := [], head := true,
+       right := zebra b ++ [true] } : Config 6) -[tm]->*
+    { state := some stC, left := rev_zebra b, head := true, right := [true] } := by
+  es tm [zebra_traverse_ev]
+
+opaque Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := sorry
 
 /-- **LOv1 core** (c=0): the full LOv1 computation without right tail.
     8 phases: zebra_traverse + CBED + cd_pair_retreat + CD_DA + AB + BEDA + BED + cd_final.
@@ -601,12 +628,11 @@ theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by
 private theorem Ov2_raw (b : Nat) :
     (S2 0 b : Config 6) -[tm]->*
     { state := some stC, left := ones (4 + 2 * b), head := true,
-      right := [false, true, false] } := by sorry -- proved below via es
+      right := [false, true, false] } := by sorry
 
 theorem Inc3_absorb (a b : Nat) :
     ({ state := some stC, left := ones (2 * (1 + a)), head := true,
-       right := zebra b ++ [false] } : Config 6) -[tm]->* S3 a (2 + b) := by
-  sorry
+       right := zebra b ++ [false] } : Config 6) -[tm]->* S3 a (2 + b) := by sorry
 
 opaque Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := sorry
 
