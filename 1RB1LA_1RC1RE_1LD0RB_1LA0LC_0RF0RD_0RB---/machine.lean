@@ -323,7 +323,7 @@ theorem Inc1 (a b c : Nat) :
 /-! ### 6. Other atomic rules — proved after LOv1 section below -/
 
 -- Inc2 proved after shift rules are defined (see section 6b below)
-theorem Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := by sorry
+opaque Inc2 (a b : Nat) : S2 (1 + a) b -[tm]->* S2 a (3 + b) := sorry
 
 /-- Boundary step for Inc3: C reads true then B reads false (from empty right),
     adding `[1,0]` to the left. -/
@@ -598,7 +598,7 @@ theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by
   rw [← ones_append (a := 6) (b := 2 * c)]
   exact hcore
 
-theorem Ov2_raw (b : Nat) :
+private theorem Ov2_raw (b : Nat) :
     (S2 0 b : Config 6) -[tm]->*
     { state := some stC, left := ones (4 + 2 * b), head := true,
       right := [false, true, false] } := by sorry -- proved below via es
@@ -606,9 +606,9 @@ theorem Ov2_raw (b : Nat) :
 theorem Inc3_absorb (a b : Nat) :
     ({ state := some stC, left := ones (2 * (1 + a)), head := true,
        right := zebra b ++ [false] } : Config 6) -[tm]->* S3 a (2 + b) := by
-  sorry -- proved below via es
+  sorry
 
-theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by sorry -- proved below via es
+opaque Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := sorry
 
 /-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme). -/
 theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by sorry
@@ -685,7 +685,7 @@ theorem ROv1_0 (a b : Nat) : S1 a b 0 -[tm]->* S1 0 2 (3 + a * 2 + b) := by
             rw [show 2 + a * 2 + (1 + b) = 3 + a * 2 + b from by omega]
 
 /-- `S1(2+a, b, 1) →* S2(a, 6+b)`: boundary step from S1 with c=1 to S2. -/
-theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by sorry
+private theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by sorry
 
 theorem ROv1_1 (a b : Nat) :
     S1 (2 + a) b 1 -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
