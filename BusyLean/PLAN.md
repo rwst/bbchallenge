@@ -13,9 +13,10 @@
 - ✅ **Phase 4** (polish): four-level `congr 1 / omega` cascade in `esFinish` handles `zebra (b+3) = zebra (3+b)` style mismatches. Tactics documented in `BusyLean/CLAUDE.md`. Still open: `es?` trace mode, `register_option` tuning knobs.
 
 Validated test cases (in `1RB1LA_..../machine.lean`):
-- `Inc2_core_base_ev` — `{C, ones 2, t, zebra b ++ [t]} →* {C, [], t, zebra (3+b) ++ [t]}` via `es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]`. Replaces a ~30-line manual phase decomposition.
-- `Inc3_core_base_ev` — `{C, ones 2, t, zebra b} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev_nil, Inc3_boundary_ev, cd_retreat_ev_nil]`. Uses the `_nil` variants for `right := zebra b` (no trailing `++ R`).
-- `Inc3_absorb_core_base_ev` — `{C, ones 2, t, zebra b ++ [false]} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev, Inc3_absorb_boundary_ev, cd_retreat_ev_nil]`.
+- `Inc2_core_base_ev` — `{C, ones 2, t, zebra b ++ [t]} →* {C, [], t, zebra (3+b) ++ [t]}` via `es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]`.
+- `Inc3_core_base_ev` — `{C, ones 2, t, zebra b} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev, Inc3_boundary_ev, cd_retreat_ev]`. **No `_nil` variants needed** thanks to Phase 1 Stage 1.
+- `Inc3_absorb_core_base_ev` — `{C, ones 2, t, zebra b ++ [false]} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev, Inc3_absorb_boundary_ev, cd_retreat_ev]`.
+- **`Inc1_core_base_ev`** — `{C, ones 2, t, zebra b ++ (ones 4 ++ T)} →* {C, [], t, zebra (3+b) ++ T}` via `es tm [zebra_traverse_ev, ones_process_ev, cd_retreat_ev_keep_ones, cd_retreat_ev]`. **Most demanding test**: parameterized right tail `T`, requires Phase 1 Stages 1+3 to handle the `ones 4 ++ T` boundary AND `zebra (b+2) ++ zebra 1 → zebra (b+3)` post-shift merging in `esFinish`.
 - `esx tm []` proves the trivial F-state halt.
 
 **Lesson learned (informs future Phase 1 work):** Lean's `isDefEq` does not bridge `xs ++ [] = xs`, so shift rules need both `_ev` and `_ev_nil` variants when the right tape can be empty. A future Phase 1 implementation should automate this by retrying unification with each `List Sym` metavariable assigned to `[]` after the direct attempt fails — matching BusyCoq's "context size 0" search.

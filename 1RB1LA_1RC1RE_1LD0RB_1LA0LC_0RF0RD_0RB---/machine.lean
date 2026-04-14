@@ -718,11 +718,15 @@ theorem Inc3_core_base_ev (b : Nat) :
     { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
   es tm [zebra_traverse_ev, Inc3_boundary_ev, cd_retreat_ev]
 
--- Inc1_core_base_ev via es is blocked: after zebra_traverse + ones_process
--- the goal reaches `{C, rev_zebra (b+2), t, T}` where T is unknown, requiring
--- a shift rule that processes `rev_zebra` under state C with head=t. No such
--- shift exists in the current rule set. (Phase 1 tape_unify is fine; the
--- blocker is missing shift lemmas, not the tactic.)
+/-- **Inc1 core base, EvStep version** — proved in one `es` line, demonstrating
+    that with the existing shifts plus Phase 1 (Stages 1+3), `es` can handle
+    the variable trailing context `T`. Uses `cd_retreat_ev_keep_ones` to absorb
+    the `ones (4+2c)` boundary processing. -/
+theorem Inc1_core_base_ev (b : Nat) (T : List Sym) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b ++ (ones 4 ++ T) } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true, right := zebra (3 + b) ++ T } := by
+  es tm [zebra_traverse_ev, ones_process_ev, cd_retreat_ev_keep_ones, cd_retreat_ev]
 
 /-- **Inc2 core base**: `{C, ones 2, true, zebra b ++ [true]}` →
     `{C, [], true, zebra (3+b) ++ [true]}` in `4b + 26` steps.

@@ -48,13 +48,23 @@ private def esFinish : TacticM Bool := do
   -- Fast path 3: 0-step + field-wise congr with omega for Nat index equalities.
   -- `unfold Multistep run` reduces `run tm A 0 = B` to `A = B`, enabling `congr 1`.
   -- The cascade handles up to four nested levels: Config → List → atom → Nat.
+  --
+  -- The simp call uses `← List.append_assoc` (LEFT-associate) so that adjacent
+  -- atom-runs become directly composable, then `ones_append`/`zebra_append`/etc
+  -- merge them. These merges are NOT in `tape_norm` (which preserves splits),
+  -- so we add them explicitly here.
   let saved3 ← saveState
   let ok3 ← try
     evalTactic (← `(tactic|
       (refine ⟨0, ?_⟩
        unfold Multistep run
-       try simp only [tape_norm, List.append_nil, List.nil_append,
-                      List.append_assoc, List.cons_append]
+       -- Note: do NOT include tape_norm here. tape_norm has `List.append_assoc`
+       -- (right-associating); combining with `← List.append_assoc` (left-associating)
+       -- causes simp to loop.
+       try simp only [List.append_nil, List.nil_append,
+                      ← List.append_assoc, List.cons_append,
+                      BusyLean.ones_append, BusyLean.zeros_append,
+                      BusyLean.zebra_append]
        first
          | rfl
          | (congr 1 <;>
