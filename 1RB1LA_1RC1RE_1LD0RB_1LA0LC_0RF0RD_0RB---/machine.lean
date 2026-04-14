@@ -1182,8 +1182,126 @@ theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by
   rw [ones_append, ones_append]
   rw [show (1 + (2 * b + 1) + 2 : Nat) = 4 + 2 * b from by omega]
 
+/-! ### Phase decomposition for `ROv1_1_0_halts`
+
+We decompose the halting trajectory of `S1(0, b, 1)` into:
+  1. **zebra_traverse(b)** — `2b` steps. Uses the existing lemma.
+  2. **`phase_a_boundary`** — fixed `22` steps that process the right boundary
+     `[t, t, f, t]` regardless of the underlying left tape `L`. Built via
+     `run_left_append` from a 21-step concrete base.
+  3. **`phase_b`** (sorry'd for now) — the remaining `42 + 6b` steps that
+     process the left's `rev_zebra b` and reach a halted state.
+-/
+
+/-- 21-step base case for `phase_a_boundary`: from `{B, [f], t, [t, f, t]}`
+    reach `{A, [], f, ones 7 ++ [f, t]}`. Proved by `decide`. -/
+private theorem phase_a_base :
+    run tm ({state := some stB, left := [false], head := true,
+             right := [true, false, true]} : Config 6) 21 =
+    { state := some stA, left := [], head := false,
+      right := [true, true, true, true, true, true, true, false, true] } := by
+  decide
+
+/-- Left stays non-empty during the 21-step `phase_a_base` trajectory. Proved
+    by `decide` (Lean's `Nat.decBallLT` handles bounded `∀ m, m < 21 → ...`
+    decidably for each concrete-config step result). -/
+private theorem phase_a_base_left_ne :
+    ∀ m, m < 21 →
+      (run tm ({state := some stB, left := [false], head := true,
+                right := [true, false, true]} : Config 6) m).left ≠ [] := by
+  decide
+
+/-- Lifted version of `phase_a_base` with arbitrary tail `L` appended to the left. -/
+private theorem phase_a_lift (L : List Sym) :
+    run tm ({state := some stB, left := [false] ++ L, head := true,
+             right := [true, false, true]} : Config 6) 21 =
+    { state := some stA, left := L, head := false,
+      right := [true, true, true, true, true, true, true, false, true] } := by
+  have h := run_left_append tm
+    ({state := some stB, left := [false], head := true,
+      right := [true, false, true]} : Config 6) L 21 phase_a_base_left_ne
+  rw [phase_a_base] at h
+  simp only [List.nil_append] at h
+  exact h
+
+/-- First step of `phase_a_boundary`: `{C, L, t, [t,t,f,t]}` advances to
+    `{B, f::L, t, [t,f,t]}` in one step. Generic over `L`. -/
+private theorem phase_a_step1 (L : List Sym) :
+    step tm ({state := some stC, left := L, head := true,
+              right := [true, true, false, true]} : Config 6) =
+    { state := some stB, left := [false] ++ L, head := true, right := [true, false, true] } :=
+  rfl
+
+/-- **Phase A boundary**: 22 fixed steps from `{C, L, t, [t, t, f, t]}` to
+    `{A, L, f, ones 7 ++ [f, t]}`, generic over `L`. Combines `phase_a_step1`
+    (1 step) + `phase_a_lift` (21 steps via `run_left_append`). -/
+theorem phase_a_boundary (L : List Sym) :
+    run tm ({state := some stC, left := L, head := true,
+             right := [true, true, false, true]} : Config 6) 22 =
+    { state := some stA, left := L, head := false,
+      right := [true, true, true, true, true, true, true, false, true] } := by
+  rw [show (22 : Nat) = 1 + 21 from rfl, run_add, run_one tm]
+  rw [phase_a_step1 L]
+  exact phase_a_lift L
+
+/-- Combine `zebra_traverse` and `phase_a_boundary` into the full Phase A
+    of ROv1: `(2b + 22)` steps from `S1(0, b, 1)` to
+    `{A, rev_zebra b, f, ones 7 ++ [f, t]}`. -/
+theorem ROv1_phase_a (b : Nat) :
+    run tm (S1 0 b 1) (2 * b + 22) =
+    { state := some stA, left := rev_zebra b, head := false,
+      right := [true, true, true, true, true, true, true, false, true] } := by
+  rw [show (S1 0 b 1) =
+        ({state := some stC, left := [], head := true,
+          right := zebra b ++ [true, true, false, true]} : Config 6) from by
+        simp [S1, ones, repeatSym]]
+  rw [run_add]
+  rw [zebra_traverse b [] [true, true, false, true]]
+  simp only [List.append_nil]
+  exact phase_a_boundary (rev_zebra b)
+
+/-- **Phase B step 1**: 6 fixed steps from `{A, L, f, ones 7 ++ [f, t]}`
+    (the Phase A end state) to `{C, L, t, [f, t, f, t, t, t, t, f, t]}`.
+    Generic over `L`. The 6 steps include both R and L direction operations,
+    but all `listHead` reads come from cells written during the trajectory,
+    so `L` is preserved at the bottom. Provable by `:= rfl`. -/
+theorem phase_b_step1 (L : List Sym) :
+    run tm ({state := some stA, left := L, head := false,
+             right := [true, true, true, true, true, true, true, false, true]} : Config 6) 6 =
+    { state := some stC, left := L, head := true,
+      right := [false, true, false, true, true, true, true, false, true] } := rfl
+
+/-- **Phase B step 2**: 14 more fixed steps from `{C, L, t, [f, t, f, t, t, t, t, f, t]}`
+    (the result of `phase_b_step1`) to `{C, L, f, [f, t, f, t, f, t, f, f, t]}`.
+    Generic over `L`. Proved by splitting into two sub-chunks of 5 and 9 steps
+    (both `:= rfl` chunks) to avoid kernel timeouts on large single-step runs. -/
+theorem phase_b_step2 (L : List Sym) :
+    run tm ({state := some stC, left := L, head := true,
+             right := [false, true, false, true, true, true, true, false, true]} : Config 6) 14 =
+    { state := some stC, left := L, head := false,
+      right := [false, true, false, true, false, true, false, false, true] } := by
+  rw [show (14 : Nat) = 5 + 9 from rfl, run_add]
+  have h1 : run tm ({state := some stC, left := L, head := true, right := [false, true, false, true, true, true, true, false, true]} : Config 6) 5 = ({state := some stB, left := (false :: true :: false :: true :: false :: L), head := true, right := [true, true, false, true]} : Config 6) := rfl
+  rw [h1]
+  have h2 : run tm ({state := some stB, left := (false :: true :: false :: true :: false :: L), head := true, right := [true, true, false, true]} : Config 6) 9 = ({state := some stC, left := L, head := false, right := [false, true, false, true, false, true, false, false, true]} : Config 6) := rfl
+  exact h2
+
+/-- Combined Phase A + Phase B steps 1 and 2: `2b + 42` steps from `S1(0, b, 1)`
+    to `{C, rev_zebra b, f, [f, t, f, t, f, t, f, f, t]}`. This is the longest
+    L-preserving sub-trajectory of ROv1; after this point the trajectory
+    diverges based on the specific value of `b` because the subsequent
+    L-direction steps would need to read into `rev_zebra b`. -/
+theorem ROv1_pre_divergence (b : Nat) :
+    run tm (S1 0 b 1) (2 * b + 42) =
+    { state := some stC, left := rev_zebra b, head := false,
+      right := [false, true, false, true, false, true, false, false, true] } := by
+  rw [show 2 * b + 42 = (2 * b + 22) + (6 + 14) from by omega, run_add, ROv1_phase_a]
+  rw [run_add, phase_b_step1 (rev_zebra b)]
+  exact phase_b_step2 (rev_zebra b)
+
 /-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme).
-    TODO: port via `esx` once the E-state zebra sweep shift is added. -/
+    Phase A is fully proved (above); Phase B (the remaining `42 + 6b` steps to
+    halt, which processes the left's `rev_zebra b`) is still TODO. -/
 theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by sorry
 
 /-! ### 7. Iterated versions -/
