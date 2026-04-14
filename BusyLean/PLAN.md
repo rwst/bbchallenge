@@ -4,14 +4,21 @@
 
 ## Status (2026-04-14)
 
+- ✅ **Phase 1** (tape-aware shift matching) — **DONE** in two stages, see `BusyLean/PLAN-tape-unify.md`:
+  - **Stage 1 (trailing-empty fallback)**: `esTryShift` retries with each `List Sym` parameter assigned to `[]`, strips `xs ++ []` via `Meta.transform` recognizing both `List.append` (3 args) and `HAppend.hAppend` (6 args), then uses `replaceTargetEq` to coerce the goal type to match the unstripped shift source. Eliminates `_nil` shift variants. Verified on `Inc3_core_base_ev`.
+  - **Stage 3 (`tape_split` simp set)**: a separate `BusyLean/TapeSplit.lean` module with context-aware splitting lemmas like `ones_4_peel_2_in : L ++ ones (4 + k) = (L ++ ones 2) ++ ones (2 + k)` (left-associated to match shift sources). Wired in `esTryShift` as a Stage 3 fallback after Stages 0+1 fail; runs `simp only [tape_split]` followed by `simp only [tape_norm]` to re-normalize. Saved/restored around the Stage 3 attempts.
+  - Stage 2 (position-aware split) and Stage 4 (brute-force) deferred — not needed for current sorries.
 - ✅ **Phase 2** (tape normalization): `BusyLean/Attr.lean` registers the `tape_norm` simp attribute; `BusyLean/TapeNorm.lean` provides cons-fold lemmas for `ones`, `zeros`, `zebra` plus arithmetic simp. `esNormalize` uses `simp only [tape_norm]`. Machine files extend the set with atoms like `rev_zebra`.
 - ✅ **Phase 3** (`esx` for halts goals): `esx tm [shifts]` introduced via `halts_of_evstep_halted` + `esxTryHalt` loop. Closes `∃ k, (run tm A k).halted` by detecting reduced `state := none` configs and unifying the existential target with `EvStep.refl`. Verified on a trivial F-state halt.
-- ⏸ **Phase 1** (tape-aware shift matching): **deferred**. Current `esTryShift` uses fresh-metavariable `isDefEq`, which handles the direct-atom case (`rev_zebra (b+2) ++ ones 2` against `rev_zebra ?k ++ ones 2`). For multi-atom context (`rev_zebra k ++ ones 2 ++ L`), provide parameterized shift variants (e.g. `cd_retreat_ev_left`) instead of implementing full `tape_unify`. Re-enable if/when the manual workaround proves too tedious.
 - ✅ **Phase 4** (polish): four-level `congr 1 / omega` cascade in `esFinish` handles `zebra (b+3) = zebra (3+b)` style mismatches. Tactics documented in `BusyLean/CLAUDE.md`. Still open: `es?` trace mode, `register_option` tuning knobs.
 
-Validated test cases (in `1RB1LA_..../machine.lean`, sections near line 620):
-- `es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]` proves the Inc2 core shape with both `zebra (b+3)` and `zebra (3+b)` targets.
+Validated test cases (in `1RB1LA_..../machine.lean`):
+- `Inc2_core_base_ev` — `{C, ones 2, t, zebra b ++ [t]} →* {C, [], t, zebra (3+b) ++ [t]}` via `es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]`. Replaces a ~30-line manual phase decomposition.
+- `Inc3_core_base_ev` — `{C, ones 2, t, zebra b} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev_nil, Inc3_boundary_ev, cd_retreat_ev_nil]`. Uses the `_nil` variants for `right := zebra b` (no trailing `++ R`).
+- `Inc3_absorb_core_base_ev` — `{C, ones 2, t, zebra b ++ [false]} →* {C, [], t, zebra (2+b)}` via `es tm [zebra_traverse_ev, Inc3_absorb_boundary_ev, cd_retreat_ev_nil]`.
 - `esx tm []` proves the trivial F-state halt.
+
+**Lesson learned (informs future Phase 1 work):** Lean's `isDefEq` does not bridge `xs ++ [] = xs`, so shift rules need both `_ev` and `_ev_nil` variants when the right tape can be empty. A future Phase 1 implementation should automate this by retrying unification with each `List Sym` metavariable assigned to `[]` after the direct attempt fails — matching BusyCoq's "context size 0" search.
 
 **Driving observation**: BusyCoq's `es` tactic is the difference between a **3-line proof** and a **150-line manual phase decomposition**. The current Lean `es` (in `EsTactic.lean`) handles single-shift cases but cannot handle multi-cycle macros. Closing this gap is the highest-leverage tactic work in BusyLean.
 

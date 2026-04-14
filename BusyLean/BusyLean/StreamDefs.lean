@@ -226,7 +226,7 @@ theorem listToSide_tail (l : List Sym) :
 
 @[simp] theorem listToSide_zeros (p : Nat) : listToSide (zeros p) = Side.blank := by
   ext n; simp [listToSide, Side.blank, zeros]
-  simp [List.getD, List.getElem?_replicate]
+  simp [List.getElem?_replicate]
   split <;> rfl
 
 @[simp] theorem listToSide_ones (n : Nat) :

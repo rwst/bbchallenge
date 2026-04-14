@@ -492,6 +492,19 @@ theorem zebra_traverse_ev (b : Nat) (L R : List Sym) :
     { state := some stC, left := rev_zebra b ++ L, head := true, right := R } :=
   ⟨2 * b, zebra_traverse b L R⟩
 
+/-- `nil`-trailing variant of `zebra_traverse_ev`: matches goals whose right
+    tape is exactly `zebra b` (no `++ R`).
+
+    Obsolete since `esTryShift` Stage 1 (Phase 1) automatically retries with
+    `?R := []`. Kept for reference. -/
+theorem zebra_traverse_ev_nil (b : Nat) (L : List Sym) :
+    ({ state := some stC, left := L, head := true,
+       right := zebra b } : Config 6) -[tm]->*
+    { state := some stC, left := rev_zebra b ++ L, head := true, right := [] } := by
+  have h := zebra_traverse_ev b L []
+  simp only [List.append_nil] at h
+  exact h
+
 theorem cd_pair_retreat_ev (k : Nat) (R : List Sym) :
     ({ state := some stC, left := rev_zebra k, head := false,
        right := R } : Config 6) -[tm]->*
@@ -533,6 +546,19 @@ theorem cd_retreat_ev_left_cons (k : Nat) (L R : List Sym) :
   have heq : (rev_zebra k ++ (ones 2) ++ L : List Sym) = rev_zebra k ++ (true :: true :: L) := by
     show rev_zebra k ++ [true, true] ++ L = rev_zebra k ++ (true :: true :: L)
     rw [List.append_assoc]; rfl
+  rw [← heq]
+  exact h
+
+/-- Generalized `cd_retreat`: handles `rev_zebra k ++ ones (2 + m)` on the left,
+    leaving `ones m` on the left after the retreat. This avoids needing tape
+    splitting in the `es` tactic when the goal has merged-ones form. -/
+theorem cd_retreat_ev_keep_ones (k m : Nat) (R : List Sym) :
+    ({ state := some stC, left := rev_zebra k ++ ones (2 + m), head := false,
+       right := R } : Config 6) -[tm]->*
+    { state := some stC, left := ones m, head := true, right := zebra (k + 1) ++ R } := by
+  have h := cd_retreat_ev_left k (ones m) R
+  have heq : (rev_zebra k ++ ones 2 ++ ones m : List Sym) = rev_zebra k ++ ones (2 + m) := by
+    rw [List.append_assoc, ones_append]
   rw [← heq]
   exact h
 
@@ -658,6 +684,46 @@ example : ∃ k, (run tm ({state := some stF, left := [], head := true,
                          right := []} : Config 6) k).halted := by
   esx tm []
 
+/-- **Inc2 core base, EvStep version** — proved in one `es` line, replacing
+    the ~30-line manual phase decomposition of `Inc2_core_base` below. -/
+theorem Inc2_core_base_ev (b : Nat) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b ++ [true] } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true,
+      right := zebra (3 + b) ++ [true] } := by
+  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
+
+/-- EvStep variant of `Inc3_boundary` for the `right := []` case. -/
+theorem Inc3_boundary_ev (L : List Sym) :
+    ({ state := some stC, left := L, head := true, right := [] } : Config 6) -[tm]->*
+    { state := some stC, left := true :: false :: L, head := false, right := [] } :=
+  ⟨2, Inc3_boundary L⟩
+
+/-- `nil`-trailing variant of `cd_retreat_ev`: ends with `right := zebra (k+1)`
+    rather than `right := zebra (k+1) ++ R`. -/
+theorem cd_retreat_ev_nil (k : Nat) :
+    ({ state := some stC, left := rev_zebra k ++ ones 2, head := false,
+       right := [] } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true, right := zebra (k + 1) } := by
+  have h := cd_retreat_ev k []
+  simp only [List.append_nil] at h
+  exact h
+
+/-- **Inc3 core base, EvStep version** — proved in one `es` line.
+    Uses standard `_ev` shifts (no `_nil` variants) thanks to Stage 1 of
+    `esTryShift` which retries with `List Sym` parameters assigned to `[]`. -/
+theorem Inc3_core_base_ev (b : Nat) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
+  es tm [zebra_traverse_ev, Inc3_boundary_ev, cd_retreat_ev]
+
+-- Inc1_core_base_ev via es is blocked: after zebra_traverse + ones_process
+-- the goal reaches `{C, rev_zebra (b+2), t, T}` where T is unknown, requiring
+-- a shift rule that processes `rev_zebra` under state C with head=t. No such
+-- shift exists in the current rule set. (Phase 1 tape_unify is fine; the
+-- blocker is missing shift lemmas, not the tactic.)
+
 /-- **Inc2 core base**: `{C, ones 2, true, zebra b ++ [true]}` →
     `{C, [], true, zebra (3+b) ++ [true]}` in `4b + 26` steps.
     3 phases: zebra_traverse + boundary + cd_retreat. -/
@@ -732,7 +798,7 @@ private theorem Inc2_boundary_left_ne (L : List Sym) (hL : L ≠ []) :
       rw [show k = 5 + (k - 5) from by omega, run_add, Inc2_b_c1]
       have : k - 5 = 0 ∨ k - 5 = 1 ∨ k - 5 = 2 ∨ k - 5 = 3 ∨ k - 5 = 4 := by omega
       rcases this with h|h|h|h|h <;> rw [h]
-      · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+      · (try simp only [run]); exact List.cons_ne_nil _ _
       · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
       · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
       · (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
@@ -753,7 +819,7 @@ private theorem Inc2_boundary_left_ne (L : List Sym) (hL : L ≠ []) :
         have : k - 15 = 0 ∨ k - 15 = 1 ∨ k - 15 = 2 ∨ k - 15 = 3 ∨ k - 15 = 4 := by omega
         rcases this with h|h|h|h|h <;> rw [h]
         · -- step 15: left = t :: L
-          (try simp only [run, step, listHead, listTail]); exact List.cons_ne_nil _ _
+          (try simp only [run]); exact List.cons_ne_nil _ _
         · -- step 16: left = L (back to L)
           (try simp only [run, step, listHead, listTail]); exact hL
         · -- step 17: left = f :: L
@@ -886,7 +952,7 @@ private theorem Ov2_raw (b : Nat) :
   rw [Inc2_boundary (rev_zebra b)]
   -- After phase 1: left = [t,f,t,f] ++ rev_zebra b = rev_zebra (b+2)
   rw [show (true :: false :: true :: false :: rev_zebra b : List Sym) = rev_zebra (b + 2) from by
-        simp [rev_zebra, List.cons_append]]
+        simp [rev_zebra]]
   rw [run_add]
   -- Phase 2: cd_pair_retreat (b+2) [true]
   rw [cd_pair_retreat (b + 2) [true]]
@@ -926,6 +992,19 @@ private theorem Ov2_raw (b : Nat) :
 theorem Inc3_absorb_boundary (L : List Sym) :
     run tm { state := some stC, left := L, head := true, right := [false] } 2 =
     { state := some stC, left := true :: false :: L, head := false, right := [] } := rfl
+
+/-- EvStep variant of `Inc3_absorb_boundary`. -/
+theorem Inc3_absorb_boundary_ev (L : List Sym) :
+    ({ state := some stC, left := L, head := true, right := [false] } : Config 6) -[tm]->*
+    { state := some stC, left := true :: false :: L, head := false, right := [] } :=
+  ⟨2, Inc3_absorb_boundary L⟩
+
+/-- **Inc3_absorb core base, EvStep version** — proved in one `es` line. -/
+theorem Inc3_absorb_core_base_ev (b : Nat) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b ++ [false] } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
+  es tm [zebra_traverse_ev, Inc3_absorb_boundary_ev, cd_retreat_ev]
 
 /-- Inc3_absorb core (a=0): `{C, ones 2, true, zebra b ++ [false]}` → `{C, [], true, zebra (2+b)}`
     in `4b + 6` steps. Same count as Inc3, with [false] absorbed by the boundary. -/
@@ -1095,7 +1174,7 @@ theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by
       show ([true, true, false, true] : List Sym) = ones 2 ++ [false, true] from rfl]
   rw [show (zebra 2 ++ ones 1 ++ (ones (2 * b + 1) ++ (ones 2 ++ [false, true])) : List Sym) =
           zebra 2 ++ (ones 1 ++ ones (2 * b + 1) ++ ones 2) ++ [false, true] from by
-        simp [List.append_assoc]]
+        simp]
   rw [ones_append, ones_append]
   rw [show (1 + (2 * b + 1) + 2 : Nat) = 4 + 2 * b from by omega]
 
@@ -1199,7 +1278,12 @@ theorem ROv1_0 (a b : Nat) : S1 a b 0 -[tm]->* S1 0 2 (3 + a * 2 + b) := by
       _ -[tm]->* S1 0 2 (3 + a * 2 + b) := by
             rw [show 2 + a * 2 + (1 + b) = 3 + a * 2 + b from by omega]
 
-/-- `S1(2+a, b, 1) →* S2(a, 6+b)`: boundary step from S1 with c=1 to S2. -/
+/-- `S1(2+a, b, 1) →* S2(a, 6+b)`: boundary step from S1 with c=1 to S2.
+    Requires shift rules for `right := ones 2 ++ [f, t]` boundary processing
+    that are not yet defined. With Phase 1 Stages 1 and 3 of `es` implemented,
+    `tape_split` can peel `ones (4+2a)` into `ones 2 ++ ones (2+2a)`, but the
+    es loop still gets stuck on the missing boundary shift. TODO: add the
+    boundary shift rules and prove via `es`. -/
 private theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by sorry
 
 theorem ROv1_1 (a b : Nat) :
@@ -1302,47 +1386,69 @@ def ValidS (n i : Nat) : Prop :=
   ((n % 2 = i % 2 ∧ 3 ^ i * 2 - i - 2 ≤ n ∧ n ≤ 3 ^ i * 6 - i - 6) ∨
    (n % 2 = (i + 1) % 2 ∧ 3 ^ i * 2 - i ≤ n ∧ n ≤ 3 ^ i * 6 - i - 10))
 
-/-- Every valid state progresses to another valid state. Uses BigStep0/BigStep1 + pomme_main. -/
+/-- Every valid state progresses (in a positive number of TM steps) to another
+    valid state. Uses BigStep0/BigStep1 + pomme_main.
+
+    Returns an explicit step count `k > 0` rather than an `EvStep` existential
+    so callers (notably `tm_not_halts`) can chain via `run_add` without losing
+    the strict-progress witness. -/
 theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
-    ∃ n' i', ValidS n' i' ∧ S' n -[tm]->* S' n' := by
+    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
   sorry -- case split on R1 vs R2; closure uses pomme_main
 
-/-- S'(18) eventually reaches a valid state (bootstrap through levels 2..49). -/
-theorem bootstrap : ∃ n i, ValidS n i ∧ S' 18 -[tm]->* S' n := by
+/-- S'(18) eventually reaches a valid state (bootstrap through levels 2..49).
+    Returns an explicit step count so `tm_not_halts` can lift via `run_add`. -/
+theorem bootstrap : ∃ n i k, ValidS n i ∧ run tm (S' 18) k = S' n := by
   sorry -- finite computation through levels 2..49
 
 /-- S'(n) has state = some stC ≠ none. -/
 theorem S'_not_halted (n : Nat) : ¬ (S' n).halted := by
   simp [S', S1, Config.halted]
 
-/-- **Main theorem**: the TM never halts. -/
+/-- **Main theorem**: the TM never halts.
+
+    Proof structure:
+    1. `bootstrap` gives an explicit step count `k_init` such that
+       `S' 18 →{k_init} S' n_init` with `n_init` valid.
+    2. `init` plus `run_add` lifts to
+       `initConfig 6 →{715 + k_init} S' n_init`.
+    3. `nonhalt_of_progress` (using `ValidS_progress` + the `Q` predicate)
+       shows `S' n_init` never halts.
+    4. For any step `m` of `initConfig 6`:
+       - If `m ≤ 715 + k_init`: the prefix is alive because its endpoint
+         `S' n_init` is alive — apply `run_alive_of_later`.
+       - If `m > 715 + k_init`: split off the prefix via `run_add` and
+         appeal to step 3. -/
 theorem tm_not_halts : ∀ m, ¬ (run tm (initConfig 6) m).halted := by
-  -- Step 1: reach S'(18) at step 715
-  have hpre : ∀ j ≤ 715, (run tm (initConfig 6) j).state ≠ none := by native_decide
-  -- Step 2: define progress predicate
+  -- Bootstrap to an explicit valid state with explicit step count.
+  obtain ⟨n_init, i_init, k_init, hv_init, hk_init⟩ := bootstrap
+  -- Combine with `init`: initConfig reaches S' n_init in 715 + k_init steps.
+  have h_reach : run tm (initConfig 6) (715 + k_init) = S' n_init := by
+    rw [run_add, init, hk_init]
+  -- Progress invariant: every valid macro state progresses to another.
   let Q : Config 6 → Prop := fun c => ∃ n i, ValidS n i ∧ c = S' n
-  -- Step 3: S'(18) satisfies Q (via bootstrap)
-  have hQ : Q (run tm (initConfig 6) 715) := by
-    rw [init]
-    obtain ⟨n, i, hv, hreach⟩ := bootstrap
-    obtain ⟨k, hk⟩ := hreach
-    sorry -- need to show Q at the bootstrapped state
-  -- Step 4: progress
   have hProg : ∀ c, Q c → ∃ k, 0 < k ∧ Q (run tm c k) ∧ (run tm c k).state ≠ none := by
     rintro c ⟨n, i, hv, rfl⟩
-    obtain ⟨n', i', hv', hreach⟩ := ValidS_progress n i hv
-    obtain ⟨k, hk⟩ := hreach
-    exact ⟨k, sorry, ⟨n', i', hv', hk⟩, by rw [hk]; exact S'_not_halted n'⟩
-  -- Step 5: apply nonhalt_of_progress
-  intro m
-  by_cases h : m ≤ 715
-  · exact fun hhalt => hpre m h hhalt
-  · have h' : 715 < m := by omega
-    intro hhalt
-    have key := nonhalt_of_progress tm Q hProg _ hQ (m - 715)
-    apply key
-    rw [show m = 715 + (m - 715) from by omega, run_add] at hhalt
-    exact hhalt
+    obtain ⟨n', i', k, hv', hkpos, hk⟩ := ValidS_progress n i hv
+    refine ⟨k, hkpos, ⟨n', i', hv', hk⟩, ?_⟩
+    rw [hk]; exact S'_not_halted n'
+  -- The bootstrapped state is in Q.
+  have hQ : Q (S' n_init) := ⟨n_init, i_init, hv_init, rfl⟩
+  -- S' n_init never halts.
+  have h_safe : ∀ m, (run tm (S' n_init) m).state ≠ none :=
+    nonhalt_of_progress tm Q hProg (S' n_init) hQ
+  -- The endpoint of the bootstrap prefix is alive.
+  have h_alive_at : (run tm (initConfig 6) (715 + k_init)).state ≠ none := by
+    rw [h_reach]; exact S'_not_halted n_init
+  -- Conclude for every step `m`.
+  intro m hhalt
+  by_cases hle : m ≤ 715 + k_init
+  · -- Prefix case: alive throughout via `run_alive_of_later`.
+    exact run_alive_of_later tm (initConfig 6) m (715 + k_init) hle h_alive_at hhalt
+  · -- Suffix case: split off the prefix and use `h_safe`.
+    have hsplit : m = (715 + k_init) + (m - (715 + k_init)) := by omega
+    rw [hsplit, run_add, h_reach] at hhalt
+    exact h_safe (m - (715 + k_init)) hhalt
 
 /-! ### 12. Atomic rules proved via `es` tactic
 

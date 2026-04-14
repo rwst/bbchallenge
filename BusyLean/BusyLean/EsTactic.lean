@@ -141,8 +141,43 @@ private def esStepN (maxSteps : Nat) : TacticM Nat := do
     else return count
   return count
 
-/-- Try to apply a shift rule. Elaborates the shift, instantiates with fresh
-    metavariables for its arguments, and checks defeq against the goal source. -/
+/-- Recursively strip `xs ++ []` to `xs` in an expression, after instantiating
+    metavariables. Used by `esTryShift`'s Stage 1 trailing-empty fallback to
+    bridge the `xs ++ [] = xs` defeq gap that Lean does not reduce.
+
+    Recognizes both `List.append xs ys` (3 args) and `HAppend.hAppend _ _ _ _ xs ys`
+    (6 args, the elaborated form of `xs ++ ys` via the `HAppend` typeclass). -/
+private def stripAppendNil (e : Expr) : MetaM Expr := do
+  let e ← instantiateMVars e
+  Meta.transform e (post := fun e' => do
+    let e' := e'.consumeMData
+    -- Case 1: List.append xs ys (3 args: α, xs, ys)
+    if e'.isAppOfArity ``List.append 3 then
+      let ys := e'.getArg! 2
+      if ys.isAppOfArity ``List.nil 1 then
+        return .done (e'.getArg! 1)
+    -- Case 2: HAppend.hAppend (6 args: α β γ inst xs ys)
+    if e'.isAppOfArity ``HAppend.hAppend 6 then
+      let ys := e'.getArg! 5
+      if ys.isAppOfArity ``List.nil 1 then
+        return .done (e'.getArg! 4)
+    return .done e')
+
+/-- Try to apply a shift rule.
+
+    **Stage 0 (direct)**: elaborate the shift, instantiate fresh metavariables
+    for its parameters, check `isDefEq` of the goal's source against the
+    shift's source.
+
+    **Stage 1 (trailing-empty fallback)**: if Stage 0 fails, try assigning
+    each `List Sym` parameter to `[]` (one at a time, with state restore), then
+    use `stripAppendNil` to collapse the resulting `xs ++ []` patterns and
+    retry `isDefEq`. Bridges the `zebra b` vs `zebra ?b ++ ?R` mismatch
+    without requiring `_nil` shift variants.
+
+    Stage 0 and Stage 1 reuse the same `applyShift` helper, which builds the
+    `EvStep.trans` proof with the *unified* shift target — `esNormalize` then
+    cleans up any residual `xs ++ []` in the continuation goal. -/
 private def esTryShift (shiftSyn : Syntax) : TacticM Bool := do
   if (← getGoals).isEmpty then return false
   let saved ← saveState
@@ -150,39 +185,162 @@ private def esTryShift (shiftSyn : Syntax) : TacticM Bool := do
   let goalType ← goal.getType
   let some (_, goalSrc, _) := parseEvStep' goalType | return false
   let some (_, _, tgtExpr) := parseEvStep' goalType | return false
-  try
-    let shiftExpr ← Term.elabTerm shiftSyn none
-    let shiftRawType ← inferType shiftExpr
-    -- Apply to fresh metavariables for any remaining Pi binders so that
-    -- the result has type EvStep tm A B (not ∀ ..., EvStep ...).
-    let (mvars, _, shiftType) ← forallMetaTelescope shiftRawType
-    let shiftExpr := mkAppN shiftExpr mvars
-    let some (tmE, shiftSrc, shiftB) := parseEvStep' shiftType | do
-      saved.restore; return false
-    -- Check defeq
-    unless (← isDefEq goalSrc shiftSrc) do
-      saved.restore
-      return false
-    -- Apply: build EvStep.trans shiftExpr ?rest
-    let remainType ← mkAppM ``EvStep #[tmE, shiftB, tgtExpr]
-    let remainMVar ← mkFreshExprMVar remainType
-    let fullProof ← mkAppM ``EvStep.trans #[shiftExpr, remainMVar]
-    goal.assign fullProof
-    replaceMainGoal [remainMVar.mvarId!]
-    return true
-  catch _ =>
-    saved.restore
-    return false
+  let listSymTy : Expr := mkApp (mkConst ``List [.zero]) (mkConst ``BusyLean.Sym)
+  let nilSym : Expr := mkApp (mkConst ``List.nil [.zero]) (mkConst ``BusyLean.Sym)
+  -- Try one match attempt. If `preAssignIdx = none`, this is the direct
+  -- Stage 0 attempt. If `preAssignIdx = some i`, pre-assign mvars[i] to []
+  -- and use `stripAppendNil` before defeq (Stage 1). Returns true on success,
+  -- false on failure (state is restored on failure).
+  let attempt (preAssignIdx : Option Nat) : TacticM Bool := do
+    let restore ← saveState
+    let success : Bool ← try
+      let shiftExpr ← Term.elabTerm shiftSyn none
+      let shiftRawType ← inferType shiftExpr
+      let (mvars, _, shiftType) ← forallMetaTelescope shiftRawType
+      let shiftExpr := mkAppN shiftExpr mvars
+      match parseEvStep' shiftType with
+      | none => pure false
+      | some (tmE, shiftSrc, _) => do
+        let mut isStage1 := false
+        match preAssignIdx with
+        | none => pure ()
+        | some i =>
+          if i < mvars.size then
+            let mvId := mvars[i]!.mvarId!
+            if !(← mvId.isAssigned) then
+              let mvTy ← mvId.getType
+              if ← isDefEq mvTy listSymTy then
+                try
+                  mvId.assign nilSym
+                  isStage1 := true
+                catch _ => pure ()
+        -- Try direct defeq first (Stage 0 path or Stage 1 with no `++ []`).
+        let defeqOk ← isDefEq goalSrc shiftSrc
+        if defeqOk then
+          let shiftType' ← instantiateMVars shiftType
+          match parseEvStep' shiftType' with
+          | none => pure false
+          | some (_, _, shiftB') => do
+            let remainType ← mkAppM ``EvStep #[tmE, shiftB', tgtExpr]
+            let remainMVar ← mkFreshExprMVar remainType
+            let fullProof ← mkAppM ``EvStep.trans #[shiftExpr, remainMVar]
+            goal.assign fullProof
+            replaceMainGoal [remainMVar.mvarId!]
+            pure true
+        else if isStage1 then
+          -- Stage 1: try stripping `xs ++ []` from the SHIFT'S source for
+          -- defeq, then update the GOAL'S type via `replaceTargetEq` to
+          -- match the unstripped (true) shift source. This way the shift's
+          -- type is unchanged and the kernel accepts the proof.
+          let shiftSrc' ← stripAppendNil shiftSrc
+          if !(← isDefEq goalSrc shiftSrc') then
+            pure false
+          else
+            -- Build a new goal type `EvStep tm shiftSrc tgtExpr` (with the
+            -- original `++ []` form, post-instantiation) and rewrite the goal
+            -- to it via `replaceTargetEq`. The eq proof is constructed by
+            -- `simp [List.append_nil]` going the other way.
+            let shiftType' ← instantiateMVars shiftType
+            match parseEvStep' shiftType' with
+            | none => pure false
+            | some (_, shiftSrcInst, shiftB') => do
+              -- New goal type: EvStep tm shiftSrcInst tgtExpr
+              let newGoalType ← mkAppM ``EvStep #[tmE, shiftSrcInst, tgtExpr]
+              -- Build eq proof: oldGoalType = newGoalType.
+              -- oldGoalType: EvStep tm goalSrc tgtExpr (which is defeq to newGoalType
+              -- modulo the `xs ++ [] ↔ xs` rewrite). We construct the proof via
+              -- `Eq.mpr` of an `EvStep` congrArg from `goalSrc = shiftSrcInst`,
+              -- which holds via `simp [List.append_nil]`.
+              -- Simplest: use `mkAppM ``Eq.refl` and let it succeed if defeq holds
+              -- with `tape_norm`-equivalent forms. If that fails, we manually
+              -- build the proof by wrapping `(List.append_nil _).symm` in congrArg
+              -- positions.
+              -- For now, try the simp-based approach: invoke a `simp [List.append_nil]`
+              -- subroutine that returns an equality proof.
+              let eqProof? ← try
+                let oldType ← instantiateMVars (← goal.getType)
+                let proof ← mkAppOptM ``Eq.refl #[some (← inferType oldType), some oldType]
+                -- Will fail if oldType ≠ newGoalType. Retry via `Eq.mpr`-style
+                -- coercion using `mkAppM ``id_of_eq` or `mkExpectedTypeHint`.
+                pure (some proof)
+              catch _ => pure none
+              match eqProof? with
+              | none => pure false
+              | some _ => do
+                -- Use replaceTargetEq with a proof that the old and new types
+                -- are equal. The new type uses `shiftSrcInst` (with `++ []`).
+                -- Construct via mkEq + simp.
+                let oldType ← instantiateMVars (← goal.getType)
+                let eqType ← mkEq oldType newGoalType
+                -- Try to prove the eqType via `simp [List.append_nil]`.
+                let eqProofOpt ← try
+                  let prf ← mkFreshExprMVar eqType
+                  -- Run simp on the proof's mvar via evalTactic
+                  let prevGoals ← getGoals
+                  setGoals [prf.mvarId!]
+                  evalTactic (← `(tactic| simp only [List.append_nil]))
+                  let remainingAfterSimp ← getGoals
+                  setGoals prevGoals
+                  if remainingAfterSimp.isEmpty then pure (some prf)
+                  else pure none
+                catch _ => pure none
+                match eqProofOpt with
+                | none => pure false
+                | some eqProof => do
+                  let newGoal ← goal.replaceTargetEq newGoalType eqProof
+                  -- Now build the trans proof against the new goal.
+                  let remainType ← mkAppM ``EvStep #[tmE, shiftB', tgtExpr]
+                  let remainMVar ← mkFreshExprMVar remainType
+                  let fullProof ← mkAppM ``EvStep.trans #[shiftExpr, remainMVar]
+                  newGoal.assign fullProof
+                  replaceMainGoal [remainMVar.mvarId!]
+                  pure true
+        else
+          pure false
+    catch _ => pure false
+    if !success then restore.restore
+    return success
+  -- Stage 0: direct attempt with no mvar pre-assignment.
+  if ← attempt none then return true
+  -- Stage 1: try each individual parameter index assigned to []. The first
+  -- index that successfully unifies (after stripping `xs ++ []` and
+  -- rewriting the goal via `replaceTargetEq`) wins.
+  for i in [:8] do
+    if ← attempt (some i) then return true
+  -- Stage 3: try splitting the goal's atoms via `tape_split` (e.g.
+  -- `ones (4+2*a) → ones 2 ++ ones (2+2*a)`), then re-associate via
+  -- `tape_norm` (which does NOT include `ones_append`, so the splits
+  -- survive), then re-run Stages 0 and 1. This bridges the gap between
+  -- merged-atom goals and split-atom shift rules. Goal state is saved before
+  -- Stage 3 and restored if all attempts fail, so an unsuccessful Stage 3
+  -- doesn't poison the surrounding loop.
+  let stage3Saved ← saveState
+  let splitOk ← try
+    evalTactic (← `(tactic| simp only [tape_split]))
+    -- Re-associate appends after the split so left-associated shift sources
+    -- like `rev_zebra k ++ ones 2 ++ L` match. `tape_norm` includes
+    -- `List.append_assoc` and `List.cons_append` but not `ones_append`.
+    try evalTactic (← `(tactic| simp only [tape_norm])) catch _ => pure ()
+    pure true
+  catch _ => pure false
+  if splitOk then
+    if ← attempt none then return true
+    for i in [:8] do
+      if ← attempt (some i) then return true
+  stage3Saved.restore
+  saved.restore
+  return false
 
 /-- Normalize the goal source via the `tape_norm` simp set. Folds leading cons
     prefixes back into tape atoms (`ones k`, `zebra k`, …) so that shift rule
-    sources with metavariable indices unify structurally.
+    sources with metavariable indices unify structurally. Also reduces concrete
+    `Nat` arithmetic via the `Nat.reduceMul`/`Nat.reduceAdd` simprocs.
 
     Silently does nothing on failure. -/
 private def esNormalize : TacticM Unit := do
   if (← getGoals).isEmpty then return
   try
-    evalTactic (← `(tactic| simp only [tape_norm]))
+    evalTactic (← `(tactic| simp only [tape_norm, Nat.reduceMul, Nat.reduceAdd]))
   catch _ => pure ()
 
 syntax "es " ident " [" term,* "]" : tactic
@@ -190,6 +348,9 @@ syntax "es " ident " [" term,* "]" : tactic
 elab_rules : tactic
   | `(tactic| es $_tmId [ $shifts,* ]) => do
     let shiftSyns := shifts.getElems.toList.map fun (s : TSyntax `term) => s.raw
+    -- Initial normalization: right-associate appends, fold cons prefixes,
+    -- simplify arithmetic (e.g. `2 * (2+a) → 4 + 2*a`).
+    esNormalize
     for _ in [:200] do
       if (← getGoals).isEmpty then return
       if ← esFinish then return

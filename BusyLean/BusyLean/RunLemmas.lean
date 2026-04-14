@@ -78,12 +78,12 @@ theorem step_right_append (c : Config n) (T : List Sym) (h : c.right ≠ []) :
   rcases hst : st with _ | q
   · rfl
   rcases htr : tm.tr q hd with _ | ⟨q', w, d⟩
-  · simp only [step, hst, htr, List.cons_append]
+  · simp only [step, htr, List.cons_append]
   rcases d
   · -- Dir.L
-    simp only [step, hst, htr, List.cons_append]
+    simp only [step, htr, List.cons_append]
   · -- Dir.R
-    simp only [step, hst, htr, List.cons_append, listTail, listHead]
+    simp only [step, htr, List.cons_append, listTail, listHead]
 
 /-- **Run locality.** If the right strip stays non-empty for the first
 `k` steps, extending it with `T` commutes with `run tm · k`. -/
@@ -123,10 +123,10 @@ theorem step_left_append (c : Config n) (T : List Sym) (h : c.left ≠ []) :
   rcases hst : st with _ | q
   · rfl
   rcases htr : tm.tr q hd with _ | ⟨q', w, d⟩
-  · simp only [step, hst, htr, List.cons_append]
+  · simp only [htr, List.cons_append]
   rcases d
-  · simp only [step, hst, htr, List.cons_append, listTail, listHead]
-  · simp only [step, hst, htr, List.cons_append, listTail, listHead]
+  · simp only [htr, listTail, listHead]
+  · simp only [htr, List.cons_append, listTail, listHead]
 
 /-- **Run left-locality.** If the left strip stays non-empty for the
 first `k` steps, appending `T` to it commutes with `run tm · k`. -/

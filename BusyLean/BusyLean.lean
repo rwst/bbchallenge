@@ -11,4 +11,5 @@ import BusyLean.ClosedSet
 import BusyLean.Transition
 import BusyLean.BackwardReasoning
 import BusyLean.TapeNorm
+import BusyLean.TapeSplit
 import BusyLean.EsTactic

@@ -90,5 +90,7 @@ attribute [tape_norm]
   Nat.zero_mul
   Nat.mul_one
   Nat.one_mul
+  Nat.mul_add
+  Nat.add_mul
 
 end BusyLean

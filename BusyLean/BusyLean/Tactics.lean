@@ -652,7 +652,7 @@ elab "closeConfigEq_" : tactic => do
 elab "evstep_finish" : tactic => do
   let goal ← getMainGoal
   let goalType ← goal.getType
-  let some (_, goalA, goalB) := parseEvStep goalType
+  let some (_, _, _) := parseEvStep goalType
     | throwError "evstep_finish: goal is not of the form `A -[tm]->* B`"
   -- Try EvStep.refl directly (A = B definitionally)
   try evalTactic (← `(tactic| exact EvStep.refl)); return
