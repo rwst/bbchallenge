@@ -925,7 +925,115 @@ theorem Inc3_absorb (a b : Nat) :
   rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
   exact hleft
 
-opaque Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := sorry
+/-! ### Helper lemmas for Ov3 -/
+
+/-- 2-step `Ov3_grow_rev`: `{C, rev_zebra k, t, []}` → `{C, rev_zebra (k+1), f, []}`. -/
+theorem Ov3_grow_rev (k : Nat) :
+    run tm ({state := some stC, left := rev_zebra k, head := true, right := []} : Config 6) 2 =
+    {state := some stC, left := rev_zebra (k+1), head := false, right := []} := rfl
+
+/-- 4-step `BED1`: `{B, L, t, [t]}` → `{B, [t,t]++L, t, []}`. -/
+theorem BED1 (L : List Sym) :
+    run tm ({state := some stB, left := L, head := true, right := [true]} : Config 6) 4 =
+    {state := some stB, left := (true :: true :: L), head := true, right := []} := rfl
+
+/-- 4-step `BEFC`: `{B, L, t, []}` → `{C, [t,f,f,t]++L, f, []}`. -/
+theorem BEFC (L : List Sym) :
+    run tm ({state := some stB, left := L, head := true, right := []} : Config 6) 4 =
+    {state := some stC, left := (true :: false :: false :: true :: L), head := false, right := []} := rfl
+
+/-- 4-step `CDA_4step`: `{C, [t,f,f,t]++L, f, []}` → `{A, L, head=listHead L false, [t,t,f,t]}`,
+    only if listHead L false has the expected value (depends on L's first element).
+    Specialized for L = ones n with n > 0: head = true. -/
+theorem CDA_4step_ones (n : Nat) :
+    run tm ({state := some stC, left := (true :: false :: false :: true :: ones (n+1)),
+             head := false, right := []} : Config 6) 4 =
+    {state := some stA, left := ones (n+1), head := true, right := [true, true, false, true]} := rfl
+
+/-- 6-step `Ov3_finalize`: combines (A,f)→(B,1,R) + 5-step BED→C cleanup.
+    Generic form independent of remaining tape. -/
+theorem Ov3_finalize (R : List Sym) :
+    run tm ({state := some stA, left := [], head := false,
+             right := [true, true, true, true, true] ++ R} : Config 6) 6 =
+    {state := some stC, left := [], head := true,
+     right := [false, true, false, true, true] ++ R} := rfl
+
+/-- **Ov3**: `S3 0 b →* S1 0 2 (2+b)` in `35 + 10b` steps. 13-phase decomposition. -/
+theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by
+  refine ⟨35 + 10 * b, ?_⟩
+  show run tm (S3 0 b) (35 + 10 * b) = S1 0 2 (2 + b)
+  -- Set up explicit start and end forms
+  have hS3 : (S3 0 b : Config 6) = ⟨some stC, [], true, zebra b⟩ := by simp [S3]
+  have hS1 : (S1 0 2 (2 + b) : Config 6) =
+             ⟨some stC, [], true, zebra 2 ++ ones (4 + 2 * b) ++ [false, true]⟩ := by
+    simp [S1]; congr 1; rw [show 2 * (2 + b) = 4 + 2 * b from by omega]
+  rw [hS3, hS1]
+  -- Total step count decomposition
+  have hcount : 35 + 10 * b =
+    2 * b + (2 + ((2 * b + 2) + (2 + (1 + (4 + (4 * b + (4 + (4 + (4 + ((2 * b + 6) + 6))))))))))
+    := by omega
+  rw [hcount]
+  -- Phase 0: zebra_traverse b [] []
+  rw [run_add, show (zebra b : List Sym) = zebra b ++ [] from by simp,
+      zebra_traverse b [] [], show (rev_zebra b ++ ([] : List Sym)) = rev_zebra b from by simp]
+  -- Phase 1: Ov3_grow_rev b
+  rw [run_add, Ov3_grow_rev b]
+  -- Phase 2: cd_pair_retreat (b+1) []
+  rw [run_add, show (2 * b + 2 : Nat) = 2 * (b + 1) from by omega]
+  rw [cd_pair_retreat (b + 1) [],
+      show (zebra (b + 1) ++ ([] : List Sym)) = zebra (b + 1) from by simp]
+  -- Phase 3: CD_DA_empty (zebra (b+1))
+  rw [run_add, CD_DA_empty (zebra (b + 1))]
+  -- Phase 4: AB_start (zebra (b+1))
+  rw [run_add, AB_start (zebra (b + 1))]
+  -- Phase 5: BEDA_pair [t] (zebra b)
+  -- Need: t :: zebra (b+1) = t :: f :: t :: zebra b
+  rw [run_add, show (true :: zebra (b + 1) : List Sym) = true :: false :: true :: zebra b from rfl]
+  rw [BEDA_pair [true] (zebra b)]
+  -- Phase 6: BEDA_traverse b [t,t,t] []
+  rw [run_add, show (true :: true :: ([true] : List Sym)) = [true, true, true] from rfl,
+      show (true :: zebra b : List Sym) = true :: (zebra b ++ []) from by simp]
+  rw [BEDA_traverse b [true, true, true] []]
+  -- Phase 7: BED1 (ones (2b+3))
+  rw [run_add, show (ones (2 * b) ++ [true, true, true] : List Sym) = ones (2 * b + 3) from by
+        rw [show ([true, true, true] : List Sym) = ones 3 from rfl, ones_append],
+      show (true :: ([] : List Sym)) = [true] from rfl]
+  rw [BED1 (ones (2 * b + 3))]
+  -- Phase 8: BEFC. Need {B, ones (2b+5), t, []}
+  rw [run_add, show (true :: true :: ones (2 * b + 3) : List Sym) = ones (2 * b + 5) from rfl]
+  rw [BEFC (ones (2 * b + 5))]
+  -- Phase 9: CDA_4step_ones (2b+4) — needs ones ((2b+4)+1) = ones (2b+5)
+  rw [run_add, show (true :: false :: false :: true :: ones (2 * b + 5) : List Sym) =
+                 (true :: false :: false :: true :: ones ((2 * b + 4) + 1)) from rfl]
+  rw [CDA_4step_ones (2 * b + 4)]
+  -- Phase 10: A_shift (2b+5) [] [t,t,f,t]
+  -- A_shift signature: A_shift k L R: {A, ones k ++ L, t, R} (k+1) → {A, listTail L, listHead L false, ones (k+1) ++ R}
+  -- We have {A, ones ((2*b+4)+1), t, [t,t,f,t]} = {A, ones (2*b+5), t, [t,t,f,t]}
+  -- which is {A, ones (2*b+5) ++ [], t, [t,t,f,t]}
+  rw [run_add, show (ones ((2 * b + 4) + 1) : List Sym) = ones (2 * b + 5) ++ [] from by simp]
+  rw [A_shift (2 * b + 5) [] [true, true, false, true]]
+  simp only [listTail, listHead]
+  -- After A_shift: {A, [], false, ones (2b+5+1) ++ [t,t,f,t]} = {A, [], false, ones (2b+6) ++ [t,t,f,t]}
+  -- For Ov3_finalize R, need right = [t,t,t,t,t] ++ R'.
+  -- ones (2*b+6) ++ [t,t,f,t] = ones 5 ++ ones (2*b+1) ++ [t,t,f,t] = [t,t,t,t,t] ++ (ones (2*b+1) ++ [t,t,f,t])
+  rw [show (ones (2 * b + 5 + 1) ++ [true, true, false, true] : List Sym) =
+          [true, true, true, true, true] ++ (ones (2 * b + 1) ++ [true, true, false, true]) from by
+        rw [show 2 * b + 5 + 1 = 5 + (2 * b + 1) from by omega, ← ones_append]
+        rw [show (ones 5 : List Sym) = [true, true, true, true, true] from rfl, List.append_assoc]]
+  rw [Ov3_finalize (ones (2 * b + 1) ++ [true, true, false, true])]
+  -- Result: {C, [], t, [f,t,f,t,t] ++ (ones (2b+1) ++ [t,t,f,t])}
+  -- Need: {C, [], t, zebra 2 ++ ones (4+2b) ++ [f,t]}
+  congr 1
+  -- Prove list equality via ones algebra
+  show ([false, true, false, true, true] ++ (ones (2 * b + 1) ++ [true, true, false, true]) : List Sym) =
+       zebra 2 ++ ones (4 + 2 * b) ++ [false, true]
+  rw [show ([false, true, false, true, true] : List Sym) = zebra 2 ++ ones 1 from rfl,
+      show ([true, true, false, true] : List Sym) = ones 2 ++ [false, true] from rfl]
+  rw [show (zebra 2 ++ ones 1 ++ (ones (2 * b + 1) ++ (ones 2 ++ [false, true])) : List Sym) =
+          zebra 2 ++ (ones 1 ++ ones (2 * b + 1) ++ ones 2) ++ [false, true] from by
+        simp [List.append_assoc]]
+  rw [ones_append, ones_append]
+  rw [show (1 + (2 * b + 1) + 2 : Nat) = 4 + 2 * b from by omega]
 
 /-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme). -/
 theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by sorry
