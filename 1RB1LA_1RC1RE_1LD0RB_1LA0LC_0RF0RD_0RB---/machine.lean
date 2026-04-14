@@ -791,14 +791,139 @@ theorem LOv1 (b c : Nat) : S1 0 b (3 + c) -[tm]->* S1 (2 + b) 2 c := by
   rw [← ones_append (a := 6) (b := 2 * c)]
   exact hcore
 
+/-- **Ov2 finalize**: 5 final steps from B with 5+ ones on left and `[t,t]` right
+    yield C with 4+ ones and `[f,t,f]` right. Independent of the rest of the left tape. -/
+theorem Ov2_finalize (L : List Sym) :
+    run tm ({ state := some stB,
+              left := (true :: true :: true :: true :: true :: L),
+              head := true, right := [true, true] } : Config 6) 5 =
+    { state := some stC,
+      left := (true :: true :: true :: true :: L),
+      head := true, right := [false, true, false] } := rfl
+
+/-- **Ov2_raw**: `S2 0 b →* {C, ones (4+2b), true, [f,t,f]}` in `40+8b` steps.
+    7-phase decomposition (similar to `LOv1_core` but with different boundary). -/
 private theorem Ov2_raw (b : Nat) :
     (S2 0 b : Config 6) -[tm]->*
     { state := some stC, left := ones (4 + 2 * b), head := true,
-      right := [false, true, false] } := by sorry
+      right := [false, true, false] } := by
+  refine ⟨40 + 8 * b, ?_⟩
+  show run tm (S2 0 b) (40 + 8 * b) = _
+  simp only [S2]
+  rw [show (2 * 0 : Nat) = 0 from rfl, ones_zero]
+  -- Step count: 40 + 8b = 2*b + (20 + (2*(b+2) + (2 + (1 + (4*(b+2) + 5)))))
+  rw [show 40 + 8 * b = 2 * b + (20 + (2 * (b + 2) + (2 + (1 + (4 * (b + 2) + 5))))) from by omega]
+  rw [run_add]
+  -- Phase 0: zebra_traverse b [] [true]
+  rw [zebra_traverse b [] [true]]
+  simp only [List.append_nil]
+  rw [run_add]
+  -- Phase 1: Inc2_boundary (rev_zebra b)
+  rw [Inc2_boundary (rev_zebra b)]
+  -- After phase 1: left = [t,f,t,f] ++ rev_zebra b = rev_zebra (b+2)
+  rw [show (true :: false :: true :: false :: rev_zebra b : List Sym) = rev_zebra (b + 2) from by
+        simp [rev_zebra, List.cons_append]]
+  rw [run_add]
+  -- Phase 2: cd_pair_retreat (b+2) [true]
+  rw [cd_pair_retreat (b + 2) [true]]
+  rw [run_add]
+  -- Phase 3: CD_DA_empty (zebra (b+2) ++ [true])
+  rw [CD_DA_empty (zebra (b + 2) ++ [true])]
+  rw [run_add]
+  -- Phase 4: AB_start (zebra (b+2) ++ [true])
+  -- The right is now `true :: true :: zebra (b+2) ++ [true]`, AB_start expects this form
+  rw [AB_start (zebra (b + 2) ++ [true])]
+  rw [run_add]
+  -- Phase 5: BEDA_traverse (b+2) [true] [true]
+  -- After AB_start: {B, [true], true, true :: zebra (b+2) ++ [true]}
+  -- BEDA_traverse expects: {B, L, true, true :: zebra n ++ R}
+  rw [BEDA_traverse (b + 2) [true] [true]]
+  -- After BEDA_traverse: {B, ones (2*(b+2)) ++ [true], true, true :: [true]}
+  -- = {B, ones (4+2b) ++ [true], true, [true, true]}
+  -- Rewrite ones (4+2b) ++ [true] as ones (5+2b) for finalize lemma
+  rw [show (ones (2 * (b + 2)) ++ [true] : List Sym) =
+          true :: true :: true :: true :: true :: ones (2 * b) from by
+        rw [show ([true] : List Sym) = ones 1 from rfl, ones_append]
+        rw [show 2 * (b + 2) + 1 = 5 + 2 * b from by omega]
+        show ones (5 + 2 * b) = _
+        rw [show (5 + 2 * b : Nat) = 2 * b + 1 + 1 + 1 + 1 + 1 from by omega]
+        simp [ones_succ]]
+  -- Phase 6: Ov2_finalize (ones (2*b))
+  rw [Ov2_finalize (ones (2 * b))]
+  -- After phase 6: {C, [t,t,t,t] ++ ones (2*b), true, [f,t,f]}
+  -- = {C, ones (4 + 2*b), true, [f,t,f]}
+  congr 1
+  show (true :: true :: true :: true :: ones (2 * b) : List Sym) = ones (4 + 2 * b)
+  rw [show (4 + 2 * b : Nat) = 4 + 2 * b from rfl]
+  simp [ones_succ, show 4 + 2 * b = (((2 * b + 1) + 1) + 1) + 1 from by omega]
 
+/-- Boundary step for Inc3_absorb: like `Inc3_boundary` but with `[false]` on right.
+    Two steps: C reads true (writes 0, moves R), then B reads false (writes 1, moves R). -/
+theorem Inc3_absorb_boundary (L : List Sym) :
+    run tm { state := some stC, left := L, head := true, right := [false] } 2 =
+    { state := some stC, left := true :: false :: L, head := false, right := [] } := rfl
+
+/-- Inc3_absorb core (a=0): `{C, ones 2, true, zebra b ++ [false]}` → `{C, [], true, zebra (2+b)}`
+    in `4b + 6` steps. Same count as Inc3, with [false] absorbed by the boundary. -/
+theorem Inc3_absorb_core_base (b : Nat) :
+    run tm { state := some stC, left := (ones 2), head := true,
+             right := zebra b ++ [false] } (4 * b + 6) =
+    { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
+  rw [show 4 * b + 6 = 2 * b + (2 + 2 * (b + 1 + 1)) from by omega, run_add]
+  rw [zebra_traverse b (ones 2) [false]]
+  rw [run_add]
+  rw [Inc3_absorb_boundary (rev_zebra b ++ (ones 2))]
+  rw [show (true :: false :: (rev_zebra b ++ (ones 2)) : List Sym) =
+          rev_zebra (b + 1) ++ (ones 2) from by
+        simp [rev_zebra, List.cons_append]]
+  rw [cd_retreat (b + 1) []]
+  congr 1
+  show zebra (b + 1 + 1) ++ ([] : List Sym) = zebra (2 + b)
+  simp [show b + 1 + 1 = 2 + b from by omega]
+
+/-- Left nonemptiness for Inc3_absorb core. -/
+private theorem Inc3_absorb_left_ne (b : Nat) :
+    ∀ m, m < 4 * b + 6 →
+      (run tm { state := some stC, left := (ones 2), head := true,
+                right := zebra b ++ [false] } m).left ≠ [] := by
+  intro m hm
+  by_cases hm1 : m < 2 * b
+  · exact zebra_traverse_left_ne b (ones 2) [false] (by simp [ones, repeatSym]) m hm1
+  · by_cases hm2 : m < 2 * b + 2
+    · -- Phase 2: Inc3_absorb_boundary (2 steps). Left grows.
+      rw [show m = 2 * b + (m - 2 * b) from by omega, run_add]
+      rw [zebra_traverse b (ones 2) [false]]
+      have : m - 2 * b = 0 ∨ m - 2 * b = 1 := by omega
+      rcases this with h | h <;> rw [h] <;>
+        simp [run, step, listHead, listTail, ones, repeatSym] <;>
+        exact List.cons_ne_nil _ _
+    · -- Phase 3: cd_retreat on rev_zebra(b+1) ++ ones(2).
+      rw [show m = (2 * b + 2) + (m - (2 * b + 2)) from by omega, run_add,
+          show (2 * b + 2 : Nat) = 2 * b + 2 from rfl, run_add]
+      rw [zebra_traverse b (ones 2) [false]]
+      rw [Inc3_absorb_boundary (rev_zebra b ++ (ones 2))]
+      rw [show (true :: false :: (rev_zebra b ++ (ones 2)) : List Sym) =
+              rev_zebra (b + 1) ++ (ones 2) from by
+            simp [rev_zebra, List.cons_append]]
+      exact cd_retreat_left_ne' (b + 1) [] (m - (2 * b + 2)) (by omega)
+
+/-- **Inc3_absorb**: lifts Inc3_absorb_core_base via run_left_append. -/
 theorem Inc3_absorb (a b : Nat) :
     ({ state := some stC, left := ones (2 * (1 + a)), head := true,
-       right := zebra b ++ [false] } : Config 6) -[tm]->* S3 a (2 + b) := by sorry
+       right := zebra b ++ [false] } : Config 6) -[tm]->* S3 a (2 + b) := by
+  have hcore := Inc3_absorb_core_base b
+  have hne := Inc3_absorb_left_ne b
+  have hleft := run_left_append tm
+    { state := some stC, left := ones 2, head := true, right := zebra b ++ [false] }
+    (ones (2 * a)) (4 * b + 6) hne
+  rw [hcore] at hleft
+  simp only [List.nil_append] at hleft
+  refine ⟨4 * b + 6, ?_⟩
+  show run tm { state := some stC, left := ones (2 * (1 + a)), head := true,
+                right := zebra b ++ [false] } (4 * b + 6) = S3 a (2 + b)
+  simp only [S3]
+  rw [show 2 * (1 + a) = 2 + 2 * a from by omega, ← ones_append]
+  exact hleft
 
 opaque Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := sorry
 
@@ -860,7 +985,32 @@ theorem IncsOv3 (a b : Nat) : S3 a b -[tm]->* S1 0 2 (2 + a * 2 + b) := by
             rw [show 2 + (a * 2 + b) = 2 + a * 2 + b from by omega]
 
 theorem IncsOv2 (a b : Nat) : S2 a b -[tm]->* S1 0 2 (7 + a * 6 + b * 2) := by
-  sorry -- proved below via es-based atomic rules
+  -- Chain: Incs2 → Ov2_raw → Inc3_absorb → IncsOv3
+  -- S2 a b → S2 0 (a*3+b) → raw form → S3 (1+a*3+b) 3 → S1 0 2 (7+a*6+b*2)
+  have step1 : S2 a b -[tm]->* S2 0 (a * 3 + b) := Incs2 a b
+  have step2 : (S2 0 (a * 3 + b) : Config 6) -[tm]->*
+               { state := some stC, left := ones (4 + 2 * (a * 3 + b)), head := true,
+                 right := [false, true, false] } := Ov2_raw (a * 3 + b)
+  -- The raw form matches Inc3_absorb's input with a' = 1 + (a*3+b), b' = 1
+  -- ones (4 + 2*(a*3+b)) = ones (2*(2+a*3+b)) = ones (2*(1+(1+a*3+b)))
+  -- right [f,t,f] = zebra 1 ++ [false]
+  have step3 : (⟨some stC, ones (4 + 2 * (a * 3 + b)), true, [false, true, false]⟩ : Config 6)
+               -[tm]->* S3 (1 + (a * 3 + b)) 3 := by
+    have h := Inc3_absorb (1 + (a * 3 + b)) 1
+    -- Need to match the form
+    have heq_left : ones (2 * (1 + (1 + (a * 3 + b)))) = ones (4 + 2 * (a * 3 + b)) := by
+      congr 1; omega
+    have heq_right : (zebra 1 ++ [false] : List Sym) = [false, true, false] := rfl
+    have heq_target : S3 (1 + (a * 3 + b)) (2 + 1) = S3 (1 + (a * 3 + b)) 3 := rfl
+    rw [heq_left, heq_right] at h
+    rw [heq_target] at h
+    exact h
+  have step4 : S3 (1 + (a * 3 + b)) 3 -[tm]->* S1 0 2 (2 + (1 + (a * 3 + b)) * 2 + 3) :=
+    IncsOv3 (1 + (a * 3 + b)) 3
+  have step5 : S1 0 2 (2 + (1 + (a * 3 + b)) * 2 + 3) = S1 0 2 (7 + a * 6 + b * 2) := by
+    congr 1; omega
+  rw [step5] at step4
+  exact step1.trans (step2.trans (step3.trans step4))
 
 /-- `S1(a, b, 0) →* S3(a, 1+b)`: boundary step from S1 with c=0 to S3. -/
 theorem S1_to_S3 (a b : Nat) : S1 a b 0 -[tm]->* S3 a (1 + b) := by
