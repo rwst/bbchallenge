@@ -44,12 +44,23 @@ theorem IncsOv3 (a b : ℕ) : S3 a b -[tm]->* S1 0 2 (2+a*2+b) := by
   evstep_finish
 ```
 
-### 12. `tm_es` tactic (exhaustive search for →\* goals)
+### ~~12. `es` / `esx` tactics~~ ✅ DONE (see `BusyLean/EsTactic.lean`, `BusyLean/PLAN.md`)
 
-BusyCoq's `es` tactic automatically proves `A →* B` for concrete-prefix
-configurations by searching for a small `k` such that `run tm A k = B`. This
-is the workhorse for atomic lemmas (Inc1, Inc2, Inc3, LOv1, Ov2, Ov3 — each
-~4–8 TM steps).
+`es tm [shifts]` proves `A -[tm]->* B` by batching concrete steps via `Meta.reduce`
+and applying shift rules by fresh-metavariable unification. `esx tm [shifts]`
+proves `∃ k, (run tm A k).halted` via `halts_of_evstep_halted` + the es loop.
+
+Includes:
+- `tape_norm` simp set (fold cons prefixes back into atoms: `ones k`, `zebra k`, …)
+- 4-level congr/omega cascade in `esFinish` for Nat-index mismatches
+- `esx` halt detection via `isHaltedConfig` check on the reduced source
+
+Known limitation: tape-aware shift unification (`tape_unify` in the plan) is
+deferred. For cases needing multi-atom context (`rev_zebra k ++ ones 2 ++ L`),
+provide parameterized shift variants (e.g. `cd_retreat_ev_left`) rather than
+expecting `es` to split the tape automatically.
+
+### 12a. (legacy) `tm_es` — superseded by item 12 above.
 
 **Proposed `tm_es` for BusyLean:**
 

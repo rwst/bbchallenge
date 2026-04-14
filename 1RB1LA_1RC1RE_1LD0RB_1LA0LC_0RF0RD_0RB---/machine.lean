@@ -110,6 +110,15 @@ theorem rev_zebra_append (a b : Nat) :
     simp only [rev_zebra_succ, List.cons_append, ih,
                show a + 1 + b = (a + b) + 1 from by omega]
 
+/-- Machine-specific `tape_norm` lemmas for folding `rev_zebra` prefixes. -/
+@[tape_norm] theorem rev_zebra_fold_cons (k : Nat) :
+    true :: false :: rev_zebra k = rev_zebra (k + 1) := rfl
+
+@[tape_norm] theorem rev_zebra_fold_cons_app (k : Nat) (R : List Sym) :
+    true :: false :: (rev_zebra k ++ R) = rev_zebra (k + 1) ++ R := by
+  show true :: false :: rev_zebra k ++ R = rev_zebra (k + 1) ++ R
+  rfl
+
 /-! ### 3. Small-step lemmas (building blocks) -/
 
 /-- **Zebra pair step**: 2 TM steps traverse one `(0,1)` pair from the right,
@@ -555,6 +564,14 @@ theorem A_shift_ev (k : Nat) (L R : List Sym) :
       right := ones (k + 1) ++ R } :=
   ⟨k + 1, A_shift k L R⟩
 
+/-- EvStep shift for `ones_process` (4 steps processing the 4-ones boundary). -/
+theorem ones_process_ev (L T : List Sym) :
+    ({ state := some stC, left := L, head := true,
+       right := ones 4 ++ T } : Config 6) -[tm]->*
+    { state := some stC, left := true :: false :: L, head := false,
+      right := zebra 1 ++ T } :=
+  ⟨4, ones_process L T⟩
+
 /-! ### 6b. Atomic rules proved via `es` tactic
 
 The es tactic uses Meta.reduce to take concrete TM steps in MetaM, then applies
@@ -593,6 +610,53 @@ theorem Inc2_boundary (L : List Sym) :
             { state := some stC, left := (true :: false :: true :: false :: L),
               head := false, right := [true] } := rfl
   exact h4
+
+/-- EvStep shift rule for `Inc2_boundary`. -/
+theorem Inc2_boundary_ev (L : List Sym) :
+    ({ state := some stC, left := L, head := true, right := [true] } : Config 6) -[tm]->*
+    { state := some stC, left := (true :: false :: true :: false :: L),
+      head := false, right := [true] } :=
+  ⟨20, Inc2_boundary L⟩
+
+/-- Test 1: single shift via `Inc2_boundary_ev`. -/
+example (L : List Sym) :
+    ({ state := some stC, left := L, head := true, right := [true] } : Config 6) -[tm]->*
+    { state := some stC, left := (true :: false :: true :: false :: L),
+      head := false, right := [true] } := by
+  es tm [Inc2_boundary_ev]
+
+/-- Test 2: chain zebra_traverse + Inc2_boundary. After traverse, left is
+    `rev_zebra b ++ L`, which matches `Inc2_boundary_ev`'s generic `L`. -/
+example (b : Nat) (L : List Sym) :
+    ({ state := some stC, left := L, head := true,
+       right := zebra b ++ [true] } : Config 6) -[tm]->*
+    { state := some stC,
+      left := (true :: false :: true :: false :: (rev_zebra b ++ L)),
+      head := false, right := [true] } := by
+  es tm [zebra_traverse_ev, Inc2_boundary_ev]
+
+/-- Test 3: full 3-shift chain to the Inc2 core base target. Requires tape_norm
+    folding of the `true::false::` cons prefix into `rev_zebra` after boundary. -/
+example (b : Nat) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b ++ [true] } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true,
+      right := zebra (b + 3) ++ [true] } := by
+  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
+
+/-- Test 4: same as Test 3 but with target `zebra (3 + b)` (non-canonical commutation).
+    This requires `esFinish` to handle `Nat.add_comm`-style arithmetic on indices. -/
+example (b : Nat) :
+    ({ state := some stC, left := ones 2, head := true,
+       right := zebra b ++ [true] } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := true,
+      right := zebra (3 + b) ++ [true] } := by
+  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
+
+/-- Test 5 (esx): trivial halt — state F with head 1 halts in 1 step. -/
+example : ∃ k, (run tm ({state := some stF, left := [], head := true,
+                         right := []} : Config 6) k).halted := by
+  esx tm []
 
 /-- **Inc2 core base**: `{C, ones 2, true, zebra b ++ [true]}` →
     `{C, [], true, zebra (3+b) ++ [true]}` in `4b + 26` steps.
@@ -1035,7 +1099,8 @@ theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by
   rw [ones_append, ones_append]
   rw [show (1 + (2 * b + 1) + 2 : Nat) = 4 + 2 * b from by omega]
 
-/-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme). -/
+/-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme).
+    TODO: port via `esx` once the E-state zebra sweep shift is added. -/
 theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by sorry
 
 /-! ### 7. Iterated versions -/

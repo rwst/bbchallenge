@@ -5,8 +5,10 @@ Released under Apache 2.0 license.
 import BusyLean.Defs
 import BusyLean.RunLemmas
 import BusyLean.TapeHelpers
+import BusyLean.TapeNorm
 import BusyLean.Notation
 import BusyLean.Multistep
+import BusyLean.Nonhalt
 import Lean.Elab.Tactic
 
 /-! # BusyLean: `es` tactic (symbolic evaluator)
@@ -27,22 +29,44 @@ private def parseEvStep' (e : Expr) : Option (Expr × Expr × Expr) :=
 private def esFinish : TacticM Bool := do
   if (← getGoals).isEmpty then return true
   let saved ← saveState
-  -- First try: exact EvStep.refl (syntactic equality)
+  -- Fast path 1: EvStep.refl (syntactic equality)
   let ok ← try evalTactic (← `(tactic| exact EvStep.refl)); pure true
            catch _ => saved.restore; pure false
   if ok then return true
-  -- Second try: 0-step proof with normalization
+  -- Fast path 2: 0-step with tape_norm + rfl (handles cons-fold)
   let saved2 ← saveState
   let ok2 ← try
     evalTactic (← `(tactic|
       (refine ⟨0, ?_⟩
-       show _ = _
-       simp only [List.append_nil, List.nil_append,
-                  List.append_assoc, List.cons_append]
+       unfold Multistep run
+       try simp only [tape_norm, List.append_nil, List.nil_append,
+                      List.append_assoc, List.cons_append]
        rfl)))
     pure true
   catch _ => saved2.restore; pure false
-  return ok2
+  if ok2 then return true
+  -- Fast path 3: 0-step + field-wise congr with omega for Nat index equalities.
+  -- `unfold Multistep run` reduces `run tm A 0 = B` to `A = B`, enabling `congr 1`.
+  -- The cascade handles up to four nested levels: Config → List → atom → Nat.
+  let saved3 ← saveState
+  let ok3 ← try
+    evalTactic (← `(tactic|
+      (refine ⟨0, ?_⟩
+       unfold Multistep run
+       try simp only [tape_norm, List.append_nil, List.nil_append,
+                      List.append_assoc, List.cons_append]
+       first
+         | rfl
+         | (congr 1 <;>
+            first | rfl | omega
+                  | (congr 1 <;>
+                     first | rfl | omega
+                           | (congr 1 <;>
+                              first | rfl | omega
+                                    | (congr 1 <;> first | rfl | omega)))))))
+    pure true
+  catch _ => saved3.restore; pure false
+  return ok3
 
 /-- Check if an expression is a "concrete head" — i.e., literally `true`, `false`,
     or stuck on a `listHead/listTail` recursor that won't reduce further.
@@ -150,22 +174,21 @@ private def esTryShift (shiftSyn : Syntax) : TacticM Bool := do
     saved.restore
     return false
 
-/-- Normalize the goal source via simp to canonicalize tape associativity,
-    `[]`-appends, and split `List.replicate` of a sum into prepended `List.replicate 2`.
+/-- Normalize the goal source via the `tape_norm` simp set. Folds leading cons
+    prefixes back into tape atoms (`ones k`, `zebra k`, …) so that shift rule
+    sources with metavariable indices unify structurally.
+
     Silently does nothing on failure. -/
 private def esNormalize : TacticM Unit := do
   if (← getGoals).isEmpty then return
   try
-    evalTactic (← `(tactic|
-      simp only [Nat.mul_add, Nat.mul_one, Nat.mul_zero, Nat.add_zero, Nat.zero_add,
-                 ← BusyLean.replicate_append,
-                 List.append_nil, List.nil_append, List.cons_append]))
+    evalTactic (← `(tactic| simp only [tape_norm]))
   catch _ => pure ()
 
 syntax "es " ident " [" term,* "]" : tactic
 
 elab_rules : tactic
-  | `(tactic| es $tmId [ $shifts,* ]) => do
+  | `(tactic| es $_tmId [ $shifts,* ]) => do
     let shiftSyns := shifts.getElems.toList.map fun (s : TSyntax `term) => s.raw
     for _ in [:200] do
       if (← getGoals).isEmpty then return
@@ -195,5 +218,98 @@ elab_rules : tactic
     let goal ← getMainGoal
     let goalFmt ← ppExpr (← goal.getType)
     throwError m!"es: exceeded maximum iterations\nGoal: {goalFmt}"
+
+/-! ### `esx` — halts-goal variant
+
+`esx tm [shifts]` proves goals of the form `∃ k, (run tm A k).halted`. It
+reduces the goal to an `EvStep` via `halts_of_evstep_halted`, then runs an
+es-like loop until the current source has `state := none`. At that point the
+final config is a concrete halted `Config.mk` literal; we close the EvStep
+subgoal via `EvStep.refl` (unifying the metavariable target) and the
+`.halted` subgoal via `rfl`. -/
+
+/-- Check whether a reduced `Config.mk` expression has `state := none`. -/
+private def isHaltedConfig (e : Expr) : Bool :=
+  let e := e.consumeMData
+  if e.isAppOf ``Config.mk then
+    let args := e.getAppArgs
+    -- Args: {n}, state, left, head, right — state is at index 1.
+    if h : args.size ≥ 2 then
+      (args[1]'(by omega)).consumeMData.isAppOf ``Option.none
+    else false
+  else false
+
+/-- Check if the current EvStep goal has a halted source. If so, close with
+    `EvStep.refl` (which unifies the target metavariable). -/
+private def esxTryHalt : TacticM Bool := do
+  if (← getGoals).isEmpty then return false
+  let goal ← getMainGoal
+  let goalType ← goal.getType
+  let some (_, srcE, _) := parseEvStep' goalType | return false
+  -- Reduce the source so match/projection are computed
+  let srcE' ← try Meta.reduce srcE (skipProofs := true) (skipTypes := true)
+               catch _ => pure srcE
+  if isHaltedConfig srcE' then
+    let saved ← saveState
+    try
+      evalTactic (← `(tactic| exact EvStep.refl))
+      return true
+    catch _ =>
+      saved.restore
+      return false
+  else
+    return false
+
+syntax "esx " ident " [" term,* "]" : tactic
+
+elab_rules : tactic
+  | `(tactic| esx $_tmId [ $shifts,* ]) => do
+    let shiftSyns := shifts.getElems.toList.map fun (s : TSyntax `term) => s.raw
+    -- Step 1: convert `∃ k, (run tm A k).halted` via `halts_of_evstep_halted`.
+    -- This introduces a metavariable `?c` for the intermediate config and
+    -- splits the goal into (a) `A -[tm]->* ?c` and (b) `?c.halted`.
+    evalTactic (← `(tactic| apply halts_of_evstep_halted))
+    -- Initial normalization: right-associate appends, fold cons prefixes.
+    esNormalize
+    -- First goal: EvStep loop until source is halted.
+    for _ in [:200] do
+      if (← getGoals).isEmpty then break
+      -- Check halt first: if source is halted, close via EvStep.refl.
+      if ← esxTryHalt then break
+      -- Try shifts.
+      let mut shifted := false
+      for shiftSyn in shiftSyns do
+        if (← getGoals).isEmpty then break
+        let shOk ← try pure (← esTryShift shiftSyn) catch _ => pure false
+        if shOk then shifted := true; break
+      if (← getGoals).isEmpty then break
+      if shifted then
+        esNormalize
+        continue
+      -- Take concrete steps.
+      let stepped ← esStepN 30
+      if (← getGoals).isEmpty then break
+      if stepped > 0 then
+        esNormalize
+        continue
+      -- Try halt one more time before giving up (stepping may have reached
+      -- a halted state in a mid-batch).
+      if ← esxTryHalt then break
+      let goal ← getMainGoal
+      let goalFmt ← ppExpr (← goal.getType)
+      throwError m!"esx: stuck (no shifts/steps applicable and source not halted)\nGoal: {goalFmt}"
+    -- Second goal: `?c.halted` — now `?c` has been unified with a concrete
+    -- halted Config.mk, so it reduces to `none = none`.
+    if !(← getGoals).isEmpty then
+      try evalTactic (← `(tactic| rfl))
+      catch _ =>
+        try evalTactic (← `(tactic| decide))
+        catch _ =>
+          try evalTactic (← `(tactic| simp [Config.halted]))
+          catch _ => pure ()
+    if !(← getGoals).isEmpty then
+      let goal ← getMainGoal
+      let goalFmt ← ppExpr (← goal.getType)
+      throwError m!"esx: failed to close halted subgoal\nGoal: {goalFmt}"
 
 end BusyLean

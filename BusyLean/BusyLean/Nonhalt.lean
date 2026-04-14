@@ -4,6 +4,7 @@ Released under Apache 2.0 license.
 -/
 import BusyLean.Defs
 import BusyLean.RunLemmas
+import BusyLean.Multistep
 
 /-!
 # BusyLean: Non-halting Infrastructure
@@ -79,5 +80,17 @@ theorem not_halts_of_progress (tm : TM n) (P : Config n → Prop)
     (hprog : ∀ c, P c → ∃ k, 0 < k ∧ P (run tm c k) ∧ (run tm c k).state ≠ none)
     (c : Config n) (hc : P c) : ∀ m, ¬ (run tm c m).halted :=
   fun m h => nonhalt_of_progress tm P hprog c hc m h
+
+-- ============================================================
+-- Halting lemmas
+-- ============================================================
+
+/-- If `A` reaches some halted configuration in finitely many steps, then `A` halts.
+    The intermediate configuration `c` is implicit so `apply` does not create a
+    separate goal for it — it is inferred from the shape of `h`. -/
+theorem halts_of_evstep_halted (tm : TM n) (A : Config n) {c : Config n}
+    (h : A -[tm]->* c) (hc : c.halted) : ∃ k, (run tm A k).halted := by
+  obtain ⟨k, hk⟩ := h
+  exact ⟨k, hk.symm ▸ hc⟩
 
 end BusyLean

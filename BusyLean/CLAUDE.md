@@ -12,12 +12,15 @@ Notation.lean      listRepeat (×× n), stA..stF, mkConfig, mkConfigFromTape
 Parser.lean        tm! "1RB1RA_..." macro (kernel-reducible)
 Tactics.lean       tm_exec, tm_follow, tm_chain, tm_step, tm_ind_succ, tm_ind_zero,
                    evstep_follow, evstep_finish, closeConfigEq_
-Nonhalt.lean       nonhalt_of_progress, not_halts_of_progress
+Nonhalt.lean       nonhalt_of_progress, not_halts_of_progress, halts_of_evstep_halted
 Multistep.lean     Multistep/Progress/EvStep relations, notation, Trans instances
 ClosedSet.lean     ClosedSet structure + closed_set tactic
 Transition.lean    halted_of_step, transReachable, nonhalt_of_unreachable
 BackwardReasoning.lean  SymConfig, matchingConfig?, backwardReason, nonhalt_of_backward
 StreamDefs.lean    SConfig (infinite tape), toSConfig embedding, commutativity
+Attr.lean          tape_norm simp attribute registration
+TapeNorm.lean      tape_norm lemmas (cons-fold, append, arithmetic)
+EsTactic.lean      `es`, `esx` — symbolic evaluator tactics (batch-stepping + shift rules)
 ```
 
 ## Key design decisions
@@ -144,6 +147,66 @@ theorem IncsOv3' (a b : ℕ) : S3 a b -[tm]->* S1 0 2 (2+a*2+b) :=
 
 `evstep_follow h` accepts: `EvStep`, `Multistep`, or raw `run tm A k = B` hypotheses.
 `evstep_finish` tries: `EvStep.refl`, then `congr 1 <;> omega` on struct fields.
+
+### `es` — symbolic evaluator (`BusyLean/EsTactic.lean`)
+
+`es tm [shift1, shift2, …]` proves `A -[tm]->* B` goals by alternating:
+- **Shift rules** (`EvStep` lemmas passed as parameters) — applied via fresh-metavariable
+  unification against the current source; absorb many steps at once.
+- **Concrete stepping** via `Meta.reduce` on `step tm <src>` — batch up to 30 steps per
+  iteration, producing a reduced `Config.mk` literal. Halts on unknown head.
+- **`tape_norm` normalization** after each shift/step — folds leading cons prefixes
+  back into atoms (`true :: (ones k ++ R) → ones (k+1) ++ R`, etc.).
+- **`esFinish`** — three-tier closing: `EvStep.refl`; 0-step + `tape_norm` + `rfl`;
+  0-step + four-level `congr 1 / omega` cascade for Nat-index mismatches (e.g.
+  `zebra (b+3) = zebra (3+b)`).
+
+```lean
+example (b : Nat) :
+    ({C, ones 2, t, zebra b ++ [true]} : Config 6) -[tm]->*
+    {C, [], t, zebra (3 + b) ++ [true]} := by
+  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
+```
+
+### `esx` — halts-goal variant
+
+`esx tm [shifts]` proves `∃ k, (run tm A k).halted` by:
+1. Reducing via `halts_of_evstep_halted` into `A -[tm]->* ?c` and `?c.halted`.
+2. Running the `es` loop with a modified termination: whenever the current source
+   has `state := none`, close with `EvStep.refl` (which unifies `?c`).
+3. Closing `?c.halted` by `rfl`.
+
+```lean
+example : ∃ k, (run tm ({state := some stF, left := [], head := true,
+                         right := []} : Config 6) k).halted := by
+  esx tm []  -- F with head 1 is a halting transition; halts in 1 step.
+```
+
+### `tape_norm` — normalization simp set
+
+Used internally by `es` to fold cons prefixes. Machine-specific atoms can extend
+the set by tagging fold lemmas:
+
+```lean
+@[tape_norm] theorem rev_zebra_fold_cons_app (k : Nat) (R : List Sym) :
+    true :: false :: (rev_zebra k ++ R) = rev_zebra (k + 1) ++ R := rfl
+```
+
+### Writing shift rules for `es`
+
+Shift rules are `EvStep` lemmas `{C, L, h, R} -[tm]->* {C', L', h', R'}` with
+generic `L` and `R` parameters. The tactic applies them by fresh-metavariable
+unification against the current goal source; `forallMetaTelescope` handles the
+parameter binders.
+
+Best practices:
+- Keep the tape shape on the source **structurally simple** (atom + tail),
+  since Lean's `isDefEq` doesn't do tape-unification.
+- When an atom needs to be split (`ones (n + m)`, `rev_zebra (k + 1)`), add a
+  `@[tape_norm]` fold lemma so the normalization step brings the goal into the
+  expected shape.
+- For shifts that take extra context on one side, add a second variant with an
+  explicit `L`/`R` parameter (e.g. `cd_retreat_ev` vs `cd_retreat_ev_left`).
 
 ## Style conventions
 
