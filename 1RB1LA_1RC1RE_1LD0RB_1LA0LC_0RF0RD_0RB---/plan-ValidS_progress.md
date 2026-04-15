@@ -414,6 +414,104 @@ development already in place), this plan completes the non-halting
 proof without further axioms on the `ValidS_progress` side — just
 mechanical case analysis and omega.
 
+## 7.5 Option 1 attempt and the fundamental closure obstruction
+
+**Date:** 2026-04-15 (this session)
+
+After proving the R2 case and the R1 standard sub-case (for
+`n ≤ 3^i*6 - 3i - 24`), I attempted Option 1 ("tighten `ValidS` to exclude
+the stuck values") and discovered it does **not** lead to a clean single-
+BigStep closure. The analysis below explains why, so future sessions do
+not re-attempt it.
+
+### 7.5.1 Empirical gap discovery
+
+Running a Lean `#eval` simulator from each of the 5 boundary gap-producing
+`n` values (`n = 3^i*6 − 3i − k'` for `k' ∈ {8, 12, 14, 18, 22}`) reveals:
+
+| `k'` | 1st BigStep | Intermediate `n'` | 2nd BigStep | Resolution |
+|------|-------------|-------------------|-------------|------------|
+|  22  | B0 @ i      | `3^i*6 − i − 9`   | B1 @ i      | `R1@(i+1)` ✓ |
+|  18  | B0 @ i      | `3^i*6 − i − 7`   | — (STUCK)   | **unreachable** |
+|  14  | B0 @ i      | `3^i*6 − i − 5`   | — (STUCK)   | **unreachable** |
+|  12  | B0 @ i      | `3^i*6 − i − 4`   | — (STUCK)   | **unreachable** |
+|   8  | B0 @ i      | `3^i*6 − i − 2`   | B1 @ i+1    | `R2@(i+2)` ✓ |
+
+For `k' ∈ {12, 14, 18}` the intermediate matches no `BigStep0`/`BigStep1`
+hypothesis form at *any* level `j`: in each case `c = (n − (3^j·2 − j − 2))/2`
+either has wrong parity, is negative, or exceeds `3^j·2 − 2` by exactly 1
+or 2. This is verified manually and via the simulator.
+
+### 7.5.2 Is this a proof-engineering artifact?
+
+**No** — it's genuinely mathematical. The `P` relation in `machine.lean`
+is generated inductively by `P_O` (`P 0 0`) and `P_S`. Applying `P_S`
+iteratively to `P_O` yields exactly the `P_n i = P (3^i·2 − i − 2) (3^i·2 − 2)`
+family (`P_S (P_n i) = P_n (i+1)`). There are **no other `P n1 n2` instances**
+reachable. So `BigStep0`/`BigStep1` specialised to `P_n i` cover exactly one
+specific family of macro transitions, and these three `n` per level lie
+outside the union of applicable arguments, for **every** level.
+
+### 7.5.3 Why `ValidS` bound-tightening does not close
+
+Suppose we tighten `R1` upper to some `U(i) < 3^i*6 - i - 6`. Closure of
+`R1` under a single `BigStep0'` requires: for every `n ≤ U(i)`, the
+endpoint `n' = (n + 3^i·6 + i + 4) / 2` is also `≤ U(i)`. Solving the
+fixed-point condition:
+
+```
+(U(i) + 3^i·6 + i + 4) / 2  ≤  U(i)
+⟺  U(i)  ≥  3^i · 6 + i + 4
+```
+
+But any such `U(i)` exceeds the entire "physical" range `[2·3^i − i − 2,
+6·3^i − 1]` of macro-values, so it is useless. **There is no finite `R1`
+window preserved under a single `BigStep0'` at the same level.** Level
+advancement via `BigStep1'` only fires from `R2`, so an R1-only closure
+must route through R2.
+
+### 7.5.4 Why "exclude the 3 stuck `n` values" also fails
+
+Adding a side condition `n ≠ 3^i*6 − 3i − k'` for `k' ∈ {12, 14, 18}`
+does not close either: the *pre-image* `n_pre` satisfying
+`BigStep0'(n_pre) = 3^i*6 − 3i − k'` is a perfectly valid R1 state —
+explicitly `n_pre = 3^i*6 − 7i − (2k' + 4)`, which still lies in R1 for
+large `i`. Excluding `n_pre` forces excluding *its* pre-image, and so on.
+The pre-image chain has length `≈ log₂(4·3^i / (2k'+4)) ≈ 70+` iterations
+before dropping below `R1`'s lower bound, giving ~200 exclusions per level
+per stuck value. That's too many for a clean `ValidS` definition.
+
+### 7.5.5 What Option 1 really requires
+
+For Option 1 to give a clean closure, `ValidS` must be defined as a
+**fixed point** of the `BigStep0`/`BigStep1` image operator, starting
+from (say) the bootstrap endpoint. This is an inductive definition —
+essentially "the set of macro states reachable from `S'(18)` via
+`BigStep`s". `ValidS_progress` then becomes trivial by construction.
+
+However, such a definition makes `ValidS` non-decidable by value
+inspection, so the bootstrap endpoint check and the window inclusions
+disappear — replaced by existence proofs for individual states. The
+proof structure changes significantly; this is a multi-session refactor.
+
+### 7.5.6 What the paper actually does (conjecture)
+
+The `pomme_main` inequality `N i / 2^{v₂(N i)} ≥ 2·i + 14` suggests that
+the "correct" closure lemma is **not single-step** at all. Rather, for
+every valid `(n, i)`, the TM trajectory iterates `BigStep0` some bounded
+number of times (at most `v₂(N i)` times) at level `i` before parity
+flips and `BigStep1` advances to `i + 1`. The 2-adic bound from pomme
+controls how many iterations this takes; without pomme it is unbounded.
+
+So a faithful Option 1 would need:
+
+1. An inductive/well-founded definition of "macro trajectory".
+2. A measure function bounded by `v₂(N i)`.
+3. A progress lemma that after `≤ v₂(N i)` BigStep0s we reach R2 at level `i`.
+
+This is substantial additional Lean infrastructure (~500+ lines),
+roughly on par with the rest of the non-halt proof.
+
 ## 8. Risks and contingencies
 
 * **Risk A:** Q1 reveals that for some gap offset, the chain loops back

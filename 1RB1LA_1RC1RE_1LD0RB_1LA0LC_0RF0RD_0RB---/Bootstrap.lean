@@ -222,18 +222,35 @@ private theorem ValidS_progress_R1_standard (n i : Nat) (hi : 50 ≤ i)
     valid state.
 
     **Status (2026-04-15):** R2 branch and R1-standard sub-case fully proved.
-    R1 near-boundary sub-case (`n > 3^i*6 - 3*i - 24`) deferred — this range
-    contains ~`2i + 18` values per level, of which 3 specific `n` (offsets
-    `k ∈ {12, 14, 18}` from `3^i*6 - 3*i`) have no single or 2-step BigStep
-    chain reaching a valid state. See `plan-ValidS_progress.md` for details. -/
+    R1 near-boundary sub-case (`n > 3^i*6 - 3*i - 24`) deferred.
+
+    **Note on Option 1 (tighten `ValidS`):** attempted and determined
+    mathematically infeasible as a clean one-step fix:
+
+    * No finite `R1` upper bound `U(i)` gives a level-preserving single-
+      `BigStep0'` closure — the fixed-point condition
+      `(U + 3^i*6 + i + 4)/2 ≤ U` requires `U ≥ 3^i*6 + i + 4`, which
+      exceeds the entire physical range `[2·3^i − i − 2, 6·3^i − 1]`.
+    * Excluding the 3 stuck `n` values per level as side conditions
+      creates a pre-image cascade: the ~70 pre-images per level per
+      stuck value are themselves valid inputs mapping to the excluded
+      outputs.
+    * The `P` relation is generated solely by `P_O` and `P_S`, giving
+      exactly the `P_n i` family (`P_S (P_n i) = P_n (i+1)`). There are
+      no other `P n1 n2` instances, so the three stuck intermediates
+      genuinely match no `BigStep0/BigStep1` hypothesis form at any level.
+
+    The correct closure requires iterated `BigStep0` bounded by
+    `v₂(N i)` via `Hensel.pomme_main`, i.e. a multi-step macro
+    trajectory argument rather than single-step window inclusion. See
+    `plan-ValidS_progress.md` §7.5 for the full analysis. -/
 theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
     ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
   obtain ⟨hi, hwin⟩ := hv
   rcases hwin with ⟨hpar, hlo, hhi⟩ | ⟨hpar, hlo, hhi⟩
-  · -- R1 case: split by whether `n` is in the standard range or the near-top boundary
-    by_cases hstd : n ≤ 3^i * 6 - 3 * i - 24
+  · by_cases hstd : n ≤ 3^i * 6 - 3 * i - 24
     · exact ValidS_progress_R1_standard n i hi hpar hlo hstd
-    · -- Near-boundary sub-case: deferred
+    · -- Near-boundary sub-case: requires pomme_main-controlled iteration.
       sorry
   · exact ValidS_progress_R2 n i hi hpar hlo hhi
 
