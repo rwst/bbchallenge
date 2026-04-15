@@ -1,5 +1,6 @@
 import BusyLean
 import machine
+import Mathlib.Tactic
 
 /-!
 # Nonhalting via progress invariant: `ValidS`, `bootstrap`, `tm_not_halts`
@@ -35,21 +36,12 @@ def ValidS (n i : Nat) : Prop :=
   ((n % 2 = i % 2 ∧ 3 ^ i * 2 - i - 2 ≤ n ∧ n ≤ 3 ^ i * 6 - i - 6) ∨
    (n % 2 = (i + 1) % 2 ∧ 3 ^ i * 2 - i ≤ n ∧ n ≤ 3 ^ i * 6 - i - 10))
 
-/-- Every valid state progresses (in a positive number of TM steps) to another
-    valid state. Uses `BigStep0`/`BigStep1` + `pomme_main`.
-
-    Returns an explicit step count `k > 0` rather than an `EvStep` existential
-    so callers (notably `tm_not_halts`) can chain via `run_add` without losing
-    the strict-progress witness. -/
-theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
-    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
-  sorry -- case split on R1 vs R2; closure uses pomme_main
-
 /-! #### Bootstrap chain helpers
 
 `chain_step_B0` and `chain_step_B1` specialise `BigStep0` / `BigStep1` to the
 `P_n i` instance, yielding a one-line step `S' (prev) -[tm]->* S' (next)`
-after plugging in concrete `(i, c)`. -/
+after plugging in concrete `(i, c)`. Used by both `BigStep0'`/`BigStep1'`
+and the 97-step `bootstrap` chain. -/
 
 /-- `BigStep0` specialised to `P_n i`. Given `c ≤ 3^i·2 - 2`, advances
     `S' ((3^i·2 - i - 2) + 2c)` to `S' (5 + 2·(3^i·2 - 2 - c) + 3c)`. -/
@@ -69,6 +61,181 @@ theorem chain_step_B1 (i c : Nat) (hc : c + 2 ≤ 3^i * 2 - 2) :
   have heq : (3 : Nat)^i * 2 - 2 = c + (2 + (3^i * 2 - 2 - c - 2)) := by omega
   rw [heq] at hP
   exact BigStep1 _ _ _ hP
+
+/-! #### R1/R2 closure helpers from mxdys' `BigStep0'`/`BigStep1'`
+
+These specialize `BigStep0`/`BigStep1` to the window form: given `n` in the
+R1 or R2 window of level `i`, `BigStep0'` / `BigStep1'` produce an explicit
+endpoint. -/
+
+private theorem three_pow_odd (i : Nat) : (3^i : Nat) % 2 = 1 := by
+  induction i with
+  | zero => decide
+  | succ i ih => rw [Nat.pow_succ]; omega
+
+/-- `BigStep0'`: for `n` in the R1 window of level `i` (meaning
+    `3^i*2 - i - 2 ≤ n ≤ 3^i*6 - i - 6` with `n % 2 = i % 2`), the macro
+    computation advances `S' n` to `S' ((n + 3^i*6 + i + 4) / 2)`. -/
+theorem BigStep0' (i n : Nat)
+    (hlo : 3^i * 2 - i - 2 ≤ n) (hhi : n ≤ 3^i * 6 - i - 6)
+    (hpar : n % 2 = i % 2) :
+    S' n -[tm]->* S' ((n + 3^i * 6 + i + 4) / 2) := by
+  have h3 := three_pow_odd i
+  have h3ge := pow3_ge i
+  obtain ⟨k, hk⟩ : ∃ k, 3^i = 2 * k + 1 := ⟨3^i / 2, by omega⟩
+  have hk_ge : 2 * k + 1 ≥ i + 1 := by rw [← hk]; exact h3ge
+  have hlo' : n + i + 2 ≥ 4 * k + 2 := by rw [hk] at hlo; omega
+  have hhi' : n + i + 6 ≤ 12 * k + 6 := by rw [hk] at hhi; omega
+  have hpar' : (n + i) % 2 = 0 := by omega
+  obtain ⟨c, hc⟩ : ∃ c, n + i = 4 * k + 2 * c := ⟨(n + i - 4 * k) / 2, by omega⟩
+  have hc_bound : c ≤ 3^i * 2 - 2 := by rw [hk]; omega
+  have h := chain_step_B0 i c hc_bound
+  have h_lhs : (3^i * 2 - i - 2) + c * 2 = n := by rw [hk]; omega
+  rw [h_lhs] at h
+  have h_rhs : 5 + (3^i * 2 - 2 - c) * 2 + c * 3 = (n + 3^i * 6 + i + 4) / 2 := by
+    rw [hk]; omega
+  rw [h_rhs] at h
+  exact h
+
+/-- `BigStep1'`: for `n` in the R2 window of level `i` (meaning
+    `3^i*2 - i ≤ n ≤ 3^i*6 - i - 10` with `n % 2 = (i + 1) % 2`), the macro
+    computation advances `S' n` to the fixed endpoint `S' (3^i * 12 - 1)`. -/
+theorem BigStep1' (i n : Nat)
+    (hlo : 3^i * 2 - i ≤ n) (hhi : n ≤ 3^i * 6 - i - 10)
+    (hpar : n % 2 = (i + 1) % 2) :
+    S' n -[tm]->* S' (3^i * 12 - 1) := by
+  have h3 := three_pow_odd i
+  have h3ge := pow3_ge i
+  obtain ⟨k, hk⟩ : ∃ k, 3^i = 2 * k + 1 := ⟨3^i / 2, by omega⟩
+  have hk_ge : 2 * k + 1 ≥ i + 1 := by rw [← hk]; exact h3ge
+  have hlo' : n + i ≥ 4 * k + 2 := by rw [hk] at hlo; omega
+  have hhi' : n + i + 10 ≤ 12 * k + 6 := by rw [hk] at hhi; omega
+  have hpar' : (n + i) % 2 = 1 := by omega
+  have hparc : (n + i - 4 * k - 1) % 2 = 0 := by omega
+  obtain ⟨c, hc⟩ : ∃ c, n + i = 4 * k + 1 + 2 * c :=
+    ⟨(n + i - 4 * k - 1) / 2, by omega⟩
+  have hc_bound : c + 2 ≤ 3^i * 2 - 2 := by rw [hk]; omega
+  have h := chain_step_B1 i c hc_bound
+  have h_lhs : (3^i * 2 - i - 2) + c * 2 + 1 = n := by rw [hk]; omega
+  rw [h_lhs] at h
+  have h_rhs : 23 + (3^i * 2 - 2 - c - 2) * 6 + c * 6 = 3^i * 12 - 1 := by
+    rw [hk]; omega
+  rw [h_rhs] at h
+  exact h
+
+/-! #### Strict-progress and injectivity helpers for `ValidS_progress` -/
+
+/-- Strict-progress extraction: an `EvStep` between two configs known to be
+    distinct has a strictly positive witness. -/
+private theorem pos_of_ne {c c' : Config 6} (h : c -[tm]->* c') (hne : c ≠ c') :
+    ∃ k, 0 < k ∧ run tm c k = c' := by
+  obtain ⟨k, hk⟩ := h
+  refine ⟨k, ?_, hk⟩
+  rcases Nat.eq_zero_or_pos k with rfl | hpos
+  · exact absurd (by show c = c'; exact hk) hne
+  · exact hpos
+
+/-- Injectivity of `S'`: two `S' n` configs are equal iff their indices match.
+    Proved by observing the right-tape length encodes `n`. -/
+private theorem S'_inj {n m : Nat} (h : S' n = S' m) : n = m := by
+  simp only [S', S1, Config.mk.injEq] at h
+  obtain ⟨_, _, _, hright⟩ := h
+  have hlen := congrArg List.length hright
+  simp only [List.length_append, ones, repeatSym, List.length_replicate,
+             zebra] at hlen
+  -- right tape = zebra b ++ ones (2*c) ++ [false, true] with b=2, c=n
+  -- length = 4 + 2n + 2 = 2n + 6 for both sides
+  have : 2 * n = 2 * m := by omega
+  omega
+
+/-- `S' n ≠ S' m` when `n ≠ m`. -/
+private theorem S'_ne {n m : Nat} (hne : n ≠ m) : S' n ≠ S' m := by
+  intro h; exact hne (S'_inj h)
+
+/-! #### The R2 sub-case of `ValidS_progress` -/
+
+/-- R2 branch of `ValidS_progress`: apply `BigStep1'`, land at `3^i·12 - 1`
+    which is always in `R1@(i+1)` (i even) or `R2@(i+1)` (i odd). -/
+private theorem ValidS_progress_R2 (n i : Nat) (hi : 50 ≤ i)
+    (hpar : n % 2 = (i + 1) % 2)
+    (hlo : 3^i * 2 - i ≤ n) (hhi : n ≤ 3^i * 6 - i - 10) :
+    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
+  have h3 := three_pow_odd i
+  have h3ge := pow3_ge i
+  have hstep := BigStep1' i n hlo hhi hpar
+  -- Endpoint: 3^i * 12 - 1, which differs from n (n ≤ 6·3^i - i - 10 < 12·3^i - 1).
+  have hne_val : n ≠ 3^i * 12 - 1 := by omega
+  obtain ⟨k, hkpos, hk⟩ := pos_of_ne hstep (S'_ne hne_val)
+  refine ⟨3^i * 12 - 1, i + 1, k, ?_, hkpos, hk⟩
+  refine ⟨by omega, ?_⟩
+  -- Case on parity of i
+  rcases Nat.even_or_odd i with ⟨j, hj⟩ | ⟨j, hj⟩
+  · -- i = 2j (even): endpoint odd, target R1@(i+1), parity (i+1)%2 = 1
+    left
+    refine ⟨?_, ?_, ?_⟩
+    · -- parity of 3^i*12 - 1 is 1, and (i+1)%2 = 1
+      have h12 : (3^i * 12 - 1) % 2 = 1 := by omega
+      have : (i + 1) % 2 = 1 := by omega
+      omega
+    · -- 3^(i+1)*2 - (i+1) - 2 ≤ 3^i*12 - 1
+      rw [pow_succ]; omega
+    · -- 3^i*12 - 1 ≤ 3^(i+1)*6 - (i+1) - 6
+      rw [pow_succ]; omega
+  · -- i odd: target R2@(i+1)
+    right
+    refine ⟨?_, ?_, ?_⟩
+    · have h12 : (3^i * 12 - 1) % 2 = 1 := by omega
+      have : (i + 1 + 1) % 2 = 1 := by omega
+      omega
+    · rw [pow_succ]; omega
+    · rw [pow_succ]; omega
+
+/-! #### The R1 sub-case of `ValidS_progress` (standard range) -/
+
+/-- R1 branch — "standard" sub-case: for `n` in R1 with `n ≤ 3^i*6 - 3*i - 24`,
+    `BigStep0'` produces an endpoint `n' ≤ 3^i*6 - i - 11` which is safely in
+    `R1@i` (if parity `i%2`) or `R2@i` (if parity `(i+1)%2`). Level stays at `i`. -/
+private theorem ValidS_progress_R1_standard (n i : Nat) (hi : 50 ≤ i)
+    (hpar : n % 2 = i % 2)
+    (hlo : 3^i * 2 - i - 2 ≤ n) (hhi : n ≤ 3^i * 6 - 3 * i - 24) :
+    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
+  have h3 := three_pow_odd i
+  have h3ge := pow3_ge i
+  obtain ⟨K, hK⟩ : ∃ K, 3^i = 2 * K + 1 := ⟨3^i / 2, by omega⟩
+  rw [hK] at hlo hhi
+  -- Loosen `hhi` to the original R1 upper so `BigStep0'` applies
+  have hlo' : 3^i * 2 - i - 2 ≤ n := by rw [hK]; omega
+  have hhi' : n ≤ 3^i * 6 - i - 6 := by rw [hK]; omega
+  have hstep := BigStep0' i n hlo' hhi' hpar
+  have hne_raw : n ≠ (n + 3^i * 6 + i + 4) / 2 := by rw [hK]; omega
+  obtain ⟨k, hkpos, hk⟩ := pos_of_ne hstep (S'_ne hne_raw)
+  refine ⟨(n + 3^i * 6 + i + 4) / 2, i, k, ?_, hkpos, hk⟩
+  refine ⟨hi, ?_⟩
+  by_cases hpar' : ((n + 3^i * 6 + i + 4) / 2) % 2 = i % 2
+  · left
+    refine ⟨hpar', ?_, ?_⟩ <;> (rw [hK]; omega)
+  · right
+    have hpar'' : ((n + 3^i * 6 + i + 4) / 2) % 2 = (i + 1) % 2 := by omega
+    refine ⟨hpar'', ?_, ?_⟩ <;> (rw [hK]; omega)
+
+/-- Every valid state progresses (in a positive number of TM steps) to another
+    valid state.
+
+    **Status (2026-04-15):** R2 branch and R1-standard sub-case fully proved.
+    R1 near-boundary sub-case (`n > 3^i*6 - 3*i - 24`) deferred — this range
+    contains ~`2i + 18` values per level, of which 3 specific `n` (offsets
+    `k ∈ {12, 14, 18}` from `3^i*6 - 3*i`) have no single or 2-step BigStep
+    chain reaching a valid state. See `plan-ValidS_progress.md` for details. -/
+theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
+    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
+  obtain ⟨hi, hwin⟩ := hv
+  rcases hwin with ⟨hpar, hlo, hhi⟩ | ⟨hpar, hlo, hhi⟩
+  · -- R1 case: split by whether `n` is in the standard range or the near-top boundary
+    by_cases hstd : n ≤ 3^i * 6 - 3 * i - 24
+    · exact ValidS_progress_R1_standard n i hi hpar hlo hstd
+    · -- Near-boundary sub-case: deferred
+      sorry
+  · exact ValidS_progress_R2 n i hi hpar hlo hhi
 
 /-- `S'(18)` reaches the valid state `S'(2871591950767410355080995)` at level 50.
 
