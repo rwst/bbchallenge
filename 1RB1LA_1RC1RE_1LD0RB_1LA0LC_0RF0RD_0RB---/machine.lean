@@ -1792,7 +1792,7 @@ theorem BigStep1 (n1 n2 c : Nat) (h : P n1 (c + (2 + n2))) :
 /-- The TM reaches `S'(18)` from the initial config at step 715. -/
 theorem init : run tm (initConfig 6) 715 = S' 18 := by
   simp only [S', S1, zebra, ones, repeatSym]
-  native_decide
+  set_option maxRecDepth 10000 in rfl
 
 /-! `ValidS`, `ValidS_progress`, `bootstrap`, and `tm_not_halts` live in
 `Bootstrap.lean` to keep `machine.lean` focused on atomic rules and macro

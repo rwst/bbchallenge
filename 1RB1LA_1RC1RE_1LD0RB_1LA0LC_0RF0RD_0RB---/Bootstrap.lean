@@ -1,5 +1,6 @@
 import BusyLean
 import machine
+import Hensel
 import Mathlib.Tactic
 
 /-!
@@ -28,13 +29,6 @@ recurrence `P_n` proved in `machine.lean`.
 open BusyLean
 
 namespace Mxdys
-
-/-- A macro state `S'(n)` is valid if `n` falls in the R1 or R2 window for some
-    level `i ≥ 50`. -/
-def ValidS (n i : Nat) : Prop :=
-  50 ≤ i ∧
-  ((n % 2 = i % 2 ∧ 3 ^ i * 2 - i - 2 ≤ n ∧ n ≤ 3 ^ i * 6 - i - 6) ∨
-   (n % 2 = (i + 1) % 2 ∧ 3 ^ i * 2 - i ≤ n ∧ n ≤ 3 ^ i * 6 - i - 10))
 
 /-! #### Bootstrap chain helpers
 
@@ -152,107 +146,284 @@ private theorem S'_inj {n m : Nat} (h : S' n = S' m) : n = m := by
 private theorem S'_ne {n m : Nat} (hne : n ≠ m) : S' n ≠ S' m := by
   intro h; exact hne (S'_inj h)
 
-/-! #### The R2 sub-case of `ValidS_progress` -/
+/-! #### Iterated-BigStep infrastructure
 
-/-- R2 branch of `ValidS_progress`: apply `BigStep1'`, land at `3^i·12 - 1`
-    which is always in `R1@(i+1)` (i even) or `R2@(i+1)` (i odd). -/
-private theorem ValidS_progress_R2 (n i : Nat) (hi : 50 ≤ i)
-    (hpar : n % 2 = (i + 1) % 2)
-    (hlo : 3^i * 2 - i ≤ n) (hhi : n ≤ 3^i * 6 - i - 10) :
-    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
+The key mathematical observation: `BigStep0'` has a unique fixed point
+`C(i) := 3^i*6 + i + 4`, and each application sends `n` to `(n + C(i))/2`,
+which halves `C(i) - n`. Strong induction on the "distance" `C(i) - n`
+lets us iterate `BigStep0'` until the parity of `C(i) - n` becomes odd
+(forcing the trajectory to exit R1), and pomme_main bounds the resulting
+odd value away from 0 so the exit lands in `R2@i` (not in a gap). -/
+
+/-- The BigStep0 fixed point at level `i`: iterating `BigStep0'` moves
+    `n` toward `C(i) = 3^i*6 + i + 4`. -/
+private def C (i : Nat) : Nat := 3^i * 6 + i + 4
+
+/-- When `n` has R1 parity (matching `i`), the distance `C(i) - n` is even,
+    so `BigStep0'` halves it exactly. -/
+private theorem C_sub_n_even (n i : Nat) (hpar : n % 2 = i % 2) :
+    2 ∣ (C i - n) := by
   have h3 := three_pow_odd i
-  have h3ge := pow3_ge i
-  have hstep := BigStep1' i n hlo hhi hpar
-  -- Endpoint: 3^i * 12 - 1, which differs from n (n ≤ 6·3^i - i - 10 < 12·3^i - 1).
-  have hne_val : n ≠ 3^i * 12 - 1 := by omega
-  obtain ⟨k, hkpos, hk⟩ := pos_of_ne hstep (S'_ne hne_val)
-  refine ⟨3^i * 12 - 1, i + 1, k, ?_, hkpos, hk⟩
-  refine ⟨by omega, ?_⟩
-  -- Case on parity of i
-  rcases Nat.even_or_odd i with ⟨j, hj⟩ | ⟨j, hj⟩
-  · -- i = 2j (even): endpoint odd, target R1@(i+1), parity (i+1)%2 = 1
-    left
-    refine ⟨?_, ?_, ?_⟩
-    · -- parity of 3^i*12 - 1 is 1, and (i+1)%2 = 1
-      have h12 : (3^i * 12 - 1) % 2 = 1 := by omega
-      have : (i + 1) % 2 = 1 := by omega
-      omega
-    · -- 3^(i+1)*2 - (i+1) - 2 ≤ 3^i*12 - 1
-      rw [pow_succ]; omega
-    · -- 3^i*12 - 1 ≤ 3^(i+1)*6 - (i+1) - 6
-      rw [pow_succ]; omega
-  · -- i odd: target R2@(i+1)
-    right
-    refine ⟨?_, ?_, ?_⟩
-    · have h12 : (3^i * 12 - 1) % 2 = 1 := by omega
-      have : (i + 1 + 1) % 2 = 1 := by omega
-      omega
-    · rw [pow_succ]; omega
-    · rw [pow_succ]; omega
+  obtain ⟨K, hK⟩ : ∃ K, 3^i = 2 * K + 1 := ⟨3^i / 2, by omega⟩
+  simp only [C]; rw [hK]; omega
 
-/-! #### The R1 sub-case of `ValidS_progress` (standard range) -/
+/-- One `BigStep0'` iteration halves the distance `C(i) - n`. -/
+private theorem distance_halves (n i : Nat) (hpar : n % 2 = i % 2) :
+    C i - (n + 3^i * 6 + i + 4) / 2 = (C i - n) / 2 := by
+  have h3 := three_pow_odd i
+  obtain ⟨K, hK⟩ : ∃ K, 3^i = 2 * K + 1 := ⟨3^i / 2, by omega⟩
+  simp only [C]; rw [hK]; omega
 
-/-- R1 branch — "standard" sub-case: for `n` in R1 with `n ≤ 3^i*6 - 3*i - 24`,
-    `BigStep0'` produces an endpoint `n' ≤ 3^i*6 - i - 11` which is safely in
-    `R1@i` (if parity `i%2`) or `R2@i` (if parity `(i+1)%2`). Level stays at `i`. -/
-private theorem ValidS_progress_R1_standard (n i : Nat) (hi : 50 ≤ i)
-    (hpar : n % 2 = i % 2)
-    (hlo : 3^i * 2 - i - 2 ≤ n) (hhi : n ≤ 3^i * 6 - 3 * i - 24) :
-    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
+/-- The BigStep0 iteration applied to `n ∈ R1@i` gives a new `n'` with
+    the distance `C(i) - n'` strictly smaller than `C(i) - n`. -/
+private theorem distance_strict_decrease (n i : Nat) (hpar : n % 2 = i % 2)
+    (hhi : n ≤ 3^i * 6 - i - 6) :
+    C i - (n + 3^i * 6 + i + 4) / 2 < C i - n := by
+  rw [distance_halves n i hpar]
   have h3 := three_pow_odd i
   have h3ge := pow3_ge i
   obtain ⟨K, hK⟩ : ∃ K, 3^i = 2 * K + 1 := ⟨3^i / 2, by omega⟩
-  rw [hK] at hlo hhi
-  -- Loosen `hhi` to the original R1 upper so `BigStep0'` applies
-  have hlo' : 3^i * 2 - i - 2 ≤ n := by rw [hK]; omega
-  have hhi' : n ≤ 3^i * 6 - i - 6 := by rw [hK]; omega
-  have hstep := BigStep0' i n hlo' hhi' hpar
-  have hne_raw : n ≠ (n + 3^i * 6 + i + 4) / 2 := by rw [hK]; omega
-  obtain ⟨k, hkpos, hk⟩ := pos_of_ne hstep (S'_ne hne_raw)
-  refine ⟨(n + 3^i * 6 + i + 4) / 2, i, k, ?_, hkpos, hk⟩
-  refine ⟨hi, ?_⟩
-  by_cases hpar' : ((n + 3^i * 6 + i + 4) / 2) % 2 = i % 2
-  · left
-    refine ⟨hpar', ?_, ?_⟩ <;> (rw [hK]; omega)
-  · right
-    have hpar'' : ((n + 3^i * 6 + i + 4) / 2) % 2 = (i + 1) % 2 := by omega
-    refine ⟨hpar'', ?_, ?_⟩ <;> (rw [hK]; omega)
+  simp only [C]; rw [hK] at hhi ⊢; omega
 
-/-- Every valid state progresses (in a positive number of TM steps) to another
-    valid state.
+/-! #### The NIter trajectory invariant (2-adic bridge)
 
-    **Status (2026-04-15):** R2 branch and R1-standard sub-case fully proved.
-    R1 near-boundary sub-case (`n > 3^i*6 - 3*i - 24`) deferred.
+The key identity: `C i - Pomme.N i = 4·3^i - 1 = 3^{i-1}*12 - 1`, which is
+exactly the BigStep1' output at level `i-1` (= level-`i` entry). Each
+BigStep0' application halves `C i - n`, so trajectory states at level `i`
+take the form `C i - Pomme.N i / 2^k` for `k ≤ v₂(Pomme.N i)`.
 
-    **Note on Option 1 (tighten `ValidS`):** attempted and determined
-    mathematically infeasible as a clean one-step fix:
+The parity flips when `k = v₂(Pomme.N i)` (odd part reached), at which
+point `Hensel.pomme_main` gives the R2@i upper bound `3^i*6 - i - 10`,
+and `BigStep1'` applies to advance to level `i+1`. -/
 
-    * No finite `R1` upper bound `U(i)` gives a level-preserving single-
-      `BigStep0'` closure — the fixed-point condition
-      `(U + 3^i*6 + i + 4)/2 ≤ U` requires `U ≥ 3^i*6 + i + 4`, which
-      exceeds the entire physical range `[2·3^i − i − 2, 6·3^i − 1]`.
-    * Excluding the 3 stuck `n` values per level as side conditions
-      creates a pre-image cascade: the ~70 pre-images per level per
-      stuck value are themselves valid inputs mapping to the excluded
-      outputs.
-    * The `P` relation is generated solely by `P_O` and `P_S`, giving
-      exactly the `P_n i` family (`P_S (P_n i) = P_n (i+1)`). There are
-      no other `P n1 n2` instances, so the three stuck intermediates
-      genuinely match no `BigStep0/BigStep1` hypothesis form at any level.
+/-- 2-adic valuation of `Pomme.N i = 2·3^i + i + 5`. -/
+private def vN (i : Nat) : Nat := padicValNat 2 (Pomme.N i)
 
-    The correct closure requires iterated `BigStep0` bounded by
-    `v₂(N i)` via `Hensel.pomme_main`, i.e. a multi-step macro
-    trajectory argument rather than single-step window inclusion. See
-    `plan-ValidS_progress.md` §7.5 for the full analysis. -/
+/-- The `k`-th trajectory state at level `i`: `C i - (N i) / 2^k`. -/
+private def NIter (i k : Nat) : Nat := C i - Pomme.N i / 2^k
+
+private theorem N_pos (i : Nat) : 0 < Pomme.N i := by
+  unfold Pomme.N; positivity
+
+private theorem N_le_C (i : Nat) (hi : 50 ≤ i) : Pomme.N i ≤ C i := by
+  have h3ge := pow3_ge i
+  simp only [Pomme.N, C]; omega
+
+private theorem N_div_le_N (i k : Nat) : Pomme.N i / 2^k ≤ Pomme.N i :=
+  Nat.div_le_self _ _
+
+private theorem N_div_le_C (i k : Nat) (hi : 50 ≤ i) :
+    Pomme.N i / 2^k ≤ C i :=
+  le_trans (N_div_le_N i k) (N_le_C i hi)
+
+/-- Division chain: `N i / 2^(k+1) = (N i / 2^k) / 2`. -/
+private theorem N_div_succ (i k : Nat) :
+    Pomme.N i / 2^(k+1) = (Pomme.N i / 2^k) / 2 := by
+  rw [pow_succ, ← Nat.div_div_eq_div_mul]
+
+/-- For `k < vN i`, `N i / 2^k` is even. -/
+private theorem N_div_even (i k : Nat) (hk : k < vN i) :
+    Pomme.N i / 2^k % 2 = 0 := by
+  have hpos := (N_pos i).ne'
+  have h1 : (2:Nat)^(k+1) ∣ Pomme.N i :=
+    (padicValNat_dvd_iff_le hpos).mpr (by unfold vN at hk; omega)
+  obtain ⟨m, hm⟩ := h1
+  have : Pomme.N i / 2^k = 2 * m := by
+    rw [hm, pow_succ, mul_assoc, mul_comm,
+        Nat.mul_div_cancel _ (by positivity : (0:Nat) < 2^k)]
+  omega
+
+/-- At `k = vN i`, `N i / 2^k` is odd. -/
+private theorem N_div_odd (i : Nat) :
+    Pomme.N i / 2^(vN i) % 2 = 1 := by
+  have hpos := (N_pos i).ne'
+  by_contra hne
+  have h : 2 ∣ (Pomme.N i / 2^(vN i)) := by omega
+  have hdvd : (2:Nat)^(vN i) ∣ Pomme.N i := by
+    unfold vN; exact pow_padicValNat_dvd
+  have h2 : (2:Nat)^(vN i + 1) ∣ Pomme.N i := by
+    rw [pow_succ]; exact Nat.mul_dvd_of_dvd_div hdvd h
+  have := (padicValNat_dvd_iff_le hpos).mp h2
+  unfold vN at this; omega
+
+/-- **NIter_zero**: `NIter i 0 = 4·3^i - 1 = 3^{i-1}*12 - 1` (level entry). -/
+private theorem NIter_zero (i : Nat) (hi : 50 ≤ i) :
+    NIter i 0 = 3^i * 4 - 1 := by
+  have h3ge := pow3_ge i
+  simp only [NIter, C, Pomme.N, pow_zero, Nat.div_one]; omega
+
+/-- **NIter_step**: one BigStep0' iteration advances k to k+1. -/
+private theorem NIter_step (i k : Nat) (hk : k < vN i) (hi : 50 ≤ i) :
+    (NIter i k + 3^i * 6 + i + 4) / 2 = NIter i (k+1) := by
+  have hev := N_div_even i k hk
+  have hle : Pomme.N i / 2^k ≤ 3^i * 6 + i + 4 := by
+    have := N_div_le_C i k hi; unfold C at this; exact this
+  set q := Pomme.N i / 2^(k+1) with hq_def
+  have hq : Pomme.N i / 2^k = 2 * q := by
+    rw [hq_def, N_div_succ]; omega
+  have hstep : Pomme.N i / 2^(k+1) = q := hq_def.symm
+  show (3^i*6 + i + 4 - Pomme.N i / 2^k + 3^i*6 + i + 4) / 2 =
+       3^i*6 + i + 4 - Pomme.N i / 2^(k+1)
+  rw [hq, hstep]; omega
+
+/-- **NIter_parity_R1**: for `k < vN i`, `NIter i k` has R1 parity. -/
+private theorem NIter_parity_R1 (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
+    NIter i k % 2 = i % 2 := by
+  have h3 := three_pow_odd i
+  have hev := N_div_even i k hk
+  have hle : Pomme.N i / 2 ^ k ≤ 3^i * 6 + i + 4 := by
+    have := N_div_le_C i k hi; unfold C at this; exact this
+  show (3^i*6 + i + 4 - Pomme.N i / 2 ^ k) % 2 = i % 2
+  omega
+
+/-- **NIter_parity_R2**: at `k = vN i`, `NIter i k` has R2 parity. -/
+private theorem NIter_parity_R2 (i : Nat) (hi : 50 ≤ i) :
+    NIter i (vN i) % 2 = (i + 1) % 2 := by
+  have h3 := three_pow_odd i
+  have hodd := N_div_odd i
+  have hle : Pomme.N i / 2 ^ (vN i) ≤ 3^i * 6 + i + 4 := by
+    have := N_div_le_C i (vN i) hi; unfold C at this; exact this
+  show (3^i*6 + i + 4 - Pomme.N i / 2 ^ (vN i)) % 2 = (i + 1) % 2
+  omega
+
+/-- **NIter_lower**: all NIter states satisfy the R1/R2 lower bound. -/
+private theorem NIter_lower (i k : Nat) (hi : 50 ≤ i) :
+    3^i * 2 - i - 2 ≤ NIter i k := by
+  have h3ge := pow3_ge i
+  have hle : Pomme.N i / 2^k ≤ Pomme.N i := N_div_le_N i k
+  simp only [NIter, C, Pomme.N] at *; omega
+
+/-- **NIter_upper_R1**: for `k < vN i`, bounded by R1@i upper via pomme_main. -/
+private theorem NIter_upper_R1 (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
+    NIter i k ≤ 3^i * 6 - i - 6 := by
+  have hpomme := Hensel.pomme_main i hi
+  -- vN i = padicValNat 2 (N i), so hpomme : 2i+14 ≤ N i / 2^(vN i)
+  have hodd_bound : 2*i + 14 ≤ Pomme.N i / 2^(vN i) := by
+    unfold vN; exact hpomme
+  -- N i / 2^k ≥ 2 * (N i / 2^(vN i)) for k < vN i
+  have hN_bound : 2 * (Pomme.N i / 2^(vN i)) ≤ Pomme.N i / 2^k := by
+    have hk' : k + 1 ≤ vN i := hk
+    have hdvd_succ : Pomme.N i / 2^(vN i) * 2 ≤ Pomme.N i / 2^k := by
+      -- N i / 2^k ≥ 2 * (N i / 2^(k+1)) ≥ ... ≥ 2^(vN i - k) * (N i / 2^(vN i))
+      have : Pomme.N i / 2^(vN i) * 2^(vN i - k) ≤ Pomme.N i / 2^k := by
+        rw [Nat.le_div_iff_mul_le (by positivity), mul_assoc,
+            ← pow_add, Nat.sub_add_cancel (le_of_lt hk)]
+        exact Nat.div_mul_le_self _ _
+      have h2le : (2:Nat) ≤ 2^(vN i - k) := by
+        have : 1 ≤ vN i - k := by omega
+        calc (2:Nat) = 2^1 := by ring
+          _ ≤ 2^(vN i - k) := Nat.pow_le_pow_right (by norm_num) this
+      calc Pomme.N i / 2^(vN i) * 2
+          ≤ Pomme.N i / 2^(vN i) * 2^(vN i - k) :=
+            Nat.mul_le_mul_left _ h2le
+        _ ≤ Pomme.N i / 2^k := this
+    linarith
+  have hbig : 4*i + 28 ≤ Pomme.N i / 2^k := by omega
+  have hle := N_div_le_C i k hi
+  simp only [NIter, C] at *
+  -- NIter i k = C i - N i / 2^k = 6·3^i + i + 4 - N i / 2^k
+  -- ≤ 6·3^i + i + 4 - (4i + 28) = 6·3^i - 3i - 24 ≤ 6·3^i - i - 6
+  have h3ge := pow3_ge i
+  omega
+
+/-- **NIter_upper_R2**: at `k = vN i`, bounded by R2@i upper. -/
+private theorem NIter_upper_R2 (i : Nat) (hi : 50 ≤ i) :
+    NIter i (vN i) ≤ 3^i * 6 - i - 10 := by
+  have hpomme := Hensel.pomme_main i hi
+  have hodd_bound : 2*i + 14 ≤ Pomme.N i / 2^(vN i) := by
+    unfold vN; exact hpomme
+  have hle := N_div_le_C i (vN i) hi
+  simp only [NIter, C] at *
+  have h3ge := pow3_ge i
+  omega
+
+/-- **NIter_lower_R2**: at `k = vN i`, above R2@i lower. -/
+private theorem NIter_lower_R2 (i : Nat) (hi : 50 ≤ i) :
+    3^i * 2 - i ≤ NIter i (vN i) := by
+  have hle : Pomme.N i / 2^(vN i) ≤ Pomme.N i := N_div_le_N i (vN i)
+  have h3ge := pow3_ge i
+  simp only [NIter, C, Pomme.N] at *; omega
+
+/-- A macro state `S'(n)` is valid at level `i ≥ 50` if it is one of the
+    trajectory states `NIter i k` for some `k ≤ v₂(Pomme.N i)`. This is
+    the explicit 2-adic trajectory invariant: level-`i` entry equals
+    `NIter i 0 = 4·3^i - 1`, and `BigStep0'` halves the distance
+    `C i - n = Pomme.N i / 2^k` at each step until parity flips at
+    `k = v₂(Pomme.N i)`, where `Hensel.pomme_main` forces the state
+    into the R2@i window. -/
+def ValidS (n i : Nat) : Prop :=
+  50 ≤ i ∧ ∃ k, k ≤ vN i ∧ n = NIter i k
+
+/-- **NIter_ne_succ**: consecutive NIter states are distinct.
+    Proof: `NIter i k` has even distance (k < vN i), while `NIter i (k+1)`
+    has strictly smaller distance `(N i / 2^k) / 2`. Both distances are
+    positive and differ, so the states differ. -/
+private theorem NIter_ne_succ (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
+    NIter i k ≠ NIter i (k+1) := by
+  have hev := N_div_even i k hk
+  have hle1 : Pomme.N i / 2^k ≤ 3^i * 6 + i + 4 := by
+    have := N_div_le_C i k hi; unfold C at this; exact this
+  have hle2 : Pomme.N i / 2^(k+1) ≤ 3^i * 6 + i + 4 := by
+    have := N_div_le_C i (k+1) hi; unfold C at this; exact this
+  -- Pomme.N i / 2^k is positive: 2^k ∣ N i (since k ≤ vN i) and N i > 0
+  have hdvd : (2:Nat)^k ∣ Pomme.N i := by
+    have h1 : (2:Nat)^k ∣ (2:Nat)^(vN i) := pow_dvd_pow 2 (le_of_lt hk)
+    exact dvd_trans h1 (by unfold vN; exact pow_padicValNat_dvd)
+  obtain ⟨q, hq⟩ := hdvd
+  have hq_pos : 0 < q := by
+    rcases Nat.eq_zero_or_pos q with rfl | hq'
+    · exfalso; rw [Nat.mul_zero] at hq; exact (N_pos i).ne' hq
+    · exact hq'
+  have hdiv_eq : Pomme.N i / 2^k = q := by
+    rw [hq, Nat.mul_div_cancel_left _ (by positivity : (0:Nat) < 2^k)]
+  have hdiv_succ : Pomme.N i / 2^(k+1) = q / 2 := by
+    rw [N_div_succ, hdiv_eq]
+  show 3^i*6 + i + 4 - Pomme.N i / 2^k ≠ 3^i*6 + i + 4 - Pomme.N i / 2^(k+1)
+  rw [hdiv_eq, hdiv_succ]
+  -- q is even (since N/2^k is even and equals q), so q ≥ 2, and q ≠ q/2
+  have hq_even : q % 2 = 0 := by rw [← hdiv_eq]; exact hev
+  omega
+
+/-- **Main progress theorem**: every valid state progresses (in `k > 0`
+    concrete TM steps) to another valid state.
+
+    Proof: a valid state is `NIter i k` for some `k ≤ vN i`.
+    * If `k < vN i`: apply `BigStep0'` to advance to `NIter i (k+1)`.
+    * If `k = vN i`: apply `BigStep1'` to advance to `NIter (i+1) 0`
+      (using `Hensel.pomme_main` for the R2@i upper bound). -/
 theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
     ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
-  obtain ⟨hi, hwin⟩ := hv
-  rcases hwin with ⟨hpar, hlo, hhi⟩ | ⟨hpar, hlo, hhi⟩
-  · by_cases hstd : n ≤ 3^i * 6 - 3 * i - 24
-    · exact ValidS_progress_R1_standard n i hi hpar hlo hstd
-    · -- Near-boundary sub-case: requires pomme_main-controlled iteration.
-      sorry
-  · exact ValidS_progress_R2 n i hi hpar hlo hhi
+  have hi : 50 ≤ i := hv.1
+  obtain ⟨k, hk, hn⟩ := hv.2
+  subst hn
+  by_cases hklast : k = vN i
+  · -- R2 case: parity flipped, BigStep1' advances to level i+1
+    subst hklast
+    have hpar := NIter_parity_R2 i hi
+    have hlo := NIter_lower_R2 i hi
+    have hhi := NIter_upper_R2 i hi
+    have hstep := BigStep1' i (NIter i (vN i)) hlo hhi hpar
+    -- Endpoint 3^i*12 - 1 = NIter (i+1) 0
+    have hend : (3^i * 12 - 1 : Nat) = NIter (i+1) 0 := by
+      have h3ge := pow3_ge i
+      rw [NIter_zero (i+1) (by omega), pow_succ]; omega
+    have hne : NIter i (vN i) ≠ 3^i * 12 - 1 := by
+      have h3ge := pow3_ge i
+      have := NIter_upper_R2 i hi
+      omega
+    obtain ⟨κ, hκpos, hκ⟩ := pos_of_ne hstep (S'_ne hne)
+    rw [hend] at hκ
+    refine ⟨NIter (i+1) 0, i+1, κ, ⟨by omega, 0, Nat.zero_le _, rfl⟩, hκpos, hκ⟩
+  · -- R1 case: k < vN i, BigStep0' advances to k+1
+    have hklt : k < vN i := lt_of_le_of_ne hk hklast
+    have hpar := NIter_parity_R1 i k hi hklt
+    have hlo := NIter_lower i k hi
+    have hhi := NIter_upper_R1 i k hi hklt
+    have hstep := BigStep0' i (NIter i k) hlo hhi hpar
+    rw [NIter_step i k hklt hi] at hstep
+    have hne := NIter_ne_succ i k hi hklt
+    obtain ⟨κ, hκpos, hκ⟩ := pos_of_ne hstep (S'_ne hne)
+    refine ⟨NIter i (k+1), i, κ, ⟨hi, k+1, hklt, rfl⟩, hκpos, hκ⟩
 
 /-- `S'(18)` reaches the valid state `S'(2871591950767410355080995)` at level 50.
 
@@ -501,8 +672,10 @@ theorem bootstrap : ∃ n i k, ValidS n i ∧ run tm (S' 18) k = S' n := by
     h1196496646153087647950441.trans h1316146310768396412745496
   obtain ⟨k, hk⟩ := chain
   refine ⟨2871591950767410355080995, 50, k, ?_, hk⟩
-  -- ValidS at level 50: hits the R2 window
-  refine ⟨by decide, Or.inr ⟨?_, ?_, ?_⟩⟩ <;> decide
+  -- Produce ValidS: endpoint = NIter 50 0 = 4·3^50 - 1
+  have hNIter : NIter 50 0 = 2871591950767410355080995 := by
+    rw [NIter_zero 50 (by decide)]; decide
+  exact ⟨by decide, 0, Nat.zero_le _, hNIter.symm⟩
 
 /-- `S'(n)` has `state = some stC ≠ none`. -/
 theorem S'_not_halted (n : Nat) : ¬ (S' n).halted := by
