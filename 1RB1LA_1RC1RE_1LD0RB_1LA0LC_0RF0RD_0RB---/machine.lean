@@ -1184,13 +1184,25 @@ theorem Ov3 (b : Nat) : S3 0 b -[tm]->* S1 0 2 (2 + b) := by
 
 /-! ### Phase decomposition for `ROv1_1_0_halts`
 
-We decompose the halting trajectory of `S1(0, b, 1)` into:
-  1. **zebra_traverse(b)** — `2b` steps. Uses the existing lemma.
+The halting trajectory of `S1(0, b, 1)` is `64 + 8*b` TM steps. We decompose:
+
+  1. **`zebra_traverse(b)`** — `2b` steps. Uses the existing lemma.
   2. **`phase_a_boundary`** — fixed `22` steps that process the right boundary
      `[t, t, f, t]` regardless of the underlying left tape `L`. Built via
      `run_left_append` from a 21-step concrete base.
-  3. **`phase_b`** (sorry'd for now) — the remaining `42 + 6b` steps that
-     process the left's `rev_zebra b` and reach a halted state.
+  3. **`phase_b_step1`** — `6` generic steps (`:= rfl`).
+  4. **`phase_b_step2`** — `14` generic steps (`5 + 9` chunks).
+  5. **`rev_zebra_consume`** — `2b` steps via `shift_rule_L_lift` (Phase 1
+     tactic work): lifts a trivial 2-step 1-iteration `{C, [t,f]++L, f, R} →{2}
+     {C, L, f, [f,t]++R}` (provable by `rfl`) to `2b` steps that consume all
+     `rev_zebra b` from the left.
+  6. **`phase_b_setup`** — `4` generic steps (`rfl`).
+  7. **`zebra_consume_R`** — `4b` steps via `shift_rule_R_lift`: lifts a
+     trivial 4-step 1-iteration on the right.
+  8. **`phase_b_tail`** — `18` steps via `run_left_append` from a
+     `decide`-based concrete base.
+
+Total: `2b + 22 + 6 + 14 + 2b + 4 + 4b + 18 = 64 + 8b`. ✓
 -/
 
 /-- 21-step base case for `phase_a_boundary`: from `{B, [f], t, [t, f, t]}`
@@ -1299,10 +1311,170 @@ theorem ROv1_pre_divergence (b : Nat) :
   rw [run_add, phase_b_step1 (rev_zebra b)]
   exact phase_b_step2 (rev_zebra b)
 
-/-- `S1(0, b, 1)` halts (the dangerous case avoided by Pomme).
-    Phase A is fully proved (above); Phase B (the remaining `42 + 6b` steps to
-    halt, which processes the left's `rev_zebra b`) is still TODO. -/
-theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by sorry
+/-! ### Post-divergence phase B using `shift_rule_L_lift` / `shift_rule_R_lift`
+
+The pre-divergence trajectory preserves `rev_zebra b` at the bottom of the
+left. The post-divergence part consumes it via two successive shift-rule
+applications:
+
+1. **`rev_zebra_consume`** (`2b` steps, via `shift_rule_L_lift`):
+   `{C, rev_zebra b, f, R} → {C, [], f, zebra b ++ R}`
+
+2. **Setup** (4 concrete steps):
+   `{C, [], f, zebra b ++ R} → {E, ones 2, t, zebra b ++ R}`
+
+3. **`zebra_consume_R`** (`4b` steps, via `shift_rule_R_lift`):
+   `{E, ones 2, t, zebra b ++ R} → {E, ones (2+2b), t, R}`
+
+4. **Final tail** (18 steps, via `run_left_append` from a `decide`d base):
+   `{E, ones (2+2b), t, R₀} → halted`
+
+Total: `2b + 42` (pre-divergence) `+ 2b + 4 + 4b + 18 = 6b + 22` (post-divergence)
+     = `64 + 8b` as expected. -/
+
+/-- `rev_zebra b = listPow [true, false] b`. -/
+theorem rev_zebra_eq_listPow (b : Nat) : rev_zebra b = listPow [true, false] b := by
+  induction b with
+  | zero => rfl
+  | succ b ih => show true :: false :: rev_zebra b = [true, false] ++ listPow [true, false] b
+                 rw [ih]; rfl
+
+/-- `zebra b = listPow [false, true] b`. -/
+theorem zebra_eq_listPow (b : Nat) : zebra b = listPow [false, true] b := by
+  induction b with
+  | zero => rfl
+  | succ b ih => show false :: true :: zebra b = [false, true] ++ listPow [false, true] b
+                 rw [ih]; rfl
+
+/-- `listPow [true, true] b = ones (2*b)`. -/
+theorem listPow_tt_eq_ones (b : Nat) : listPow [true, true] b = ones (2 * b) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+    show [true, true] ++ listPow [true, true] b = ones (2 * (b + 1))
+    rw [ih]
+    show true :: true :: ones (2 * b) = ones (2 * (b + 1))
+    rw [show 2 * (b + 1) = 2 * b + 1 + 1 from by omega]
+    rfl
+
+/-- **Rev-zebra consumption shift** (the main post-divergence lifting): from
+    `{C, rev_zebra b, f, R}` we reach `{C, [], f, zebra b ++ R}` in `2b` TM
+    steps. Derived from a trivial 1-iteration `{C, [t,f] ++ L, f, R} →{2}
+    {C, L, f, [f,t] ++ R}` via `shift_rule_L_lift`. -/
+theorem rev_zebra_consume (R : List Sym) (b : Nat) :
+    ({ state := some stC, left := rev_zebra b, head := false, right := R } : Config 6) -[tm]->*
+    { state := some stC, left := [], head := false, right := zebra b ++ R } := by
+  rw [rev_zebra_eq_listPow, zebra_eq_listPow]
+  have h : ∀ L' R' : List Sym,
+      ({ state := some stC, left := [true, false] ++ L', head := false, right := R' } : Config 6)
+        -[tm]->*
+      { state := some stC, left := L', head := false, right := [false, true] ++ R' } := by
+    intro L' R'; refine ⟨2, ?_⟩; show run tm _ 2 = _; rfl
+  have := shift_rule_L_lift tm (some stC) false [true, false] [false, true] h [] R b
+  simp only [List.append_nil] at this
+  exact this
+
+/-- **4-step setup** between `rev_zebra_consume` and `zebra_consume_R`:
+    `{C, [], f, R} → {E, [t, t], t, R}`. Generic in `R` — the intermediate
+    steps only write and move, without reading from the right beyond the
+    first two cells, both of which get written before they're read. -/
+theorem phase_b_setup (R : List Sym) :
+    run tm ({ state := some stC, left := [], head := false, right := R } : Config 6) 4 =
+    { state := some stE, left := [true, true], head := true, right := R } := rfl
+
+/-- **Zebra consumption shift** on the right: from `{E, L, t, zebra b ++ R}`
+    we reach `{E, ones (2*b) ++ L, t, R}` in `4b` TM steps. Derived from a
+    1-iteration `{E, L, t, [f,t] ++ R} →{4} {E, [t,t] ++ L, t, R}` via
+    `shift_rule_R_lift`. -/
+theorem zebra_consume_R (L R : List Sym) (b : Nat) :
+    ({ state := some stE, left := L, head := true, right := zebra b ++ R } : Config 6) -[tm]->*
+    { state := some stE, left := ones (2 * b) ++ L, head := true, right := R } := by
+  rw [zebra_eq_listPow, ← listPow_tt_eq_ones]
+  exact shift_rule_R_lift tm (some stE) true [false, true] [true, true]
+    (fun L' R' => ⟨4, by show run tm _ 4 = _; rfl⟩) L R b
+
+/-- **18-step halting tail base case**: concrete trajectory from
+    `{E, ones 2, t, [f,t,f,t,f,t,f,f,t]}` to halt in 18 steps. Proved by `decide`. -/
+private theorem phase_b_tail_base :
+    run tm ({state := some stE, left := [true, true], head := true,
+             right := [false, true, false, true, false, true, false, false, true]} : Config 6) 18 =
+    {state := none, left := [false, true, true, true, true, true, true, true, true, true, true],
+     head := true, right := []} := by decide
+
+/-- Left non-empty during `phase_b_tail_base` (needed for `run_left_append`).
+    Checked by `Nat.decBallLT`. -/
+private theorem phase_b_tail_base_left_ne : ∀ m, m < 18 →
+    (run tm ({state := some stE, left := [true, true], head := true,
+              right := [false, true, false, true, false, true, false, false, true]} : Config 6)
+             m).left ≠ [] := by
+  decide
+
+/-- **Phase B halting tail** (generic over a left suffix `L`): `18` TM steps
+    from `{E, [t, t] ++ L, t, [f,t,f,t,f,t,f,f,t]}` to the halted state
+    `{none, [f, t, t, t, t, t, t, t, t, t, t] ++ L, t, []}`. Lifted via
+    `run_left_append` from the concrete `L = []` case. -/
+theorem phase_b_tail (L : List Sym) :
+    run tm ({state := some stE, left := [true, true] ++ L, head := true,
+             right := [false, true, false, true, false, true, false, false, true]} : Config 6) 18 =
+    {state := none,
+     left := [false, true, true, true, true, true, true, true, true, true, true] ++ L,
+     head := true, right := []} := by
+  have h := run_left_append tm
+    ({state := some stE, left := [true, true], head := true,
+      right := [false, true, false, true, false, true, false, false, true]} : Config 6)
+    L 18 phase_b_tail_base_left_ne
+  rw [phase_b_tail_base] at h
+  exact h
+
+/-- **`S1(0, b, 1)` halts** — full proof of the dangerous case avoided by
+    Pomme, via phase decomposition and `shift_rule_L_lift` / `shift_rule_R_lift`.
+
+    Chain the 8 phases as `EvStep`s: pre-divergence (`2b + 42` steps, known),
+    then rev-zebra consumption (via `shift_rule_L_lift`), then a 4-step setup,
+    then zebra consumption via `shift_rule_R_lift`, then an 18-step halting
+    tail lifted from a `decide`d base. -/
+theorem ROv1_1_0_halts (b : Nat) : ∃ k, (run tm (S1 0 b 1) k).halted := by
+  -- Chain EvSteps from S1 0 b 1 down to a halted config.
+  have h_pre : (S1 0 b 1 : Config 6) -[tm]->*
+      ({state := some stC, left := rev_zebra b, head := false,
+        right := [false, true, false, true, false, true, false, false, true]} : Config 6) :=
+    ⟨2 * b + 42, ROv1_pre_divergence b⟩
+  have h_revzebra := rev_zebra_consume
+    [false, true, false, true, false, true, false, false, true] b
+  have h_setup : ({state := some stC, left := [], head := false,
+                   right := zebra b ++ [false, true, false, true, false, true, false, false, true]}
+                   : Config 6) -[tm]->*
+      ({state := some stE, left := [true, true], head := true,
+        right := zebra b ++ [false, true, false, true, false, true, false, false, true]}
+        : Config 6) :=
+    ⟨4, phase_b_setup _⟩
+  have h_zebracons := zebra_consume_R [true, true]
+    [false, true, false, true, false, true, false, false, true] b
+  -- `zebra_consume_R` produces left = `ones (2*b) ++ [t, t]`; `phase_b_tail`
+  -- wants `[t, t] ++ L`. Rewrite via `ones_append` + `List.append_assoc` to
+  -- bridge the two forms (both are `ones (2 + 2*b)`).
+  have h_left_eq : ones (2 * b) ++ [true, true] = [true, true] ++ ones (2 * b) := by
+    show ones (2 * b) ++ ones 2 = ones 2 ++ ones (2 * b)
+    rw [ones_append, ones_append]; congr 1; omega
+  rw [h_left_eq] at h_zebracons
+  have h_tail := phase_b_tail (ones (2 * b))
+  have h_tail_ev : ({state := some stE, left := [true, true] ++ ones (2 * b), head := true,
+                     right := [false, true, false, true, false, true, false, false, true]}
+                     : Config 6) -[tm]->*
+      ({state := none,
+        left := [false, true, true, true, true, true, true, true, true, true, true]
+                ++ ones (2 * b),
+        head := true, right := []} : Config 6) :=
+    ⟨18, h_tail⟩
+  -- Compose: S1 0 b 1 →* halted
+  have h_full : (S1 0 b 1 : Config 6) -[tm]->*
+      ({state := none,
+        left := [false, true, true, true, true, true, true, true, true, true, true]
+                ++ ones (2 * b),
+        head := true, right := []} : Config 6) :=
+    h_pre.trans (h_revzebra.trans (h_setup.trans (h_zebracons.trans h_tail_ev)))
+  obtain ⟨k, hk⟩ := h_full
+  exact ⟨k, by rw [hk]; rfl⟩
 
 /-! ### 7. Iterated versions -/
 
@@ -1400,13 +1572,133 @@ theorem ROv1_0 (a b : Nat) : S1 a b 0 -[tm]->* S1 0 2 (3 + a * 2 + b) := by
       _ -[tm]->* S1 0 2 (3 + a * 2 + b) := by
             rw [show 2 + a * 2 + (1 + b) = 3 + a * 2 + b from by omega]
 
+/-! #### S1_to_S2 helpers: generic-in-L boundary transitions
+
+The proof of `S1_to_S2` needs three constant-size boundary steps that are
+generic in the surrounding left tape `L`. Each is provable by kernel reduction
+(`rfl`); the 28-step phase 2 boundary is split into 4×7 chunks to keep kernel
+reduction within heartbeat budget. -/
+
+/-- Phase 2: 28-step boundary from `{C, L, t, [t,t,f,t]}` to
+    `{C, L, t, [f,t,f,t,t,t,t,f,t]}`. Left unchanged, right tape replaced.
+    Generic in `L`. -/
+private theorem S1_to_S2_phase2 (L : List Sym) :
+    run tm ({state := some stC, left := L, head := true,
+             right := [true, true, false, true]} : Config 6) 28 =
+    {state := some stC, left := L, head := true,
+     right := [false, true, false, true, true, true, true, false, true]} := by
+  rw [show (28:Nat) = 7 + 7 + 7 + 7 from rfl, run_add, run_add, run_add]
+  have h1 : run tm ({state := some stC, left := L, head := true,
+                     right := [true, true, false, true]} : Config 6) 7 =
+            {state := some stD, left := [false, true, true, true, false] ++ L,
+             head := false, right := []} := rfl
+  rw [h1]
+  have h2 : run tm ({state := some stD, left := [false, true, true, true, false] ++ L,
+                     head := false, right := []} : Config 6) 7 =
+            {state := some stD,
+             left := [false, false, true, true, true, true, true, false] ++ L,
+             head := true, right := [true]} := rfl
+  rw [h2]
+  have h3 : run tm ({state := some stD,
+                     left := [false, false, true, true, true, true, true, false] ++ L,
+                     head := true, right := [true]} : Config 6) 7 =
+            {state := some stA, left := false :: L, head := true,
+             right := [true, true, true, true, true, true, false, true]} := rfl
+  rw [h3]
+  have h4 : run tm ({state := some stA, left := false :: L, head := true,
+                     right := [true, true, true, true, true, true, false, true]} : Config 6) 7 =
+            {state := some stC, left := L, head := true,
+             right := [false, true, false, true, true, true, true, false, true]} := rfl
+  exact h4
+
+private theorem S1_to_S2_phase2_ev (L : List Sym) :
+    ({state := some stC, left := L, head := true,
+      right := [true, true, false, true]} : Config 6) -[tm]->*
+    {state := some stC, left := L, head := true,
+     right := [false, true, false, true, true, true, true, false, true]} :=
+  ⟨28, S1_to_S2_phase2 L⟩
+
+/-- Phase 4a: 6-step boundary, generic in `L`. -/
+private theorem S1_to_S2_phase4a_ev (L : List Sym) :
+    ({state := some stC, left := L, head := true,
+      right := [true, true, true, false, true]} : Config 6) -[tm]->*
+    {state := some stC, left := L, head := false,
+     right := [false, true, false, false, true]} :=
+  ⟨6, rfl⟩
+
+/-- Phase 6a: 2-step boundary, generic in `L`. Grows left by `[t,f]`. -/
+private theorem S1_to_S2_phase6a_ev (L : List Sym) :
+    ({state := some stC, left := L, head := true,
+      right := [false, false, true]} : Config 6) -[tm]->*
+    {state := some stC, left := true :: false :: L, head := false,
+     right := [true]} :=
+  ⟨2, rfl⟩
+
 /-- `S1(2+a, b, 1) →* S2(a, 6+b)`: boundary step from S1 with c=1 to S2.
-    Requires shift rules for `right := ones 2 ++ [f, t]` boundary processing
-    that are not yet defined. With Phase 1 Stages 1 and 3 of `es` implemented,
-    `tape_split` can peel `ones (4+2a)` into `ones 2 ++ ones (2+2a)`, but the
-    es loop still gets stuck on the missing boundary shift. TODO: add the
-    boundary shift rules and prove via `es`. -/
-private theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by sorry
+    Decomposition (`66 + 8*b` steps, independent of `a`):
+    1. `zebra_traverse b` (2b steps) consumes `zebra b` on right.
+    2. Phase 2: 28-step fixed boundary processes `[t,t,f,t]` tail.
+    3. `zebra_traverse 2` (4 steps) consumes 2 more zebra pairs.
+    4. Phase 4a: 6-step boundary flips head `t→f`.
+    5. `cd_retreat_ev_keep_ones (b+2) (2+2a)`: consumes `rev_zebra (b+2)` from left.
+    6. `zebra_traverse (b+4)` (2(b+4) steps) consumes zebras from right.
+    7. Phase 6a: 2-step boundary growing left by `[t,f]`.
+    8. `cd_retreat_ev_keep_ones (b+5) (2a)`: final retreat. -/
+theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by
+  show (S1 (2 + a) b 1 : Config 6) -[tm]->* S2 a (6 + b)
+  simp only [S1, S2]
+  rw [show 2 * (2 + a) = 4 + 2 * a from by omega,
+      show 2 * 1 = 2 from rfl,
+      show (zebra b ++ ones 2 ++ ([false, true] : List Sym)) =
+          zebra b ++ [true, true, false, true] from by
+        rw [List.append_assoc]; rfl]
+  -- Phase 1: zebra_traverse b
+  refine (zebra_traverse_ev b (ones (4 + 2 * a)) [true, true, false, true]).trans ?_
+  -- Phase 2: 28-step boundary
+  refine (S1_to_S2_phase2_ev (rev_zebra b ++ ones (4 + 2 * a))).trans ?_
+  -- Phase 3: zebra_traverse 2 (after rewriting right as `zebra 2 ++ [t,t,t,f,t]`)
+  rw [show ([false, true, false, true, true, true, true, false, true] : List Sym) =
+          zebra 2 ++ [true, true, true, false, true] from rfl]
+  refine (zebra_traverse_ev 2 (rev_zebra b ++ ones (4 + 2 * a))
+            [true, true, true, false, true]).trans ?_
+  -- Combine `rev_zebra 2 ++ rev_zebra b = rev_zebra (b + 2)`
+  rw [show (rev_zebra 2 ++ (rev_zebra b ++ ones (4 + 2 * a)) : List Sym) =
+          rev_zebra (b + 2) ++ ones (2 + (2 + 2 * a)) from by
+        rw [← List.append_assoc, rev_zebra_append,
+            show (4 + 2 * a : Nat) = 2 + (2 + 2 * a) from by omega]
+        congr 2; omega]
+  -- Phase 4a: 6-step boundary
+  refine (S1_to_S2_phase4a_ev _).trans ?_
+  -- Phase 4b: cd_retreat_ev_keep_ones (k=b+2, m=2+2a)
+  refine (cd_retreat_ev_keep_ones (b + 2) (2 + 2 * a)
+            [false, true, false, false, true]).trans ?_
+  -- Rewrite right: `zebra (b + 2 + 1) ++ [f,t,f,f,t] = zebra (b + 4) ++ [f,f,t]`
+  rw [show (zebra (b + 2 + 1) ++ [false, true, false, false, true] : List Sym) =
+          zebra (b + 4) ++ [false, false, true] from by
+        rw [show ([false, true, false, false, true] : List Sym) =
+                [false, true] ++ [false, false, true] from rfl,
+            ← List.append_assoc,
+            show ([false, true] : List Sym) = zebra 1 from rfl,
+            zebra_append,
+            show b + 2 + 1 + 1 = b + 4 from by omega]]
+  -- Phase 5: zebra_traverse (b + 4)
+  refine (zebra_traverse_ev (b + 4) (ones (2 + 2 * a)) [false, false, true]).trans ?_
+  -- Phase 6a: 2-step boundary
+  refine (S1_to_S2_phase6a_ev _).trans ?_
+  -- Combine `[t, f] :: rev_zebra (b + 4) = rev_zebra (b + 5)`
+  rw [show (true :: false :: (rev_zebra (b + 4) ++ ones (2 + 2 * a)) : List Sym) =
+          rev_zebra (b + 5) ++ ones (2 + 2 * a) from by
+        show rev_zebra 1 ++ rev_zebra (b + 4) ++ ones (2 + 2 * a) = _
+        rw [rev_zebra_append]
+        congr 2; omega]
+  -- Phase 6b: cd_retreat_ev_keep_ones (k=b+5, m=2a), right = [t]
+  have hfin := cd_retreat_ev_keep_ones (b + 5) (2 * a) [true]
+  -- Match shape: `ones (2 + 2*a) = ones (2 + 2*a)` already, target `zebra (6+b) ++ [t]`
+  rw [show (ones (2 + 2 * a) : List Sym) = ones (2 + 2 * a) from rfl]
+  -- `zebra (b + 5 + 1) = zebra (6 + b)` via commutativity
+  have hz : zebra (b + 5 + 1) = zebra (6 + b) := by congr 1; omega
+  rw [hz] at hfin
+  exact hfin
 
 theorem ROv1_1 (a b : Nat) :
     S1 (2 + a) b 1 -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
