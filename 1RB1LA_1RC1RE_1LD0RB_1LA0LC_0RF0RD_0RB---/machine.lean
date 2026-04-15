@@ -1787,82 +1787,16 @@ theorem BigStep1 (n1 n2 c : Nat) (h : P n1 (c + (2 + n2))) :
     exact this
   exact EvStep.trans h1 (EvStep.trans h2 h3)
 
-/-! ### 11. Init and nonhalting -/
+/-! ### 11. Init (nonhalting proof moved to `Bootstrap.lean`) -/
 
 /-- The TM reaches `S'(18)` from the initial config at step 715. -/
 theorem init : run tm (initConfig 6) 715 = S' 18 := by
   simp only [S', S1, zebra, ones, repeatSym]
   native_decide
 
-/-- A macro state `S'(n)` is valid if `n` falls in the R1 or R2 window for some level `i`. -/
-def ValidS (n i : Nat) : Prop :=
-  50 ≤ i ∧
-  ((n % 2 = i % 2 ∧ 3 ^ i * 2 - i - 2 ≤ n ∧ n ≤ 3 ^ i * 6 - i - 6) ∨
-   (n % 2 = (i + 1) % 2 ∧ 3 ^ i * 2 - i ≤ n ∧ n ≤ 3 ^ i * 6 - i - 10))
-
-/-- Every valid state progresses (in a positive number of TM steps) to another
-    valid state. Uses BigStep0/BigStep1 + pomme_main.
-
-    Returns an explicit step count `k > 0` rather than an `EvStep` existential
-    so callers (notably `tm_not_halts`) can chain via `run_add` without losing
-    the strict-progress witness. -/
-theorem ValidS_progress (n i : Nat) (hv : ValidS n i) :
-    ∃ n' i' k, ValidS n' i' ∧ 0 < k ∧ run tm (S' n) k = S' n' := by
-  sorry -- case split on R1 vs R2; closure uses pomme_main
-
-/-- S'(18) eventually reaches a valid state (bootstrap through levels 2..49).
-    Returns an explicit step count so `tm_not_halts` can lift via `run_add`. -/
-theorem bootstrap : ∃ n i k, ValidS n i ∧ run tm (S' 18) k = S' n := by
-  sorry -- finite computation through levels 2..49
-
-/-- S'(n) has state = some stC ≠ none. -/
-theorem S'_not_halted (n : Nat) : ¬ (S' n).halted := by
-  simp [S', S1, Config.halted]
-
-/-- **Main theorem**: the TM never halts.
-
-    Proof structure:
-    1. `bootstrap` gives an explicit step count `k_init` such that
-       `S' 18 →{k_init} S' n_init` with `n_init` valid.
-    2. `init` plus `run_add` lifts to
-       `initConfig 6 →{715 + k_init} S' n_init`.
-    3. `nonhalt_of_progress` (using `ValidS_progress` + the `Q` predicate)
-       shows `S' n_init` never halts.
-    4. For any step `m` of `initConfig 6`:
-       - If `m ≤ 715 + k_init`: the prefix is alive because its endpoint
-         `S' n_init` is alive — apply `run_alive_of_later`.
-       - If `m > 715 + k_init`: split off the prefix via `run_add` and
-         appeal to step 3. -/
-theorem tm_not_halts : ∀ m, ¬ (run tm (initConfig 6) m).halted := by
-  -- Bootstrap to an explicit valid state with explicit step count.
-  obtain ⟨n_init, i_init, k_init, hv_init, hk_init⟩ := bootstrap
-  -- Combine with `init`: initConfig reaches S' n_init in 715 + k_init steps.
-  have h_reach : run tm (initConfig 6) (715 + k_init) = S' n_init := by
-    rw [run_add, init, hk_init]
-  -- Progress invariant: every valid macro state progresses to another.
-  let Q : Config 6 → Prop := fun c => ∃ n i, ValidS n i ∧ c = S' n
-  have hProg : ∀ c, Q c → ∃ k, 0 < k ∧ Q (run tm c k) ∧ (run tm c k).state ≠ none := by
-    rintro c ⟨n, i, hv, rfl⟩
-    obtain ⟨n', i', k, hv', hkpos, hk⟩ := ValidS_progress n i hv
-    refine ⟨k, hkpos, ⟨n', i', hv', hk⟩, ?_⟩
-    rw [hk]; exact S'_not_halted n'
-  -- The bootstrapped state is in Q.
-  have hQ : Q (S' n_init) := ⟨n_init, i_init, hv_init, rfl⟩
-  -- S' n_init never halts.
-  have h_safe : ∀ m, (run tm (S' n_init) m).state ≠ none :=
-    nonhalt_of_progress tm Q hProg (S' n_init) hQ
-  -- The endpoint of the bootstrap prefix is alive.
-  have h_alive_at : (run tm (initConfig 6) (715 + k_init)).state ≠ none := by
-    rw [h_reach]; exact S'_not_halted n_init
-  -- Conclude for every step `m`.
-  intro m hhalt
-  by_cases hle : m ≤ 715 + k_init
-  · -- Prefix case: alive throughout via `run_alive_of_later`.
-    exact run_alive_of_later tm (initConfig 6) m (715 + k_init) hle h_alive_at hhalt
-  · -- Suffix case: split off the prefix and use `h_safe`.
-    have hsplit : m = (715 + k_init) + (m - (715 + k_init)) := by omega
-    rw [hsplit, run_add, h_reach] at hhalt
-    exact h_safe (m - (715 + k_init)) hhalt
+/-! `ValidS`, `ValidS_progress`, `bootstrap`, and `tm_not_halts` live in
+`Bootstrap.lean` to keep `machine.lean` focused on atomic rules and macro
+compositions. They depend on `BigStep0`/`BigStep1` and `Hensel.pomme_main`. -/
 
 /-! ### 12. Atomic rules proved via `es` tactic
 
