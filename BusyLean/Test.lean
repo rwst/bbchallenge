@@ -21,10 +21,18 @@ theorem init_10 : run antihydra (initConfig 6) 10 =
 theorem step_20 : run antihydra ⟨some stE, [true, true, true], true, [false]⟩ 10 =
     ⟨some stB, [true], true, [false, true, true, true, false]⟩ := by decide
 
--- Note: tm_follow has a known mdata bug when looking up theorems.
--- See TODO item 8. Using decide as workaround.
-theorem init_20 : run antihydra (initConfig 6) 20 =
-    run antihydra (⟨some stE, [true, true, true], true, [false]⟩) 10 := by decide
+-- tm_follow with have-bound hypothesis (mdata bug fix, item 8)
+-- Variant A: local have-bound hypothesis (originally failed with mdata bug)
+theorem init_20a : run antihydra (initConfig 6) 20 =
+    ⟨some stB, [true], true, [false, true, true, true, false]⟩ := by
+  have h : run antihydra (initConfig 6) 10 =
+      ⟨some stE, [true, true, true], true, [false]⟩ := by decide
+  tm_follow h  -- auto-closes: remaining 10 steps are kernel-reducible
+
+-- Variant B: direct theorem reference
+theorem init_20b : run antihydra (initConfig 6) 20 =
+    ⟨some stB, [true], true, [false, true, true, true, false]⟩ := by
+  tm_follow init_10  -- auto-closes via rfl on remaining steps
 
 -- ============================================================
 -- Test 3: tm_chain for automatic chaining

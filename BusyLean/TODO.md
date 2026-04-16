@@ -166,18 +166,22 @@ in favor of `tm_exec`.
 Added `@[simp] theorem stA_val .. stF_val` in `Notation.lean`. Eliminates
 `show (2 : Fin 6) = stC from rfl` workarounds (verified: Antihydra Fin rewrites removed).
 
-### 8. `tm_follow` remaining limitations
+### ~~8. `tm_follow` remaining limitations~~ ✅ MOSTLY DONE
 
-- **mdata bug**: `have h := thm` wraps the type in `mdata`, so `tm_follow h`
-  fails with "not an equality". Root cause: `lctx.findFromUserName?` returns
-  the mdata-wrapped type; fix needs `consumeMData` before parsing. Same bug
-  existed in `evstep_follow` and was fixed there.
-- Nested `Nat.sub` step counts after chaining don't reduce to 0 by `rfl`
-- Only works on `run tm c k = c'` goals, not `.state = none`
-- Config mismatch when hypothesis uses `ones 2 ++ ...` but goal has `true :: true :: ...`
+Fixed:
+- **mdata bug**: Switched from `lctx.findFromUserName?` to `Term.elabTerm` +
+  `inferType` + `consumeMData` (same approach as `evstep_follow`). Now accepts
+  have-bound hypotheses and direct theorem references.
+- **Implicit n parameter**: `findRunExpr` now uses `isAppOf` + `getAppArgs`
+  instead of 3-level pattern match, handling the implicit `{n : Nat}` in `run`.
+- **`.state = none` goals**: `findRunExpr` searches inside accessor applications
+  (e.g., `(run tm c k).state`), not just direct `run` expressions.
+- **Auto-close**: Added `congr 1 <;> omega` cascade for Nat mismatches after
+  `run_zero` reduction. Now `tm_follow` accepts `term` (not just `ident`).
 
-Mostly superseded by `tm_exec`, but worth fixing if `tm_follow` remains in the API.
-**Note:** item 11 (`evstep_follow`) addresses the →\* gap separately.
+Remaining:
+- Config mismatch when hypothesis uses `ones 2 ++ ...` but goal has
+  `true :: true :: ...` — would need `tape_norm` normalization before rewrite.
 
 ### 9. `tm_exec` auto-shift limitations
 

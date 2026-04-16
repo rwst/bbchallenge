@@ -91,39 +91,64 @@ macro "tm_decide" : tactic =>
     Given `h : run tm c₁ k₁ = c₂` and goal `run tm c₁ k = c₃` where `k = k₁ + m`,
     rewrites to `run tm c₂ m = c₃`.
 
+    Also works on goals of the form `(run tm c₁ k).f = v` (e.g., `.state = none`)
+    by rewriting the inner `run` expression.
+
     This is the Lean equivalent of BusyCoq's `follow` tactic. -/
-syntax "tm_follow " ident : tactic
+syntax "tm_follow " term : tactic
+
+open Lean Elab Tactic Meta in
+private def isRunApp (e : Expr) : Bool :=
+  e.isAppOf ``BusyLean.run
+
+open Lean Elab Tactic Meta in
+private def findRunExpr (e : Expr) : Option Expr :=
+  -- Direct: run tm c k (with implicit n, this is @run n tm c k = 4 args)
+  if isRunApp e then some e
+  -- Under accessor: (run tm c k).field — e is `f (run ...) arg` or `(run ...).field`
+  else if e.isApp then
+    e.getAppArgs.findSome? fun arg => if isRunApp arg then some arg else none
+  else none
 
 open Lean Elab Tactic Meta in
 elab_rules : tactic
   | `(tactic| tm_follow $h) => do
     let goal ← getMainGoal
-    -- Look up h in the local context (not elabTerm, which misses local hyps)
-    let hName := h.getId
-    let lctx := (← goal.getDecl).lctx
-    let some decl := lctx.findFromUserName? hName
-      | throwError "tm_follow: unknown hypothesis '{hName}'"
-    let hType := decl.type
-    -- hType should be: run tm c₁ k₁ = c₂
-    let_expr Eq _ lhs _ := hType | throwError "tm_follow: hypothesis '{hName}' is not an equality"
-    -- lhs = run tm c₁ k₁ — extract k₁ as an Expr (not evaluated to Nat)
-    let .app (.app (.app _ _tm) _c1) k1Expr := lhs
+    goal.withContext do
+    -- Elaborate h (handles have-bound hyps, theorems, terms)
+    let hExpr ← Term.elabTerm h none
+    let hType ← inferType hExpr
+    let hType := hType.consumeMData
+    let_expr Eq _ lhs _ := hType
+      | throwError "tm_follow: hypothesis is not an equality"
+    -- Extract step count from hypothesis: @run n tm c k → k is the last arg
+    let some hRunExpr := findRunExpr lhs
       | throwError "tm_follow: hypothesis LHS not of the form `run tm c k`"
-    -- Get the goal: run tm c₁ k = c₃ — extract k
+    let hRunArgs := hRunExpr.getAppArgs
+    unless hRunArgs.size ≥ 4 do throwError "tm_follow: malformed run expression in hypothesis"
+    let k1Expr := hRunArgs[hRunArgs.size - 1]!
     let goalType ← goal.getType
-    let_expr Eq _ goalLhs _ := goalType | throwError "tm_follow: goal not an equality"
-    let .app (.app (.app _ _) _) kExpr := goalLhs
-      | throwError "tm_follow: goal LHS not of the form `run tm c k`"
-    -- Rewrite: k = k₁ + (k - k₁) by omega, then run_add, then h
-    -- Keeps step counts symbolic — omega handles the arithmetic
+    let_expr Eq _ goalLhs _ := goalType
+      | throwError "tm_follow: goal not an equality"
+    let some goalRunExpr := findRunExpr goalLhs
+      | throwError "tm_follow: goal LHS does not contain `run tm c k`"
+    let goalRunArgs := goalRunExpr.getAppArgs
+    unless goalRunArgs.size ≥ 4 do throwError "tm_follow: malformed run expression in goal"
+    let kExpr := goalRunArgs[goalRunArgs.size - 1]!
     let kSyn ← Term.exprToSyntax kExpr
     let k1Syn ← Term.exprToSyntax k1Expr
+    let hSyn ← Term.exprToSyntax hExpr
     evalTactic (← `(tactic|
-      (rw [show $kSyn = $k1Syn + ($kSyn - $k1Syn) from by omega, run_add]; rw [$h:ident])))
-    -- If remaining steps = 0 (symbolically), try to close: normalize step count, then rfl
+      rw [show $kSyn = $k1Syn + ($kSyn - $k1Syn) from by omega, run_add, $hSyn:term]))
+    -- Try to close if remaining steps = 0
     try evalTactic (← `(tactic| rfl)) catch _ =>
-    try evalTactic (← `(tactic| (simp only [show $kSyn - $k1Syn = 0 from by omega, run]; rfl)))
-      catch _ => pure ()
+    try evalTactic (← `(tactic|
+      (simp only [show $kSyn - $k1Syn = 0 from by omega, run_zero]; rfl)))
+    catch _ =>
+    try evalTactic (← `(tactic|
+      (simp only [show $kSyn - $k1Syn = 0 from by omega, run_zero]
+       congr 1 <;> (first | rfl | omega | (congr 1 <;> omega)))))
+    catch _ => pure ()
 
 /-- `tm_chain` automatically proves `run tm c k = c'` by splitting into chunks
     and proving each with `decide`.
