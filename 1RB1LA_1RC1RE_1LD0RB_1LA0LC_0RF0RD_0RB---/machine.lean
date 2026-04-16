@@ -331,7 +331,6 @@ theorem Inc1 (a b c : Nat) :
 
 /-! ### 6. Other atomic rules — proved after LOv1 section below -/
 
--- Inc2 proved after shift rules are defined (see section 6b below)
 
 /-- Boundary step for Inc3: C reads true then B reads false (from empty right),
     adding `[1,0]` to the left. -/
@@ -493,10 +492,7 @@ theorem zebra_traverse_ev (b : Nat) (L R : List Sym) :
   ⟨2 * b, zebra_traverse b L R⟩
 
 /-- `nil`-trailing variant of `zebra_traverse_ev`: matches goals whose right
-    tape is exactly `zebra b` (no `++ R`).
-
-    Obsolete since `esTryShift` Stage 1 (Phase 1) automatically retries with
-    `?R := []`. Kept for reference. -/
+    tape is exactly `zebra b` (no `++ R`). -/
 theorem zebra_traverse_ev_nil (b : Nat) (L : List Sym) :
     ({ state := some stC, left := L, head := true,
        right := zebra b } : Config 6) -[tm]->*
@@ -598,19 +594,7 @@ theorem ones_process_ev (L T : List Sym) :
       right := zebra 1 ++ T } :=
   ⟨4, ones_process L T⟩
 
-/-! ### 6b. Atomic rules proved via `es` tactic
-
-The es tactic uses Meta.reduce to take concrete TM steps in MetaM, then applies
-shift rules to absorb sweep phases. Currently works for simple single-shift cases;
-Inc2 etc. need additional algebraic normalization (e.g., `ones (2*(1+m)) = ones 2 ++ ones (2*m)`)
-which is not yet automated. -/
-
--- Test: simplest case — apply one shift rule, no concrete stepping needed.
-example (b : Nat) :
-    ({ state := some stC, left := [], head := true,
-       right := zebra b ++ [true] } : Config 6) -[tm]->*
-    { state := some stC, left := rev_zebra b, head := true, right := [true] } := by
-  es tm [zebra_traverse_ev]
+/-! ### 6b. Atomic rules proved via `es` tactic -/
 
 /-- **Inc2 boundary**: 20 TM steps from `{C, L, true, [1]}` produce
     `{C, [1,0,1,0]++L, false, [1]}`. Independent of `L`.
@@ -644,48 +628,7 @@ theorem Inc2_boundary_ev (L : List Sym) :
       head := false, right := [true] } :=
   ⟨20, Inc2_boundary L⟩
 
-/-- Test 1: single shift via `Inc2_boundary_ev`. -/
-example (L : List Sym) :
-    ({ state := some stC, left := L, head := true, right := [true] } : Config 6) -[tm]->*
-    { state := some stC, left := (true :: false :: true :: false :: L),
-      head := false, right := [true] } := by
-  es tm [Inc2_boundary_ev]
-
-/-- Test 2: chain zebra_traverse + Inc2_boundary. After traverse, left is
-    `rev_zebra b ++ L`, which matches `Inc2_boundary_ev`'s generic `L`. -/
-example (b : Nat) (L : List Sym) :
-    ({ state := some stC, left := L, head := true,
-       right := zebra b ++ [true] } : Config 6) -[tm]->*
-    { state := some stC,
-      left := (true :: false :: true :: false :: (rev_zebra b ++ L)),
-      head := false, right := [true] } := by
-  es tm [zebra_traverse_ev, Inc2_boundary_ev]
-
-/-- Test 3: full 3-shift chain to the Inc2 core base target. Requires tape_norm
-    folding of the `true::false::` cons prefix into `rev_zebra` after boundary. -/
-example (b : Nat) :
-    ({ state := some stC, left := ones 2, head := true,
-       right := zebra b ++ [true] } : Config 6) -[tm]->*
-    { state := some stC, left := [], head := true,
-      right := zebra (b + 3) ++ [true] } := by
-  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
-
-/-- Test 4: same as Test 3 but with target `zebra (3 + b)` (non-canonical commutation).
-    This requires `esFinish` to handle `Nat.add_comm`-style arithmetic on indices. -/
-example (b : Nat) :
-    ({ state := some stC, left := ones 2, head := true,
-       right := zebra b ++ [true] } : Config 6) -[tm]->*
-    { state := some stC, left := [], head := true,
-      right := zebra (3 + b) ++ [true] } := by
-  es tm [zebra_traverse_ev, Inc2_boundary_ev, cd_retreat_ev]
-
-/-- Test 5 (esx): trivial halt — state F with head 1 halts in 1 step. -/
-example : ∃ k, (run tm ({state := some stF, left := [], head := true,
-                         right := []} : Config 6) k).halted := by
-  esx tm []
-
-/-- **Inc2 core base, EvStep version** — proved in one `es` line, replacing
-    the ~30-line manual phase decomposition of `Inc2_core_base` below. -/
+/-- **Inc2 core base, EvStep version**. -/
 theorem Inc2_core_base_ev (b : Nat) :
     ({ state := some stC, left := ones 2, head := true,
        right := zebra b ++ [true] } : Config 6) -[tm]->*
@@ -709,19 +652,14 @@ theorem cd_retreat_ev_nil (k : Nat) :
   simp only [List.append_nil] at h
   exact h
 
-/-- **Inc3 core base, EvStep version** — proved in one `es` line.
-    Uses standard `_ev` shifts (no `_nil` variants) thanks to Stage 1 of
-    `esTryShift` which retries with `List Sym` parameters assigned to `[]`. -/
+/-- **Inc3 core base, EvStep version**. -/
 theorem Inc3_core_base_ev (b : Nat) :
     ({ state := some stC, left := ones 2, head := true,
        right := zebra b } : Config 6) -[tm]->*
     { state := some stC, left := [], head := true, right := zebra (2 + b) } := by
   es tm [zebra_traverse_ev, Inc3_boundary_ev, cd_retreat_ev]
 
-/-- **Inc1 core base, EvStep version** — proved in one `es` line, demonstrating
-    that with the existing shifts plus Phase 1 (Stages 1+3), `es` can handle
-    the variable trailing context `T`. Uses `cd_retreat_ev_keep_ones` to absorb
-    the `ones (4+2c)` boundary processing. -/
+/-- **Inc1 core base, EvStep version**. -/
 theorem Inc1_core_base_ev (b : Nat) (T : List Sym) :
     ({ state := some stC, left := ones 2, head := true,
        right := zebra b ++ (ones 4 ++ T) } : Config 6) -[tm]->*
@@ -1524,11 +1462,8 @@ theorem Incs3 (a b : Nat) : S3 a b -[tm]->* S3 0 (a * 2 + b) := by
 /-! ### 8. Compositions -/
 
 theorem IncsOv3 (a b : Nat) : S3 a b -[tm]->* S1 0 2 (2 + a * 2 + b) := by
-  calc S3 a b
-      _ -[tm]->* S3 0 (a * 2 + b) := Incs3 a b
-      _ -[tm]->* S1 0 2 (2 + (a * 2 + b)) := Ov3 (a * 2 + b)
-      _ -[tm]->* S1 0 2 (2 + a * 2 + b) := by
-            rw [show 2 + (a * 2 + b) = 2 + a * 2 + b from by omega]
+  rw [show 2 + a * 2 + b = 2 + (a * 2 + b) from by omega]
+  exact EvStep.trans (Incs3 a b) (Ov3 (a * 2 + b))
 
 theorem IncsOv2 (a b : Nat) : S2 a b -[tm]->* S1 0 2 (7 + a * 6 + b * 2) := by
   -- Chain: Incs2 → Ov2_raw → Inc3_absorb → IncsOv3
@@ -1566,11 +1501,8 @@ theorem S1_to_S3 (a b : Nat) : S1 a b 0 -[tm]->* S3 a (1 + b) := by
       show b + 1 = 1 + b from by omega]
 
 theorem ROv1_0 (a b : Nat) : S1 a b 0 -[tm]->* S1 0 2 (3 + a * 2 + b) := by
-  calc S1 a b 0
-      _ -[tm]->* S3 a (1 + b) := S1_to_S3 a b
-      _ -[tm]->* S1 0 2 (2 + a * 2 + (1 + b)) := IncsOv3 a (1 + b)
-      _ -[tm]->* S1 0 2 (3 + a * 2 + b) := by
-            rw [show 2 + a * 2 + (1 + b) = 3 + a * 2 + b from by omega]
+  rw [show 3 + a * 2 + b = 2 + a * 2 + (1 + b) from by omega]
+  exact EvStep.trans (S1_to_S3 a b) (IncsOv3 a (1 + b))
 
 /-! #### S1_to_S2 helpers: generic-in-L boundary transitions
 
@@ -1702,11 +1634,8 @@ theorem S1_to_S2 (a b : Nat) : S1 (2 + a) b 1 -[tm]->* S2 a (6 + b) := by
 
 theorem ROv1_1 (a b : Nat) :
     S1 (2 + a) b 1 -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
-  calc S1 (2 + a) b 1
-      _ -[tm]->* S2 a (6 + b) := S1_to_S2 a b
-      _ -[tm]->* S1 0 2 (7 + a * 6 + (6 + b) * 2) := IncsOv2 a (6 + b)
-      _ -[tm]->* S1 0 2 (19 + a * 6 + b * 2) := by
-            rw [show 7 + a * 6 + (6 + b) * 2 = 19 + a * 6 + b * 2 from by omega]
+  rw [show 19 + a * 6 + b * 2 = 7 + a * 6 + (6 + b) * 2 from by omega]
+  exact EvStep.trans (S1_to_S2 a b) (IncsOv2 a (6 + b))
 
 /-! ### 9. P recurrence -/
 
@@ -1760,11 +1689,8 @@ theorem BigStep0 (n1 n2 c : Nat) (h : P n1 (c + n2)) :
     S' (n1 + c * 2 + 0) -[tm]->* S' (5 + n2 * 2 + c * 3) := by
   unfold S' P at *
   -- Chain: S1(0,2,n1+c*2) → S1(c+n2,2,c*2) → S1(n2,c*3+2,0) → S1(0,2,5+n2*2+c*3)
-  have h1 : S1 0 2 (n1 + c * 2) -[tm]->* S1 (c + n2) 2 (c * 2) := by
-    rw [show n1 + c * 2 = n1 + (c * 2) from rfl]; exact h (c * 2)
-  have h2 : S1 (c + n2) 2 (c * 2) -[tm]->* S1 n2 (c * 3 + 2) 0 := by
-    have := Incs1 c n2 2 0
-    rw [show c * 2 + 0 = c * 2 from by omega] at this; exact this
+  have h1 : S1 0 2 (n1 + c * 2) -[tm]->* S1 (c + n2) 2 (c * 2) := h (c * 2)
+  have h2 : S1 (c + n2) 2 (c * 2) -[tm]->* S1 n2 (c * 3 + 2) 0 := Incs1 c n2 2 0
   have h3 : S1 n2 (c * 3 + 2) 0 -[tm]->* S1 0 2 (5 + n2 * 2 + c * 3) := by
     have := ROv1_0 n2 (c * 3 + 2)
     rw [show 3 + n2 * 2 + (c * 3 + 2) = 5 + n2 * 2 + c * 3 from by omega] at this
@@ -1778,9 +1704,8 @@ theorem BigStep1 (n1 n2 c : Nat) (h : P n1 (c + (2 + n2))) :
   have h1 : S1 0 2 (n1 + c * 2 + 1) -[tm]->* S1 (c + (2 + n2)) 2 (c * 2 + 1) := by
     rw [show n1 + c * 2 + 1 = n1 + (c * 2 + 1) from by omega]
     exact h (c * 2 + 1)
-  have h2 : S1 (c + (2 + n2)) 2 (c * 2 + 1) -[tm]->* S1 (2 + n2) (c * 3 + 2) 1 := by
-    have := Incs1 c (2 + n2) 2 1
-    rw [show c * 2 + 1 = c * 2 + 1 from rfl] at this; exact this
+  have h2 : S1 (c + (2 + n2)) 2 (c * 2 + 1) -[tm]->* S1 (2 + n2) (c * 3 + 2) 1 :=
+    Incs1 c (2 + n2) 2 1
   have h3 : S1 (2 + n2) (c * 3 + 2) 1 -[tm]->* S1 0 2 (23 + n2 * 6 + c * 6) := by
     have := ROv1_1 n2 (c * 3 + 2)
     rw [show 19 + n2 * 6 + (c * 3 + 2) * 2 = 23 + n2 * 6 + c * 6 from by omega] at this

@@ -126,7 +126,7 @@ private theorem pos_of_ne {c c' : Config 6} (h : c -[tm]->* c') (hne : c ≠ c')
   obtain ⟨k, hk⟩ := h
   refine ⟨k, ?_, hk⟩
   rcases Nat.eq_zero_or_pos k with rfl | hpos
-  · exact absurd (by show c = c'; exact hk) hne
+  · exact absurd hk hne
   · exact hpos
 
 /-- Injectivity of `S'`: two `S' n` configs are equal iff their indices match.
@@ -213,7 +213,7 @@ private theorem N_div_le_N (i k : Nat) : Pomme.N i / 2^k ≤ Pomme.N i :=
   Nat.div_le_self _ _
 
 private theorem N_div_le_C (i k : Nat) (hi : 50 ≤ i) :
-    Pomme.N i / 2^k ≤ C i :=
+    Pomme.N i / 2^k ≤ 3^i * 6 + i + 4 :=
   le_trans (N_div_le_N i k) (N_le_C i hi)
 
 /-- Division chain: `N i / 2^(k+1) = (N i / 2^k) / 2`. -/
@@ -256,8 +256,7 @@ private theorem NIter_zero (i : Nat) (hi : 50 ≤ i) :
 private theorem NIter_step (i k : Nat) (hk : k < vN i) (hi : 50 ≤ i) :
     (NIter i k + 3^i * 6 + i + 4) / 2 = NIter i (k+1) := by
   have hev := N_div_even i k hk
-  have hle : Pomme.N i / 2^k ≤ 3^i * 6 + i + 4 := by
-    have := N_div_le_C i k hi; unfold C at this; exact this
+  have hle := N_div_le_C i k hi
   set q := Pomme.N i / 2^(k+1) with hq_def
   have hq : Pomme.N i / 2^k = 2 * q := by
     rw [hq_def, N_div_succ]; omega
@@ -271,8 +270,7 @@ private theorem NIter_parity_R1 (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
     NIter i k % 2 = i % 2 := by
   have h3 := three_pow_odd i
   have hev := N_div_even i k hk
-  have hle : Pomme.N i / 2 ^ k ≤ 3^i * 6 + i + 4 := by
-    have := N_div_le_C i k hi; unfold C at this; exact this
+  have hle := N_div_le_C i k hi
   show (3^i*6 + i + 4 - Pomme.N i / 2 ^ k) % 2 = i % 2
   omega
 
@@ -281,8 +279,7 @@ private theorem NIter_parity_R2 (i : Nat) (hi : 50 ≤ i) :
     NIter i (vN i) % 2 = (i + 1) % 2 := by
   have h3 := three_pow_odd i
   have hodd := N_div_odd i
-  have hle : Pomme.N i / 2 ^ (vN i) ≤ 3^i * 6 + i + 4 := by
-    have := N_div_le_C i (vN i) hi; unfold C at this; exact this
+  have hle := N_div_le_C i (vN i) hi
   show (3^i*6 + i + 4 - Pomme.N i / 2 ^ (vN i)) % 2 = (i + 1) % 2
   omega
 
@@ -309,15 +306,12 @@ private theorem NIter_upper_R1 (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
         rw [Nat.le_div_iff_mul_le (by positivity), mul_assoc,
             ← pow_add, Nat.sub_add_cancel (le_of_lt hk)]
         exact Nat.div_mul_le_self _ _
-      have h2le : (2:Nat) ≤ 2^(vN i - k) := by
-        have : 1 ≤ vN i - k := by omega
-        calc (2:Nat) = 2^1 := by ring
-          _ ≤ 2^(vN i - k) := Nat.pow_le_pow_right (by norm_num) this
+      have h2le : (2:Nat) ≤ 2^(vN i - k) := Nat.le_self_pow (by omega) 2
       calc Pomme.N i / 2^(vN i) * 2
           ≤ Pomme.N i / 2^(vN i) * 2^(vN i - k) :=
             Nat.mul_le_mul_left _ h2le
         _ ≤ Pomme.N i / 2^k := this
-    linarith
+    omega
   have hbig : 4*i + 28 ≤ Pomme.N i / 2^k := by omega
   have hle := N_div_le_C i k hi
   simp only [NIter, C] at *
@@ -361,10 +355,8 @@ def ValidS (n i : Nat) : Prop :=
 private theorem NIter_ne_succ (i k : Nat) (hi : 50 ≤ i) (hk : k < vN i) :
     NIter i k ≠ NIter i (k+1) := by
   have hev := N_div_even i k hk
-  have hle1 : Pomme.N i / 2^k ≤ 3^i * 6 + i + 4 := by
-    have := N_div_le_C i k hi; unfold C at this; exact this
-  have hle2 : Pomme.N i / 2^(k+1) ≤ 3^i * 6 + i + 4 := by
-    have := N_div_le_C i (k+1) hi; unfold C at this; exact this
+  have hle1 := N_div_le_C i k hi
+  have hle2 := N_div_le_C i (k+1) hi
   -- Pomme.N i / 2^k is positive: 2^k ∣ N i (since k ≤ vN i) and N i > 0
   have hdvd : (2:Nat)^k ∣ Pomme.N i := by
     have h1 : (2:Nat)^k ∣ (2:Nat)^(vN i) := pow_dvd_pow 2 (le_of_lt hk)

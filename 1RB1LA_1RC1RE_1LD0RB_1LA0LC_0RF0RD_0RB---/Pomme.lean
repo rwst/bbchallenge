@@ -33,8 +33,8 @@ identified by mxdys:
 3. `pomme_cor3`: for `i ≥ pommeThreshold`, the odd part of `N i`
    exceeds `2·i + 14`.
 
-4. `pomme_small_range` (axiom): discharges `50 ≤ i < pommeThreshold`
-   via a verified dense simulator (to be formalized).
+4. `pomme_small_range_proved` (see `Hensel.lean`): discharges
+   `50 ≤ i < pommeThreshold` via a Hensel-lift argument.
 
 5. `pomme_main`: combines (3) and (4).
 -/
