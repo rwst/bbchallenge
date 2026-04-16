@@ -376,6 +376,31 @@ theorem toSConfig_initConfig (n : Nat) (h : 0 < n) :
     (initConfig n h).toSConfig = sinitConfig n h := by
   simp [initConfig, sinitConfig, Config.toSConfig]
 
+/-! ### SEvStep: zero or more steps on stream configs -/
+
+def SEvStep {n : Nat} (tm : TM n) (A B : SConfig n) : Prop := ∃ k, srun tm A k = B
+
+scoped notation:50 A " -s[" tm "]->* " B => SEvStep tm A B
+
+@[refl]
+theorem SEvStep.refl {n : Nat} {tm : TM n} {A : SConfig n} : A -s[tm]->* A := ⟨0, rfl⟩
+
+theorem SEvStep.trans {n : Nat} {tm : TM n} {A B C : SConfig n}
+    (h1 : A -s[tm]->* B) (h2 : B -s[tm]->* C) : A -s[tm]->* C := by
+  obtain ⟨j, hj⟩ := h1; obtain ⟨k, hk⟩ := h2
+  exact ⟨j + k, by rw [srun_add, hj, hk]⟩
+
+instance SEvStep.instTrans {n : Nat} {tm : TM n} :
+    Trans (SEvStep tm) (SEvStep tm) (SEvStep tm) where
+  trans := SEvStep.trans
+
+theorem SEvStep.from_run {n : Nat} {tm : TM n} {A B : SConfig n} {k : Nat}
+    (h : srun tm A k = B) : A -s[tm]->* B := ⟨k, h⟩
+
+theorem SEvStep.halted_state {n : Nat} {tm : TM n} {A B : SConfig n}
+    (h : A -s[tm]->* B) (hB : B.state = none) : ∃ k, (srun tm A k).state = none := by
+  obtain ⟨k, hk⟩ := h; exact ⟨k, hk ▸ hB⟩
+
 /-! ### Notation -/
 
 /-- Blank side (all false/0). Equivalent to BusyCoq's `const 0`. -/

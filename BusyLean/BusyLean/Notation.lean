@@ -102,6 +102,13 @@ abbrev stD : Fin 6 := ⟨3, by omega⟩
 abbrev stE : Fin 6 := ⟨4, by omega⟩
 abbrev stF : Fin 6 := ⟨5, by omega⟩
 
+@[simp] theorem stA_val : (0 : Fin 6) = stA := rfl
+@[simp] theorem stB_val : (1 : Fin 6) = stB := rfl
+@[simp] theorem stC_val : (2 : Fin 6) = stC := rfl
+@[simp] theorem stD_val : (3 : Fin 6) = stD := rfl
+@[simp] theorem stE_val : (4 : Fin 6) = stE := rfl
+@[simp] theorem stF_val : (5 : Fin 6) = stF := rfl
+
 /-! ### Configuration builder -/
 
 /-- Build a `Config n` from state, left tape (visual order), head, and right tape.

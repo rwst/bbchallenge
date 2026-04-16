@@ -149,11 +149,10 @@ Test whether `ClosedSet` simplifies the Antihydra proof vs the current
 Add a computable list of halting (state, symbol) pairs to enable `decide`-based
 proofs that a specific pair is unreachable within a bounded prefix.
 
-### 4. Prove `matchingConfig?_correct` (backward reasoning completeness)
+### ~~4. Prove `matchingConfig?_correct` (backward reasoning completeness)~~ ✅ DONE
 
-The core completeness lemma in `BackwardReasoning.lean` has a sorry. Needs case
-analysis on direction (R/L) and tape structure (cons/nil) to show that reversing
-a step produces a SymConfig matching the predecessor. ~50 lines of proof.
+Complete proof in `BackwardReasoning.lean` — case analysis on direction (R/L)
+and tape structure (cons/nil), ~95 lines.
 
 ### ~~5. Redefine `zebra` via `listRepeat`~~ ✅ DONE (via item 14)
 
@@ -162,10 +161,10 @@ a step produces a SymConfig matching the predecessor. ~50 lines of proof.
 `tm_simp` hardcodes its simp set. Either make it accept extra lemmas or deprecate
 in favor of `tm_exec`.
 
-### 7. Fin literal simp lemmas
+### ~~7. Fin literal simp lemmas~~ ✅ DONE
 
-Add `@[simp] lemma stA_eq : (0 : Fin 6) = stA := rfl` etc. to eliminate the
-Fin literal vs abbreviation mismatch without needing `simp (config := { decide := true })`.
+Added `@[simp] theorem stA_val .. stF_val` in `Notation.lean`. Eliminates
+`show (2 : Fin 6) = stC from rfl` workarounds (verified: Antihydra Fin rewrites removed).
 
 ### 8. `tm_follow` remaining limitations
 
@@ -186,6 +185,64 @@ Mostly superseded by `tm_exec`, but worth fixing if `tm_follow` remains in the A
 - Bare `ones b'` without `++ R` needs manual rewrite to `ones b' ++ []`
 - Post-shift cleanup (folding cons chains into `ones (N+k)`) sometimes needs manual `congr + omega`
 - fvar leak after `conv`-based manual shifts in some `cases` branches
+
+---
+
+## Lessons from Antihydra refactoring (2026-04-16)
+
+Refactoring the Antihydra proof (`1RB1RA_0LC1LE_1LD1LC_1LA0LB_1LF1RE_---0RA`) against
+current BusyLean revealed these gaps and improvements:
+
+### ~~16. `SEvStep` — stream-config EvStep~~ ✅ DONE
+
+Added `SEvStep`, `SEvStep.refl`, `SEvStep.trans`, `SEvStep.from_run`,
+`SEvStep.halted_state`, and `Trans` instance in `StreamDefs.lean`.
+Notation: `A -s[tm]->* B`.
+
+Enables cleaner backward proofs in halting-equivalence theorems (chain
+`SEvStep.from_run h_sim` with `⟨k', rfl⟩` instead of manual `srun_add` rewriting).
+
+### 17. `SProgress` — stream-config Progress
+
+Antihydra's bridge lemmas prove `∃ k, k > 0 ∧ srun tm A k = B` (the `k > 0` is
+needed for strong induction in the halt equivalence). This is conceptually
+`SProgress` but currently requires manual step-count computation. Adding:
+```lean
+def SProgress (tm : TM n) (A B : SConfig n) : Prop :=
+  ∃ k, 0 < k ∧ srun tm A k = B ∧ B.state ≠ none
+```
+with `Trans` instances would let bridge lemmas chain via `calc` and eliminate the
+manual polynomial step-count arithmetic (`n*(3*n+9) + (9*n+2*b+26)` etc.).
+
+### ~~18. `closeConfigEq_` vs endgame tape folding~~ ✅ DONE
+
+Added 3-deep congr cascade with `tape_norm`+`ones`/`repeatSym` unfolding as
+a new level in `closeConfigEq_`. Handles `ones (N+1+1+...) ++ X = ones (N+k) ++ X`
+patterns. Antihydra endgames now use `closeConfigEq_` directly instead of the
+manual `simp; congr; unfold; congr; omega` pattern.
+
+### 19. SConfig lifting boilerplate
+
+Every Antihydra SConfig theorem follows the same 2-line pattern:
+```lean
+rw [← P_Config_Pad_toSP ..., ← P_Config_Pad_toSP ..., ← toSConfig_run]
+exact congrArg Config.toSConfig (tm_foo ...)
+```
+A generic tactic `lift_to_sconfig tm pad_bridge` that matches `srun tm A k = B`
+goals and rewrites via a padding-bridge lemma would eliminate this repetition.
+
+### ~~20. Fin literal `simp` lemmas (reinforces item 7)~~ ✅ DONE (via item 7)
+
+### 21. `tm_exec` post-shift tape normalization
+
+After `tm_exec` completes, Config fields often have the form
+`ones (N+1+1+1+1+1+1) ++ [false] ++ ones b'` instead of the target
+`ones (N+6) ++ [false] ++ ones b'`. The `tape_norm` simp set handles the cons
+folding but not the final Nat mismatch inside `ones`. Integrating `closeConfigEq_`
+into `tm_exec`'s post-loop was attempted but compound tactic state management
+(simp+congr cascades under `<;>`) causes partial goal modification that breaks
+subsequent standalone `closeConfigEq_` calls. Workaround: use `closeConfigEq_`
+as a standalone tactic after `tm_exec`.
 
 ---
 

@@ -56,10 +56,6 @@ lemma P_Config_Pad_toSP (b m n p : Nat) :
     (P_Config_Pad b m n p).toSConfig = SP_Config b m n := by
   simp [P_Config_Pad, SP_Config, Config.toSConfig]
 
--- Simp tactic for single TM steps (handles Fin literal vs stX abbreviation mismatch)
-scoped macro "ah_simp" : tactic =>
-  `(tactic| simp (config := { decide := true }) [run, step, antihydra, P_Config_Pad, ones])
-
 -- Shift rules
 
 lemma A_shift (k : Nat) (L R : List Sym) :
@@ -89,7 +85,6 @@ theorem tm_P_step (b m n p : Nat) :
     run antihydra (P_Config_Pad b (m+2+2) n (p+2)) (2*n + 12) = P_Config_Pad b (m+2) (n+3) (p+1) := by
   tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
 
-
 theorem tm_P_multistep (b m n p k : Nat) :
     run antihydra (P_Config_Pad b (m+2 + 2*k) n (p+1 + k)) (k*(2*n + 3*k + 9)) = P_Config_Pad b (m+2) (n+3*k) (p+1) := by
   induction k generalizing n with
@@ -108,15 +103,14 @@ theorem tm_P_multistep (b m n p k : Nat) :
 -- Even Endgame (m=0)
 theorem tm_even_endgame (b N p : Nat) :
     (run antihydra (P_Config_Pad b 0 N (p+2)) 2).state = none := by
-  rw [show (2:Nat) = 1 + 1 from rfl, run_add]; cases b <;> ah_simp
+  rw [show (2:Nat) = 1 + 1 from rfl, run_add]
+  cases b <;> simp (config := { decide := true }) [run, step, antihydra, P_Config_Pad, ones]
 
 -- Odd Endgame (m=3, b>0)
 theorem tm_odd_endgame (b' N p : Nat) :
     run antihydra (P_Config_Pad (b' + 1) 3 N (p+2)) (3*N + 20) = P_Config_Pad b' (N+6) 0 p := by
   tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
-  -- Remaining: tape folding for final config
-  simp only [ones_cons_append]
-  congr 1; unfold ones repeatSym; congr 1; omega
+  closeConfigEq_
 
 -- Even endgame: from a=2 to valid loop start with a=N+5, b=b+2
 theorem tm_even_endgame_to_loop (b N p : Nat) :
@@ -126,21 +120,19 @@ theorem tm_even_endgame_to_loop (b N p : Nat) :
   | zero =>
     simp only [ones_zero, Nat.mul_zero, Nat.add_zero]
     tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
-    simp only [ones_cons_append]
-    congr 1; unfold ones repeatSym; congr 1; omega
+    closeConfigEq_
   | succ b' =>
     rw [show N + 2 * (b' + 1) + 17 = N + 2 * b' + 19 from by omega]
     tm_exec [antihydra, P_Config_Pad]
     rw [show N + 2 * b' + 18 = (b' + 1) + (N + b' + 17) from by omega, run_add]
-    conv => lhs; enter [2]; rw [show (2 : Fin 6) = stC from rfl,
+    conv => lhs; enter [2]; rw [
       show ones b' = ones b' ++ ([] : List Sym) from (List.append_nil _).symm, C_shift]
     simp only [listHead_nil, listTail_nil]
     tm_exec [antihydra, P_Config_Pad]
     rw [show N + b' + 10 = (b' + 1) + (N + 9) from by omega, run_add]
-    simp only [show (4 : Fin 6) = stE from rfl, E_shift, listHead, listTail]
+    simp only [E_shift, listHead, listTail]
     tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
-    simp only [ones_cons_append]
-    congr 1; unfold ones repeatSym; congr 1; omega
+    closeConfigEq_
 
 -- Odd halt endgame: from a=3, b=0, the machine halts
 theorem tm_odd_halt_endgame (N p : Nat) :
@@ -150,7 +142,7 @@ theorem tm_odd_halt_endgame (N p : Nat) :
     { state := some stF, head := false, left := ([] : List Sym),
       right := true :: true :: false :: ones (N+1+1+1) ++ false :: zeros p } := by
     tm_exec [antihydra, P_Config_Pad] shifts [A_shift, C_shift, E_shift]
-  rw [h]; ah_simp
+  rw [h]; simp (config := { decide := true }) [run, step, antihydra, ones]
 
 -- SConfig-lifted macro theorems
 -- Lifting pattern: rewrite goal to Config form via ← P_Config_Pad_toSP, ← toSConfig_run
@@ -185,41 +177,40 @@ theorem stm_odd_halt_endgame (N : Nat) :
   rw [← P_Config_Pad_toSP 0 3 N 2, ← toSConfig_run]
   exact tm_odd_halt_endgame N 0
 
+-- SConfig bridge helpers: factor out the repeated P_multistep normalization pattern
+private lemma stm_multistep_even (b n : Nat) :
+    srun antihydra (SP_Config b (2*n+2) 0) (n*(3*n+9)) = SP_Config b 2 (3*n) := by
+  have h := stm_P_multistep b 0 0 n
+  simp only [show 0+2+2*n = 2*n+2 from by omega,
+             show (0:Nat)+2 = 2 from by omega,
+             show (0:Nat)+3*n = 3*n from by omega] at h; exact h
+
+private lemma stm_multistep_odd (b n : Nat) :
+    srun antihydra (SP_Config b (2*n+3) 0) (n*(3*n+9)) = SP_Config b 3 (3*n) := by
+  have h := stm_P_multistep b 1 0 n
+  simp only [show 1+2+2*n = 2*n+3 from by omega,
+             show (0:Nat)+3*n = 3*n from by omega] at h; exact h
+
 -- SConfig bridge lemmas
 
 theorem stm_even_full (b n : Nat) :
     ∃ k, k > 0 ∧ srun antihydra (SP_Config b (2*n+2) 0) k = SP_Config (b+2) (3*n+5) 0 := by
   refine ⟨n*(3*n+9) + (9*n+2*b+26), by omega, ?_⟩
-  have h1 : srun antihydra (SP_Config b (2*n+2) 0) (n*(3*n+9)) = SP_Config b 2 (3*n) := by
-    have h := stm_P_multistep b 0 0 n
-    simp only [show 0+2+2*n = 2*n+2 from by omega,
-               show (0:Nat)+2 = 2 from by omega,
-               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
-  show srun antihydra (SP_Config b (2*n+2) 0) (n*(3*n+9) + (9*n+2*b+26)) = _
-  rw [srun_add, h1]
-  have h2 := stm_even_endgame_to_loop b (3*n); ring_nf at h2 ⊢; exact h2
+  rw [srun_add, stm_multistep_even]
+  have h := stm_even_endgame_to_loop b (3*n); ring_nf at h ⊢; exact h
 
 theorem stm_odd_halt_ex (n : Nat) :
     ∃ k, k > 0 ∧ (srun antihydra (SP_Config 0 (2*n+3) 0) k).state = none := by
   refine ⟨n*(3*n+9) + (6*n+12), by omega, ?_⟩
-  have h1 : srun antihydra (SP_Config 0 (2*n+3) 0) (n*(3*n+9)) = SP_Config 0 3 (3*n) := by
-    have h := stm_P_multistep 0 1 0 n
-    simp only [show 1+2+2*n = 2*n+3 from by omega,
-               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
-  show (srun antihydra (SP_Config 0 (2*n+3) 0) (n*(3*n+9) + (6*n+12))).state = none
-  rw [srun_add, h1, show 6*n+12 = 2*(3*n)+12 from by ring]
+  rw [show n*(3*n+9) + (6*n+12) = n*(3*n+9) + (2*(3*n)+12) from by ring, srun_add,
+      stm_multistep_odd]
   exact stm_odd_halt_endgame (3*n)
 
 theorem stm_odd_continue (b' n : Nat) :
     ∃ k, k > 0 ∧ srun antihydra (SP_Config (b'+1) (2*n+3) 0) k = SP_Config b' (3*n+6) 0 := by
   refine ⟨n*(3*n+9) + (9*n+20), by omega, ?_⟩
-  have h1 : srun antihydra (SP_Config (b'+1) (2*n+3) 0) (n*(3*n+9)) = SP_Config (b'+1) 3 (3*n) := by
-    have h := stm_P_multistep (b'+1) 1 0 n
-    simp only [show 1+2+2*n = 2*n+3 from by omega,
-               show (0:Nat)+3*n = 3*n from by omega] at h; exact h
-  show srun antihydra (SP_Config (b'+1) (2*n+3) 0) (n*(3*n+9) + (9*n+20)) = _
-  rw [srun_add, h1]
-  have h2 := stm_odd_endgame b' (3*n); ring_nf at h2 ⊢; exact h2
+  rw [srun_add, stm_multistep_odd]
+  have h := stm_odd_endgame b' (3*n); ring_nf at h ⊢; exact h
 
 -- SConfig simulation theorem
 
@@ -337,13 +328,11 @@ theorem stm_halt_iff_math_condition (b a : Nat) (ha : a ≥ 2) :
       | none => exact mathHalts.haltStep _ h_next
       | some m' =>
         rw [h_next] at h_sim
-        -- h_sim : srun ... k_sim = SP_Config m'.b m'.a 0
         by_cases h_lt : n < k_sim
         · exact absurd (h_sim ▸ rfl : (srun antihydra (SP_Config b a 0) k_sim).state = some stE)
             (by rw [show k_sim = n + (k_sim - n) from by omega, srun_add,
                 srun_halted _ _ hk]; exact hk ▸ by simp)
-        · -- n ≥ k_sim: split and recurse
-          rw [show n = k_sim + (n - k_sim) from by omega, srun_add, h_sim] at hk
+        · rw [show n = k_sim + (n - k_sim) from by omega, srun_add, h_sim] at hk
           exact mathHalts.nextStep _ _ h_next
             (ih (n - k_sim) (by omega) m'.b m'.a (nextMathState_a_ge_2 ha h_next) hk)
   · -- Backward: if math halts, then TM halts (induction on mathHalts)
@@ -359,7 +348,7 @@ theorem stm_halt_iff_math_condition (b a : Nat) (ha : a ≥ 2) :
       have ⟨k, _, h_sim⟩ := stm_simulates_math m.b m.a hm
       rw [h_some] at h_sim
       have ⟨k', hk'⟩ := ih (nextMathState_a_ge_2 hm h_some)
-      exact ⟨k + k', by rw [srun_add, h_sim]; exact hk'⟩
+      exact ((SEvStep.from_run h_sim).trans ⟨k', rfl⟩).halted_state hk'
 
 -- SConfig initial configuration
 lemma antihydra_init_SP :
@@ -371,12 +360,10 @@ lemma antihydra_init_SP :
 lemma antihydra_halts_iff :
     (∃ k, (run antihydra (initConfig 6) k).state = none) ↔
     ∃ i, (Aiter i (8, 2)).1 % 2 = 1 ∧ (Aiter i (8, 2)).1 / 2 ≥ 1 ∧ (Aiter i (8, 2)).2 = 0 := by
-  -- Step 1: Lift Config halt ↔ SConfig halt
   have h_eq : ∀ k, (run antihydra (initConfig 6) k).state =
                     (srun antihydra (sinitConfig 6) k).state := fun k => by
     change _ = (srun antihydra (initConfig 6).toSConfig k).state
     rw [← toSConfig_run]; rfl
-  -- Step 2: Split at 58 steps and connect to SP_Config 2 8 0
   have h_iff : (∃ k, (run antihydra (initConfig 6) k).state = none) ↔
                (∃ k, (srun antihydra (SP_Config 2 8 0) k).state = none) := by
     constructor

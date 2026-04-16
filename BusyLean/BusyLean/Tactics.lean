@@ -641,6 +641,13 @@ elab "closeConfigEq_" : tactic => do
                 listHead, listTail]
      congr 1 <;> (first | rfl | omega | (congr 1 <;> omega))))); return
   catch _ => pure ()
+  -- Try 3-deep congr: handles ones (N+1+1+...) ++ X = ones (N+k) ++ X
+  try evalTactic (← `(tactic|
+    (simp only [tape_norm, ones, zeros, repeatSym, listHead, listTail]
+     congr 1 <;> (first | rfl | omega |
+       (congr 1 <;> (first | rfl | omega |
+         (congr 1 <;> (first | rfl | omega)))))))); return
+  catch _ => pure ()
   throwError "closeConfigEq_: failed"
 
 /-- `evstep_finish` — close an `→*` goal by reflexivity or simple normalization.
