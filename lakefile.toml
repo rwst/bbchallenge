@@ -29,9 +29,9 @@ roots = ["machine"]
 [[lean_lib]]
 name = "Sweeper"
 srcDir = "1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF"
-roots = ["machine_base", "machine"]
+roots = ["machine"]
 
 [[lean_lib]]
 name = "Pillai"
 srcDir = "1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---"
-roots = ["Baker", "BakerWustholz", "RatHeight", "Ellison", "Pomme", "Hensel", "machine", "Bootstrap"]
+roots = ["BakerWustholz", "RatHeight", "Ellison", "Pomme", "Hensel", "machine", "Bootstrap"]
