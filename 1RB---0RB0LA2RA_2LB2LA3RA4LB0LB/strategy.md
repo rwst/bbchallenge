@@ -167,15 +167,66 @@ should be a last resort — it's deep but speculative.
 ## What Basics.lean Contains
 
 The companion file `Basics.lean` states lemmas that are directly
-implied by `claude-said.txt` and can be proved with existing mathlib
-(placeholders with sorry for the actual proofs). These serve as
-building blocks for Paths B, C, E:
+implied by `claude-said.txt` and can be proved with existing mathlib.
+As of 2026-04-17 all but one lemma are proved (the remaining sorry is
+the open problem itself). The proved lemmas:
 
-1. Binary/ternary value properties
+1. Binary/ternary value properties (`binValue_rep_s3`, etc.)
 2. `bin = rep s3 n ↔ binValue bin = 2^n - 1` (for valid binary)
 3. 2-adic valuation / odd-ness of 2^n-1
 4. The abstract iterate map `V → V + 3^d` and its parity behavior
-5. Conservation statements relating successive eras
+5. Diophantine facts: `(2^n - 1) mod 2^m = 2^m - 1` for m ≤ n, etc.
 
-These are the "free" lemmas — already implied by current definitions,
-just not yet stated. Proving them is bookkeeping, not breakthrough.
+## What BackwardTrace.lean Contains (Path E.2 infrastructure)
+
+The file `BackwardTrace.lean` (2026-04-17) provides the structural
+groundwork for Path E.2:
+
+**Proved:**
+- `halt_phase`: abstract "halting phase" — starting at `A,s3` with
+  left = `rep s3 m ++ [s3, s1]`, the TM reaches `state = none` in
+  `m + 3` steps.
+- `all_s3_odd_overflow_halts`: the bad state
+  `CycleStart (rep s3 n) (rep s2 (2*d)) 1` reaches `state = none`
+  after exactly `6*d + 11 + n` further steps.
+- `overflow_cycle_output_not_bad`: `overflow_cycle` never outputs
+  all-zero ternary (its output ternary is `repPair s4 s2 d`,
+  value `3^d - 1 ≠ 0`).
+- `overflow_odd_k1_output_tern_not_all_zero`: `overflow_odd_k1`'s
+  output ternary starts with `s0`, hence not all-`s2`.
+- `bad_state_predecessor_forward`: the configuration
+  `CycleStart (s2 :: rep s3 (n-1)) (s0 :: s2 :: rep s2 (2*(d-1))) 1`
+  reaches the bad state in exactly 4 steps (via `cycle_d1_general`).
+
+**Open (sorries in BackwardTrace.lean):**
+- `cycle_nonzero_pred_bad_state` (uniqueness): the ONLY canonical
+  predecessor of the bad state via any cycle_nonzero macro step is
+  the configuration from `bad_state_predecessor_forward`. Proving this
+  requires inverting the case disjunction inside `cycle_nonzero` —
+  laborious but feasible.
+- `all_s3_odd_overflow_unreachable_from_init`: the main open problem
+  (bad state is never reachable from `initConfig`). Its proof, even
+  modulo the uniqueness lemma above, still needs the 2-adic /
+  Diophantine crux — i.e., Paths B or C remain necessary.
+
+## Revised recommendation (post-2026-04-17)
+
+**Short term**: Path A (revert field 8, handle cases individually) is
+still the cleanest way to remove the false invariant. The `k=1` and
+`k≥2` sub-cases of odd overflow can be built up using the same
+`odd_overflow_cascade` technology. `all_s3_odd_overflow_halts` (now
+proved) handles the all-s3 case's HALT behavior cleanly.
+
+**Long term**: The crux remains the "bad state unreachability"
+question, which BackwardTrace.lean now makes precise:
+- It's equivalent to showing, at each pad=1 era's end, binary
+  value ≠ 2^n - 1.
+- Equivalent (from the backward-trace analysis) to a Diophantine
+  constraint on era-entry binary values.
+- This Diophantine constraint is NOT simply captured mod any fixed
+  power of 2 (per `claude-said.txt` and empirical era data).
+
+Path C (2-adic analysis) remains the deepest candidate. Path B
+(computational bootstrap for the first N eras) is a pragmatic
+alternative that defers the Diophantine question beyond a finite
+prefix.
