@@ -339,6 +339,30 @@ theorem cross_sep_enter_block (L R : List Sym) :
       { state := some stB, head := s4, left := s3 :: s1 :: L, right := R } := by
   tm_step; tm_step; tm_step; tm_step; simp [run_zero]
 
+/-- Forward sweep through `2k+1` `s4`s from state B head s4 (an odd total).
+    Ends in state A. Used by R4 where the last block has odd length. -/
+theorem sweep_s4_from_B_odd (k : Nat) (L R : List Sym) :
+    run tm ({ state := some stB, head := s4, left := L,
+              right := rep s4 (2 * k) ++ R } : Config) (2 * k + 1) =
+      { state := some stA, head := listHd R, left := rep s2 (2 * k + 1) ++ L,
+        right := listTl R } := by
+  induction k generalizing L R with
+  | zero =>
+    simp only [Nat.mul_zero, rep_zero, List.nil_append]
+    tm_step; simp [run_zero, rep_succ]
+  | succ k ih =>
+    have hrep : rep s4 (2 * (k + 1)) = s4 :: s4 :: rep s4 (2 * k) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (k + 1) = 2 * k + 1 + 1 from by omega]; rfl
+    rw [hrep]
+    rw [show 2 * (k + 1) + 1 = (2 * k + 1) + 1 + 1 from by omega]
+    tm_step; tm_step
+    rw [ih (s2 :: s2 :: L) R]
+    have hL : rep s2 (2 * k + 1 + 1 + 1) = rep s2 (2 * k + 1) ++ [s2, s2] := by
+      show List.replicate _ _ = _
+      rw [show 2 * k + 1 + 1 + 1 = 2 * k + 1 + 2 from by omega, List.replicate_add]; rfl
+    rw [hL, List.append_assoc]; rfl
+
 /-- Forward sweep through `2k+2` `s4`s from state B head s4 (the situation
     after `cross_sep_enter_block`). Ends back in state B (even toggles). -/
 theorem sweep_s4_from_B_even (k : Nat) (L R : List Sym) :
@@ -375,6 +399,15 @@ theorem bounce_at_blank (L : List Sym) :
     run tm ({ state := some stB, head := s0, left := s2 :: L, right := [] } : Config) 2 =
       { state := some stB, head := listHd L, left := listTl L,
         right := [s1, s2] } := by
+  tm_step; tm_step; simp [run_zero]
+
+/-- A-variant of the right-edge bounce. Used by R4: when the forward sweep
+    through the last (odd-length) block ends in state A at blank, this bounce
+    writes a `[s2]` onto the right and positions the head at `s1`.  Takes
+    2 steps (`A,s0→1RB`, `B,s0→2LA`). -/
+theorem bounce_at_blank_from_A (L : List Sym) :
+    run tm ({ state := some stA, head := s0, left := L, right := [] } : Config) 2 =
+      { state := some stA, head := s1, left := L, right := [s2] } := by
   tm_step; tm_step; simp [run_zero]
 
 -- ---------------------------------------------------------------------
@@ -509,18 +542,27 @@ see `sim.py` for empirical values.
 
 ## Open sub-problems (roughly ordered by independence)
 
-- `sweep_s4_odd_A`        — induction, ~15 lines (mirrors `sweep_s4_2k`).
-- `cross_sep_enter_block` — 4 `tm_step`s, ~5 lines.
-- `sweep_s4_from_B_even`  — induction, ~15 lines.
-- `bounce_at_blank`       — 2 `tm_step`s, ~3 lines.
-- `sweep_s2_to_s3`        — induction on `k`, ~15 lines.
-- `backward_carry`        — 3 `tm_step`s, ~5 lines.
-- `finalize_tail`         — induction on `n`, uses `sweep_s2_carry`, ~20 lines.
-- `rule_R3_nil`           — compose the above, ~25 lines.
-- `cross_even_digit`      — compose helpers, ~20 lines.
-- `rule_R3`               — induction on `middle`, ~30 lines.
-- R4 variants             — similar, factor shared helpers.
-- R5 variants             — new helper `cross_odd_digit`.
+All the helpers above are PROVED:
+- `sweep_s4_odd_A`, `sweep_s4_from_B_even`, `sweep_s4_from_B_odd`,
+  `cross_sep_enter_block`, `bounce_at_blank`, `bounce_at_blank_from_A`,
+  `sweep_s2_to_s3`, `backward_carry`, `finalize_tail`,
+  `cross_even_digit_forward`, `cross_even_digit_backward`.
+- `rule_R3_nil` PROVED (middle=[]).
+
+Remaining:
+- `rule_R3` for middle ≠ []:  induction on middle; each step peels one
+  `cross_even_digit_forward` off the front of the input and one
+  `cross_even_digit_backward` (+ trailing `backward_carry`) off the back
+  of the output. Challenge: `AllEven middle` allows `0`, but the TM's
+  behavior with a zero middle digit differs (the block is empty). A
+  stronger hypothesis `∀ x ∈ middle, 2 ≤ x` may be needed, or a special
+  case for zero digits.
+- `rule_R4`: need `rule_R4_nil` via composition. Backward phase differs
+  qualitatively from R3 (state A → backward_carry ≠ sweep_s2_to_s3). Needs
+  case-split on `m=0` vs `m≥1` or a unified helper.
+- `rule_R5`: needs `cross_odd_digit` (head turns around past the first odd
+  digit rather than reaching blank).
+- `canonical_progress`: strengthen `ValidDigits` + case-analysis over rules.
 -/
 
 /-- R3 for `middle = []`: `[2n+1, 2m+2] → [2n, 2m+2, 0]` in `4n+4m+16` steps.
@@ -591,6 +633,51 @@ theorem rule_R3_nil (n m : Nat) :
   --       = rep s4 (2n) ++ [s1, s2] ++ rep s4 (2m+2) ++ [s1, s2]
   congr 1
   simp
+
+/-- Forward-sweep traversal of one even middle digit `2(y+1)`.
+    From state B head s1 with tape `[s2] ++ rep s4 (2y+2) ++ [s1, s2]` followed by
+    `R`, `2y + 6` steps land back at state B head s1 on the next separator's s1.
+    The block's `s4`s are rewritten as `s2`s on the left, behind fresh `s3, s1`
+    markers at the boundary. -/
+theorem cross_even_digit_forward (y : Nat) (L R : List Sym) :
+    run tm ({ state := some stB, head := s1, left := L,
+              right := s2 :: (rep s4 (2 * y + 2) ++ [s1, s2] ++ R) } : Config)
+        (2 * y + 6) =
+      { state := some stB, head := s1, left := rep s2 (2 * y + 2) ++ (s3 :: s1 :: L),
+        right := s2 :: R } := by
+  -- Expose the leading s4 of the block.
+  have hrep : rep s4 (2 * y + 2) = s4 :: rep s4 (2 * y + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * y + 2 = 2 * y + 1 + 1 from by omega]; rfl
+  rw [hrep]
+  simp only [List.cons_append]
+  -- Peel cross_sep_enter_block (4 steps).
+  rw [show 2 * y + 6 = 4 + (2 * y + 2) from by omega, run_add,
+      cross_sep_enter_block L (rep s4 (2 * y + 1) ++ [s1, s2] ++ R)]
+  -- Apply sweep_s4_from_B_even y (2y+2 steps).
+  rw [List.append_assoc,
+      sweep_s4_from_B_even y (s3 :: s1 :: L) ([s1, s2] ++ R)]
+  simp only [List.cons_append, List.nil_append, listHd_cons, listTl_cons]
+
+/-- Backward-sweep traversal of one even middle digit `2y+2`.
+    Starts from state A head s2 with left `rep s2 (2y+1) ++ s3 :: s1 :: L_next`
+    (as produced by the preceding `backward_carry`) and ends at state A head s1
+    with the left fully past the middle-digit markers and the right rebuilt
+    with `rep s4 (2y+1) ++ s1`. Takes `2y + 3` steps:
+    `turn_at_s2` (1) + `sweep_s2_to_s3 (2y)` (`2y + 2`). -/
+theorem cross_even_digit_backward (y : Nat) (L_next R : List Sym) :
+    run tm ({ state := some stA, head := s2,
+              left := rep s2 (2 * y + 1) ++ s3 :: s1 :: L_next,
+              right := R } : Config) (2 * y + 3) =
+      { state := some stA, head := s1, left := L_next,
+        right := s2 :: rep s4 (2 * y + 1) ++ s1 :: R } := by
+  have hrep : rep s2 (2 * y + 1) = s2 :: rep s2 (2 * y) := by
+    show List.replicate _ _ = _; rfl
+  rw [hrep, List.cons_append]
+  rw [show 2 * y + 3 = (2 * y + 2) + 1 from by omega]
+  tm_step
+  rw [sweep_s2_to_s3 (2 * y) (s1 :: L_next) (s1 :: R)]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
 
 /-- **Rule R3**  `[2n+1, 2a₁, 2a₂, …, 2aⱼ, 2m+2]  →  [2n, 2a₁, …, 2aⱼ, 2m+2, 0]`.
     Here `middle` is an arbitrary list of even digits. Currently proved only
