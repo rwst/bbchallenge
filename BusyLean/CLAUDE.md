@@ -21,7 +21,41 @@ StreamDefs.lean    SConfig (infinite tape), toSConfig embedding, commutativity
 Attr.lean          tape_norm simp attribute registration
 TapeNorm.lean      tape_norm lemmas (cons-fold, append, arithmetic)
 EsTactic.lean      `es`, `esx` — symbolic evaluator tactics (batch-stepping + shift rules)
+bb2x5.lean         2-state 5-symbol framework (parallel to the binary core — NOT auto-imported)
 ```
+
+## `bb2x5.lean` — 2-state 5-symbol framework
+
+A parallel framework for 2-state, 5-symbol Turing machines. Mirrors the
+binary-alphabet architecture above but with `Sym := Fin 5` and `St := Fin 2`.
+**Not bundled into `BusyLean.lean`**; downstream consumers must
+`import BusyLean.bb2x5` explicitly.
+
+Everything in `bb2x5.lean` lives in `namespace BB2x5`. Provided:
+
+- **Core types**: `Dir`, `Sym` (= `Fin 5`), `St` (= `Fin 2`), `Config`,
+  `Config.halted`, `s0 … s4`, `stA`, `stB`.
+- **Tape helpers**: `listHd`, `listTl`, `rep s n`, `repPair a b n`,
+  `lpow xs n` (list power) with `lpow_add`, `lpow_mul`, `lpow_rotate`,
+  `lpow_length`, `map_lpow`.
+- **Dynamics**: `Tr` (transition type), `step`, `run`, `run_zero`,
+  `run_succ`, `run_add`, `run_halted`, `run_state_none`,
+  `run_alive_of_later`.
+- **Non-halting**: `nonhalt_of_progress` (progress-invariant),
+  `progress_nonhalt_simple` (abstract-state-type wrapper).
+- **Relations + calc**: `Multistep` / `Progress` / `EvStep` with scoped
+  notation `A -[tr]{k}-> B`, `-[tr]->+ B`, `-[tr]->* B`, and `Trans`
+  instances mixing all three.
+- **Parser**: `parseTM` + `tm! "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB"` macro
+  (BusyCoq's `TM_from_str` analogue for the 5-symbol format).
+- **`tm_follow` tactic**: 5-symbol analogue of the binary one — peels a
+  prefix of `run` via a provided `run ... = ...` hypothesis; accepts an
+  optional `using N` to pin the residual step count.
+
+Not provided (deliberately): `ones`/`zeros`/`zebra`-style atoms,
+`es`/`esx` tactics, `closed_set`, backward reasoning. The downstream
+user (e.g. `TM5/machine.lean`) defines its own TM-specific atoms and
+tactics in the `BB2x5` namespace.
 
 ## Key design decisions
 

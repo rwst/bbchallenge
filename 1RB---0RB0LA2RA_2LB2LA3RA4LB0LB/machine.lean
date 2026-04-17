@@ -1,7 +1,7 @@
 import Mathlib.Data.Nat.Basic
 import Mathlib.Data.List.Basic
 import Mathlib.Tactic.NormNum
-import bb2x5
+import BusyLean.bb2x5
 
 /-!
 # Nonhalting proof for TM 1RB---0RB0LA2RA_2LB2LA3RA4LB0LB

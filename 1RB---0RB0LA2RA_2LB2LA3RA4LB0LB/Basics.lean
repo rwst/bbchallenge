@@ -3,7 +3,7 @@ import Mathlib.Data.List.Basic
 import Mathlib.Data.Nat.Log
 import Mathlib.NumberTheory.Padics.PadicVal.Basic
 import Mathlib.Tactic.NormNum
-import bb2x5
+import BusyLean.bb2x5
 
 /-!
 # Basics — provable building-block lemmas for the TM5 nonhalt proof
