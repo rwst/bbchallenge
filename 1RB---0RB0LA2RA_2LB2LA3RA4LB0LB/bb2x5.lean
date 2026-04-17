@@ -144,6 +144,75 @@ instance {tr : Tr} {j k : Nat} :
     Trans (Multistep tr j) (Multistep tr k) (Multistep tr (j + k)) where
   trans := Multistep.trans
 
+/-- `A -[tr]->+ B` — reaches `B` in one or more steps, with `B` non-halted. -/
+def Progress (tr : Tr) (A B : Config) : Prop :=
+  ∃ k : Nat, 0 < k ∧ Multistep tr k A B ∧ ¬ B.halted
+
+scoped notation:50 A " -[" tr "]->+ " B => Progress tr A B
+
+theorem Progress.mk {tr : Tr} {A B : Config} {k : Nat}
+    (hk : 0 < k) (h : A -[tr]{k}-> B) (hB : ¬ B.halted) : A -[tr]->+ B :=
+  ⟨k, hk, h, hB⟩
+
+/-- `A -[tr]->* B` — reaches `B` in zero or more steps. -/
+def EvStep (tr : Tr) (A B : Config) : Prop :=
+  ∃ k : Nat, Multistep tr k A B
+
+scoped notation:50 A " -[" tr "]->* " B => EvStep tr A B
+
+@[refl]
+theorem EvStep.refl {tr : Tr} {A : Config} : A -[tr]->* A := ⟨0, rfl⟩
+
+theorem EvStep.from_multistep {tr : Tr} {A B : Config} {k : Nat}
+    (h : A -[tr]{k}-> B) : A -[tr]->* B := ⟨k, h⟩
+
+theorem EvStep.trans {tr : Tr} {A B C : Config}
+    (h1 : A -[tr]->* B) (h2 : B -[tr]->* C) : A -[tr]->* C := by
+  obtain ⟨j, hAB⟩ := h1; obtain ⟨k, hBC⟩ := h2
+  exact ⟨j + k, hAB.trans hBC⟩
+
+theorem Progress.to_evstep {tr : Tr} {A B : Config}
+    (h : A -[tr]->+ B) : A -[tr]->* B :=
+  let ⟨_, _, hk, _⟩ := h; EvStep.from_multistep hk
+
+/-- `Trans` instances so `calc` chains can mix Multistep / EvStep / Progress. -/
+instance {tr : Tr} : Trans (EvStep tr) (EvStep tr) (EvStep tr) where
+  trans := EvStep.trans
+
+instance {tr : Tr} {k : Nat} : Trans (Multistep tr k) (EvStep tr) (EvStep tr) where
+  trans h1 h2 := (EvStep.from_multistep h1).trans h2
+
+instance {tr : Tr} {k : Nat} : Trans (EvStep tr) (Multistep tr k) (EvStep tr) where
+  trans h1 h2 := h1.trans (EvStep.from_multistep h2)
+
+instance {tr : Tr} : Trans (Progress tr) (EvStep tr) (EvStep tr) where
+  trans h1 h2 := h1.to_evstep.trans h2
+
+instance {tr : Tr} : Trans (Progress tr) (EvStep tr) (EvStep tr) where
+  trans h1 h2 := h1.to_evstep.trans h2
+
+instance {tr : Tr} : Trans (EvStep tr) (Progress tr) (EvStep tr) where
+  trans h1 h2 := h1.trans h2.to_evstep
+
+/-- **Non-halting via an abstract state enumeration.**
+
+Ergonomic wrapper around `nonhalt_of_progress`: you only need an abstract state
+type `C`, an embedding `f : C → Config`, and a "big step" lemma showing that
+every `f c` progresses to some `f c'`. The progress invariant `∃ c, x = f c` is
+synthesized automatically.
+
+Matches the BusyCoq `progress_nonhalt_simple` idiom used for 2×5 proofs:
+prove one `BigStep` lemma, apply this, done. -/
+theorem progress_nonhalt_simple (tr : Tr) {C : Sort*} (f : C → Config)
+    (hnext : ∀ c, ∃ c', f c -[tr]->+ f c') :
+    ∀ c m, (run tr (f c) m).state ≠ none := by
+  intro c m
+  refine nonhalt_of_progress tr (fun x => ∃ c, x = f c) ?_ (f c) ⟨c, rfl⟩ m
+  rintro x ⟨c, rfl⟩
+  obtain ⟨c', k, hk, hmul, hnh⟩ := hnext c
+  refine ⟨k, hk, ⟨c', hmul⟩, ?_⟩
+  rw [show run tr (f c) k = f c' from hmul]; exact hnh
+
 -- ============================================================
 -- `tm_follow` tactic
 -- ============================================================
@@ -197,7 +266,58 @@ elab "tm_follow " h:term : tactic => tmFollowCore h none
 elab "tm_follow " h:term " using " r:term : tactic => tmFollowCore h (some r)
 
 -- ============================================================
--- Generic symbol list helpers
+-- Generic list power (`lpow`): repeat a *block* of symbols `n` times
+-- ============================================================
+-- Matches BusyCoq's `s ^^ n` (Individual25 and siblings). Generalizes
+-- `rep` (single-symbol) and `repPair` (two-symbol block) to any block.
+
+/-- Repeat a list `xs` `n` times as a flat list. -/
+def lpow {α : Type} : List α → Nat → List α
+  | _,  0     => []
+  | xs, n + 1 => xs ++ lpow xs n
+
+@[simp] theorem lpow_zero {α : Type} (xs : List α) : lpow xs 0 = [] := rfl
+@[simp] theorem lpow_succ {α : Type} (xs : List α) (n : Nat) :
+    lpow xs (n + 1) = xs ++ lpow xs n := rfl
+
+theorem lpow_add {α : Type} (xs : List α) (m n : Nat) :
+    lpow xs (m + n) = lpow xs m ++ lpow xs n := by
+  induction m with
+  | zero => simp
+  | succ m ih =>
+    rw [show m + 1 + n = (m + n) + 1 from by omega, lpow_succ, lpow_succ, ih,
+        List.append_assoc]
+
+theorem lpow_mul {α : Type} (xs : List α) (m n : Nat) :
+    lpow xs (m * n) = lpow (lpow xs m) n := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    have hm : m * (n + 1) = m + m * n := by rw [Nat.mul_succ, Nat.add_comm]
+    rw [hm, lpow_add, ih, ← lpow_succ]
+
+theorem lpow_length {α : Type} (xs : List α) (n : Nat) :
+    (lpow xs n).length = n * xs.length := by
+  induction n with
+  | zero => simp
+  | succ n ih => rw [lpow_succ, List.length_append, ih, Nat.succ_mul]; omega
+
+theorem map_lpow {α β : Type} (f : α → β) (xs : List α) (n : Nat) :
+    (lpow xs n).map f = lpow (xs.map f) n := by
+  induction n with
+  | zero => simp
+  | succ n ih => rw [lpow_succ, List.map_append, ih, lpow_succ]
+
+/-- `lpow_rotate`: `lpow (a :: xs) n ++ [a] = a :: lpow (xs ++ [a]) n`. Used to
+    slide a sentinel `a` from right of a repeating block to the left side. -/
+theorem lpow_rotate {α : Type} (a : α) (xs : List α) (n : Nat) :
+    lpow (a :: xs) n ++ [a] = a :: lpow (xs ++ [a]) n := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp [lpow_succ, List.append_assoc, ih]
+
+-- ============================================================
+-- `rep` / `repPair` as specializations of `lpow`
 -- ============================================================
 
 /-- Repeat a symbol `n` times. -/
@@ -205,6 +325,11 @@ def rep (s : Sym) (n : Nat) : List Sym := List.replicate n s
 
 @[simp] theorem rep_zero (s : Sym) : rep s 0 = [] := rfl
 @[simp] theorem rep_succ (s : Sym) (n : Nat) : rep s (n + 1) = s :: rep s n := rfl
+
+theorem rep_eq_lpow (s : Sym) (n : Nat) : rep s n = lpow [s] n := by
+  induction n with
+  | zero => rfl
+  | succ n ih => show s :: rep s n = [s] ++ lpow [s] n; rw [ih]; rfl
 
 /-- Repeat a pair of symbols `n` times as a flat list. -/
 def repPair (a b : Sym) : Nat → List Sym
@@ -219,5 +344,56 @@ theorem repPair_length (a b : Sym) (n : Nat) : (repPair a b n).length = 2 * n :=
   induction n with
   | zero => simp
   | succ n ih => simp [ih]; omega
+
+theorem repPair_eq_lpow (a b : Sym) (n : Nat) : repPair a b n = lpow [a, b] n := by
+  induction n with
+  | zero => rfl
+  | succ n ih => show a :: b :: repPair a b n = [a, b] ++ lpow [a, b] n; rw [ih]; rfl
+
+-- ============================================================
+-- `tm!` — parse bbchallenge string literal into a transition function
+-- ============================================================
+-- Format: `"XXXXX_XXXXX"` where each `X` is a 3-character transition
+-- (symbol 0..4, direction L/R, target state A/B) or `"---"` for halt.
+-- Example: `tm! "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB"`
+-- Matches BusyCoq's `TM_from_str` (Individual25:368–427).
+
+private def chToSym : Char → Sym
+  | '0' => 0 | '1' => 1 | '2' => 2 | '3' => 3 | '4' => 4
+  | _   => 0
+
+private def chToDir : Char → Dir
+  | 'L' => .L | _ => .R
+
+private def chToSt : Char → St
+  | 'A' => 0 | _ => 1
+
+private def parseTrans3 (c1 c2 c3 : Char) : Option (St × Sym × Dir) :=
+  if c1 = '-' ∧ c2 = '-' ∧ c3 = '-' then none
+  else some (chToSt c3, chToSym c1, chToDir c2)
+
+private def parseFive : List Char → Option (Array (Option (St × Sym × Dir)) × List Char)
+  | c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: c7 :: c8 :: c9 :: c10 ::
+    c11 :: c12 :: c13 :: c14 :: c15 :: rest =>
+    some (#[parseTrans3 c1 c2 c3, parseTrans3 c4 c5 c6, parseTrans3 c7 c8 c9,
+           parseTrans3 c10 c11 c12, parseTrans3 c13 c14 c15], rest)
+  | _ => none
+
+/-- Parse a bbchallenge TM string into a transition function. On parse error,
+    returns the all-halt TM. -/
+def parseTM (s : String) : Tr :=
+  match parseFive s.toList with
+  | some (aA, '_' :: rest) =>
+    match parseFive rest with
+    | some (aB, _) =>
+      fun q sy =>
+        let arr := if q = 0 then aA else aB
+        arr[sy.val]?.getD none
+    | _ => fun _ _ => none
+  | _ => fun _ _ => none
+
+/-- `tm! "1RB---..._..."` parses the string at elaboration time and produces
+    a transition function. Uses the standard bbchallenge convention. -/
+macro "tm!" s:str : term => `(BB2x5.parseTM $s)
 
 end BB2x5

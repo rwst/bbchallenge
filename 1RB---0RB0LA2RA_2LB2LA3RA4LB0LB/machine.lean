@@ -49,6 +49,9 @@ def tm (q : St) (s : Sym) : Option (St × Sym × Dir) :=
 abbrev tmStep := step tm
 abbrev tmRun := run tm
 
+/-- Sanity check: the `tm!` parser produces the same transition function. -/
+example : ∀ q s, tm q s = (tm! "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB") q s := by decide
+
 -- Transition simp lemmas (avoid unfolding `tm` globally)
 @[simp] theorem tm_A0 : tm stA s0 = some (stB, s1, .R) := rfl
 @[simp] theorem tm_A1 : tm stA s1 = none := rfl
