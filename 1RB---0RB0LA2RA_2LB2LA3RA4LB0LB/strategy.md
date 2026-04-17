@@ -69,8 +69,11 @@ From `claude-said.txt`:
 4-sorry structure. Attack each case.
 
 **Sub-goals**:
-- A.1 Prove `overflow_odd_k` for general `k ≥ 2` (complex cascade in a
-  single cleaned-up lemma). Estimate: 200-400 lines of step-by-step work.
+- A.1 Prove `overflow_odd_k` for general `k ≥ 2` (complex cascade; see
+  the dedicated "Plan for proving k≥2 dynamics" section below —
+  simulation shows this is ~1000-step cascade that visits
+  non-canonical intermediate states, so the original estimate of
+  200-400 lines was too optimistic).
 - A.2 Prove that `bin = rep s3 dd` at odd overflow is unreachable.
   This is the crux — requires one of the sub-paths B/C/D/E below.
 - A.3 Strengthen invariants in `IsCanonical` to force bin.length ≥ 2 so
@@ -209,24 +212,232 @@ groundwork for Path E.2:
   modulo the uniqueness lemma above, still needs the 2-adic /
   Diophantine crux — i.e., Paths B or C remain necessary.
 
+## What Dio.lean Contains (Path C.3 — precise Diophantine statement)
+
+The file `Dio.lean` reduces the nonhalting claim to a **precise Diophantine
+statement** about era-entry binary values.
+
+### Derivation
+
+At pad=1 era entry `(V_0, n_0, d)`, one runs `K = 3^d - 1` cycle_nonzero
+steps. Each step: `V → V+1` or (when `V = 2^n - 1`) `V → 0, n → n+1`.
+Writing `W` = number of wraps:
+
+    n_end = n_0 + W
+    V_end = (3^d - 1) + V_0 + 2^{n_0} - 2^{n_0+W}
+
+The "bad" (all-s3) condition `V_end = 2^{n_end} - 1` reduces exactly to:
+
+    V_0 + 2^{n_0} + 3^d = 2^{n_0+W+1}
+
+i.e., **`V_0 + 2^{n_0} + 3^d` is a power of 2**.
+
+### Formalized
+
+**Proved** (`era_bad_iff_diophantine`, 2026-04-17):
+```
+IsBadEnd (eraEnd V n d).1 (eraEnd V n d).2 ↔ ∃ m, V + 2^n + 3^d = 2^m
+```
+This is a pure arithmetic fact — the reduction from TM dynamics to
+a Diophantine equation is complete.
+
+**Open** (`C3`, the main claim):
+```
+∀ V n d, IsReachableEraEntry V n d → ¬ ∃ m, V + 2^n + 3^d = 2^m
+```
+
+### Why C3 is hard
+
+- **Simple parity fails**: `V` at era entries has no periodic mod-k behavior
+  (empirical: T,F,T,T,T,F,F,F,... per `macro.md`).
+- **Mihailescu / Catalan doesn't cover it**: Mihailescu resolves
+  `2^m - 3^d = 1`. For C3 we need `2^m - 3^d = V + 2^n` to have no
+  solution in *reachable* (V, n, d). The RHS ranges over a specific subset
+  of `[2^n, 2^{n+1})`; Mihailescu handles only `V + 2^n = 1`.
+- **Reachable set is recursive**: generated from `(V=2, n=2, d=4)` by the
+  era→next-era transition (era end + odd overflow of k∈{0,1,≥2} + overflow_cycle).
+
+### Consequence (`no_bad_end_if_C3`)
+
+If C3 holds, combined with `BackwardTrace.all_s3_odd_overflow_halts` and
+a backward-tracing analysis ruling out overflow_cycle / overflow_odd_*
+as producers of the bad state, the nonhalt proof goes through.
+
 ## Revised recommendation (post-2026-04-17)
 
-**Short term**: Path A (revert field 8, handle cases individually) is
-still the cleanest way to remove the false invariant. The `k=1` and
-`k≥2` sub-cases of odd overflow can be built up using the same
-`odd_overflow_cascade` technology. `all_s3_odd_overflow_halts` (now
-proved) handles the all-s3 case's HALT behavior cleanly.
+The mathematical task is now crisp: **prove C3**, i.e., show that for every
+reachable era entry `(V, n, d)`, `V + 2^n + 3^d` is not a power of 2.
 
-**Long term**: The crux remains the "bad state unreachability"
-question, which BackwardTrace.lean now makes precise:
-- It's equivalent to showing, at each pad=1 era's end, binary
-  value ≠ 2^n - 1.
-- Equivalent (from the backward-trace analysis) to a Diophantine
-  constraint on era-entry binary values.
-- This Diophantine constraint is NOT simply captured mod any fixed
-  power of 2 (per `claude-said.txt` and empirical era data).
+**Candidate paths** to close C3:
 
-Path C (2-adic analysis) remains the deepest candidate. Path B
-(computational bootstrap for the first N eras) is a pragmatic
-alternative that defers the Diophantine question beyond a finite
-prefix.
+- **Path C-Mihailescu**: Leverage Mihailescu for small-V cases,
+  combined with structural bounds on `(V, n, d)` triples.
+- **Path B (computational bootstrap)**: Verify C3 for the first N eras by
+  `native_decide` + `decide`. Then prove a structural property
+  (e.g., a 2-adic invariant that eventually dominates) for i ≥ N.
+- **Path "2-adic trajectory"**: Track the 2-adic valuation of
+  `V + 2^n + 3^d` through the era transition. If `ν_2` has a controlled
+  evolution, one may bound it away from `+∞` (i.e., from being a power
+  of 2).
+- **Path "lifting the exponent"**: Apply LTE / Zsygmondy-style
+  theorems to rule out `2^m = V + 2^n + 3^d` for specific (V, n, d)
+  structures.
+
+**Short term (still recommended)**: Path A (revert field 8 in `machine.lean`,
+handle overflow cases individually). This removes the false invariant.
+With `Dio.lean` now providing the reduction, the proof structure becomes:
+1. Handle k≥2 and all-s3 odd overflow cases.
+2. Use `no_bad_end_if_C3` to conclude no bad state is reached.
+3. Depend on `C3` as an axiomatic or (ideally) proved claim.
+
+## Plan for proving k≥2 dynamics (and correcting k=1)
+
+### Why this matters
+
+The arithmetic `nextEra` function in `Dio.lean` closes the k=1 and k≥2
+branches with closed-form formulas. **Neither is correct in general:**
+
+- **k≥2 branch** (`V_end % 4 = 3`): the formula
+  `V_new = (V_end - 1)/2, n_new = n_end - 1, d_new = d + 2` is a guess
+  from macro.md's era 2. Simulation (below) disproves it.
+- **k=1 branch** (`V_end % 4 = 1`): only the *single* macro-step
+  `overflow_odd_k1` is proved in `machine.lean`, and its output leaves
+  pad=1 with `tern = 1` (nonzero). The "next era entry" requires an
+  additional `cycle_nonzero` step (bringing tern to 0) and then a
+  further odd overflow (whose case is determined by the new V). The
+  `nextEra` k=1 branch collapses this multi-step composition into a
+  single formula, which is only valid when that follow-up overflow
+  happens to be trivial — not in general.
+
+Simulation for k≥2:
+
+| Starting config | `nextEra`'s prediction | Actual first canonical (simulation) |
+|-----------------|-------------------------|-----------------------------------|
+| V=2851, n=12, d=8 (era 2 end from init) | V=1426, n=11, d=10 | V=1426, n=11, d=10 ✓ |
+| V=11, n=4, d=2 (standalone test) | V=6, n=3, d=4 | V=56, n=6, d=7 ✗ |
+
+The k≥2 formula coincidentally matches era 2 of the init trajectory
+but fails for other k=2 configurations. From `V=11, n=4, d=2` the TM
+takes 1152 steps, visits no intermediate canonical at pad=0, and
+produces `(V=56, n=6, d=7)`.
+
+**Every conclusion in `Probabilistic.lean` beyond era 2 is therefore
+spurious as a statement about the TM.** The Dio arithmetic results
+are still true **about the arithmetic sequence** defined by `nextEra`,
+but that sequence has diverged from the TM's real trajectory from era
+3 onward (the first era where a non-k=0 branch is invoked).
+
+Rigorous status of `nextEra`:
+- k=0 branch: faithful to the TM (backed by `overflow_odd`).
+- k=1 branch: heuristic, may diverge when a chained overflow is needed.
+- k≥2 branch: heuristic, disproved in general.
+
+### Plan: Phase 1 — exhaustive simulation
+
+**1.1** Use `sim.py` (or a dedicated Python/OCaml simulator) to run the
+TM from many starting configurations with leading `rep s3 (k+1) ++ s2`
+and record the resulting first canonical. Vary `k ∈ {2, 3, 4}`,
+`d ∈ {2, 3, ...}`, and `bin_rest` over small values.
+
+**1.2** Tabulate:
+- step count `S(k, d, bin_rest)` from era end to first canonical
+- output `(V_new, n_new, d_new, pad_new)`
+- intermediate "non-canonical" structures encountered (ternary with
+  `s0 s0` pairs, `s4 s4` pairs, etc.)
+
+**1.3** Form a hypothesis about the macro-level transition. The known
+k=2 structure "cascade produces k+1 consecutive s0 cells in ternary"
+(per `macro.md`) is the starting point. The cascade must eventually
+normalize these non-canonical cells into valid ternary pairs.
+
+### Phase 2 — decompose the k≥2 dynamics into sub-macro-steps
+
+From `machine.lean`, we already have these sub-macro-steps:
+- `odd_overflow_cascade`: 6d+9 steps. Handles the initial bounce and
+  leftward sweep through all-zero ternary and pad.
+- `carry_step`: propagates carry through leading s3 bits.
+- `carry_stop`: stops carry at a s2 bit.
+- `overflow_carry`: propagates carry through all-s3 binary + terminator.
+
+The k≥2 case will require NEW sub-macro-steps. Candidates:
+- **`consume_s3_chain`** (k steps): after cascade, consume k leading
+  s3 bits via A,s3→0LA writing s0 cells on the right.
+- **`split_cascade`**: the head reads `s2` (the k-th bit that was not
+  s3); A,s2→0RB enters state B on the first `s0` cell.
+- **`normalize_s0_block`**: complex cascade that converts `s0 s0 s0 ...`
+  (invalid ternary) into valid ternary pairs. This is the hardest.
+
+### Phase 3 — formalize each sub-step
+
+For each sub-macro-step:
+1. Write the starting and ending `Config` as explicit structures.
+2. Prove the `tmRun` equation using `tm_step` and the composed-step
+   pattern (like `odd_overflow_cascade`).
+3. Each sub-step theorem should be of the form:
+   ```
+   theorem <name> (params : …) (hyps : …) :
+       run tm <input_config> <step_count_formula> = <output_config>
+   ```
+
+### Phase 4 — compose into `overflow_odd_k`
+
+The target theorem:
+```
+theorem overflow_odd_k (k d : Nat) (bin_rest : List Sym)
+    (hk : k ≥ 2)
+    (hvalid : ∀ s ∈ bin_rest, s = s2 ∨ s = s3) :
+    ∃ (S : Nat) (bin_new : List Sym) (d_new : Nat) (pad_new : Nat),
+      0 < S ∧
+      tmRun (CycleStart (rep s3 k ++ s2 :: bin_rest) (rep s2 (2*d)) 1) S =
+        CycleStart bin_new <tern_new> pad_new ∧
+      -- + consistency predicates on bin_new, d_new, pad_new
+```
+
+### Phase 5 — extract the value-level transition
+
+Once `overflow_odd_k` is proved, compute the arithmetic image
+`(V_end, n_end, d, pad) → (V_new, n_new, d_new, pad_new)` as a
+Lean-level function. This replaces the incorrect `nextEra`'s k≥2
+branch in `Dio.lean`.
+
+### Phase 6 — refactor downstream files
+
+- Update `Dio.lean`: replace the heuristic k=1 and k≥2 branches in
+  `nextEra` with the proven arithmetic transitions from Phase 5
+  (including the chained-overflow composition for k=1).
+- Re-verify the `∀ i < 21, eraHasBadV i = false` check in
+  `Probabilistic.lean` with the corrected `nextEra`.
+- Potentially prove `arith_reachable_iff_TM` (the bridging conjecture
+  in `Dio.lean`).
+
+### Effort estimate
+
+- Phase 1 (simulation): 4–8 hours of Python work.
+- Phase 2 (decomposition): highly dependent on Phase 1 findings;
+  expect 2–4 sub-macro-steps of varying complexity.
+- Phase 3 (formalization): 200–600 lines of Lean per sub-step;
+  total maybe 800–1500 lines.
+- Phase 4–5 (composition & arithmetic): 200–300 lines.
+- Phase 6 (downstream): mostly mechanical, 100 lines.
+
+**Total estimate**: 1500–2500 lines of Lean, 2–4 weeks of focused work,
+assuming the decomposition in Phase 2 yields tractable sub-steps.
+
+### Key risk
+
+If the k≥2 cascade doesn't decompose cleanly into a small number of
+sub-macro-steps — e.g., if `normalize_s0_block` itself requires a
+non-terminating-looking inductive structure — then this plan is
+infeasible and we'd need Path B (computational bootstrap) for the
+first N eras, then prove a NEW structural invariant that handles
+k≥2 without explicit dynamics.
+
+### Parallel work
+
+Even while k≥2 remains unproved, Phase 1 (simulation) immediately
+produces a **correct but un-axiomatized** `nextEra` for the k≥2
+branch. Using this in `Dio.lean` / `Probabilistic.lean` as a
+*computationally-tested hypothesis* (rather than an arithmetic
+formula based on incorrect intuition) gives rigorous *computational*
+results matching the TM's actual trajectory — even before Phase 2–6
+are done.
