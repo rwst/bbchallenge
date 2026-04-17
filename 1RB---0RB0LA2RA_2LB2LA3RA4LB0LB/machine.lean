@@ -446,7 +446,7 @@ theorem cycle_d2_general (k : Nat) (bin_rest tern_rest : List Sym) (pad : Nat) :
     CycleStart (rep s2 k ++ [s3] ++ bin_rest) ([s0, s2] ++ tern_rest) pad := by
   unfold CycleStart tmRun
   simp only [List.cons_append, List.append_assoc, List.nil_append]
-  rw [show 4 + 2 * k = 3 + (1 + 2 * k) from by omega, run_add, entry_d2]
+  tm_follow entry_d2 using (1 + 2 * k)
   cases k with
   | zero =>
     simp only [rep_zero, List.nil_append, Nat.mul_zero, Nat.add_zero,
@@ -454,8 +454,8 @@ theorem cycle_d2_general (k : Nat) (bin_rest tern_rest : List Sym) (pad : Nat) :
     rw [carry_stop]; simp
   | succ k =>
     simp only [rep_succ, List.cons_append, listHd_cons, listTl_cons]
-    rw [show 1 + 2 * (k + 1) = 2 * k + 3 from by omega]
-    rw [carry_step k (bin_rest ++ [s3, s1]) (s2 :: s0 :: s2 :: (tern_rest ++ rep s2 pad))]
+    rw [show 1 + 2 * (k + 1) = 2 * k + 3 from by omega,
+        carry_step k (bin_rest ++ [s3, s1]) (s2 :: s0 :: s2 :: (tern_rest ++ rep s2 pad))]
     simp [listHd_cons, listTl_cons]
 
 /-- Full cycle for ternary digit 1 with k leading binary 1-bits then a 0-bit.
@@ -465,7 +465,7 @@ theorem cycle_d1_general (k : Nat) (bin_rest tern_rest : List Sym) (pad : Nat) :
     CycleStart (rep s2 k ++ [s3] ++ bin_rest) ([s2, s2] ++ tern_rest) pad := by
   unfold CycleStart tmRun
   simp only [List.cons_append, List.append_assoc, List.nil_append]
-  rw [show 4 + 2 * k = 3 + (1 + 2 * k) from by omega, run_add, entry_d1]
+  tm_follow entry_d1 using (1 + 2 * k)
   cases k with
   | zero =>
     simp only [rep_zero, List.nil_append, Nat.mul_zero, Nat.add_zero,
@@ -473,8 +473,8 @@ theorem cycle_d1_general (k : Nat) (bin_rest tern_rest : List Sym) (pad : Nat) :
     rw [carry_stop]; simp
   | succ k =>
     simp only [rep_succ, List.cons_append, listHd_cons, listTl_cons]
-    rw [show 1 + 2 * (k + 1) = 2 * k + 3 from by omega]
-    rw [carry_step k (bin_rest ++ [s3, s1]) (s2 :: s2 :: s2 :: (tern_rest ++ rep s2 pad))]
+    rw [show 1 + 2 * (k + 1) = 2 * k + 3 from by omega,
+        carry_step k (bin_rest ++ [s3, s1]) (s2 :: s2 :: s2 :: (tern_rest ++ rep s2 pad))]
     simp [listHd_cons, listTl_cons]
 
 -- ============================================================
@@ -513,8 +513,8 @@ theorem carry_overflow_d2 (d : Nat) (tern_rest : List Sym) (pad : Nat) :
     CycleStart (rep s2 (d + 1)) ([s0, s2] ++ tern_rest) pad := by
   unfold CycleStart tmRun
   simp only [List.cons_append, List.nil_append]
-  rw [show 2 * d + 8 = 3 + (2 * d + 5) from by omega, run_add]
-  rw [rep_s3_terminator, entry_d2]
+  rw [rep_s3_terminator]
+  tm_follow entry_d2 using (2 * d + 5)
   simp only [rep_succ, List.cons_append, listHd_cons, listTl_cons]
   rw [overflow_carry d (s2 :: s0 :: s2 :: (tern_rest ++ rep s2 pad))]
   simp [listHd_cons, listTl_cons]
@@ -524,8 +524,8 @@ theorem carry_overflow_d1 (d : Nat) (tern_rest : List Sym) (pad : Nat) :
     CycleStart (rep s2 (d + 1)) ([s2, s2] ++ tern_rest) pad := by
   unfold CycleStart tmRun
   simp only [List.cons_append, List.nil_append]
-  rw [show 2 * d + 8 = 3 + (2 * d + 5) from by omega, run_add]
-  rw [rep_s3_terminator, entry_d1]
+  rw [rep_s3_terminator]
+  tm_follow entry_d1 using (2 * d + 5)
   simp only [rep_succ, List.cons_append, listHd_cons, listTl_cons]
   rw [overflow_carry d (s2 :: s2 :: s2 :: (tern_rest ++ rep s2 pad))]
   simp [listHd_cons, listTl_cons]
@@ -622,7 +622,7 @@ theorem cycle_nonzero (bin_cells tern_cells : List Sym) (pad : Nat)
         binOdd_carry_flip_stop k bin_rest, ?_, by simp [rep, List.length_append]⟩
       · unfold CycleStart tmRun
         simp only [List.cons_append, List.append_assoc]
-        rw [show 4*j+2*k+4 = (4*j+3)+(2*k+1) from by omega, run_add, borrow_sweep_d1 j]
+        tm_follow (borrow_sweep_d1 j) using (2*k+1)
         cases k with
         | zero =>
           simp only [rep_zero, List.nil_append, Nat.mul_zero, Nat.zero_add, listHd_cons, listTl_cons]
@@ -647,7 +647,7 @@ theorem cycle_nonzero (bin_cells tern_cells : List Sym) (pad : Nat)
         binOdd_overflow_carry_flip d hd_pos, ?_, by simp [rep]⟩
       · unfold CycleStart tmRun
         simp only [List.cons_append, List.append_assoc]
-        rw [show 4*j+2*d+8 = (4*j+3)+(2*d+5) from by omega, run_add, borrow_sweep_d1 j]
+        tm_follow (borrow_sweep_d1 j) using (2*d+5)
         simp only [listHd_rep_s3_term, listTl_rep_s3_term]
         rw [overflow_carry]; simp [listHd_cons, listTl_cons]
       · intro s hs; exact Or.inl (List.eq_of_mem_replicate hs)
@@ -663,7 +663,7 @@ theorem cycle_nonzero (bin_cells tern_cells : List Sym) (pad : Nat)
         binOdd_carry_flip_stop k bin_rest, ?_, by simp [rep, List.length_append]⟩
       · unfold CycleStart tmRun
         simp only [List.cons_append, List.append_assoc]
-        rw [show 4*j+2*k+4 = (4*j+3)+(2*k+1) from by omega, run_add, borrow_sweep_d2 j]
+        tm_follow (borrow_sweep_d2 j) using (2*k+1)
         cases k with
         | zero =>
           simp only [rep_zero, List.nil_append, Nat.mul_zero, Nat.zero_add, listHd_cons, listTl_cons]
@@ -688,7 +688,7 @@ theorem cycle_nonzero (bin_cells tern_cells : List Sym) (pad : Nat)
         binOdd_overflow_carry_flip d hd_pos, ?_, by simp [rep]⟩
       · unfold CycleStart tmRun
         simp only [List.cons_append, List.append_assoc]
-        rw [show 4*j+2*d+8 = (4*j+3)+(2*d+5) from by omega, run_add, borrow_sweep_d2 j]
+        tm_follow (borrow_sweep_d2 j) using (2*d+5)
         simp only [listHd_rep_s3_term, listTl_rep_s3_term]
         rw [overflow_carry]; simp [listHd_cons, listTl_cons]
       · intro s hs; exact Or.inl (List.eq_of_mem_replicate hs)
@@ -768,7 +768,7 @@ theorem overflow_cycle (bin_cells : List Sym) (d : Nat)
     · -- run equality: overflow_sweep + carry
       unfold CycleStart tmRun
       simp only [rep_zero, List.append_nil]
-      rw [show 4*d+2*k+4 = (4*d+3)+(2*k+1) from by omega, run_add, overflow_sweep]
+      tm_follow (overflow_sweep d) using (2*k+1)
       cases k with
       | zero =>
         simp only [rep_zero, List.nil_append, List.cons_append, listHd_cons, listTl_cons]
@@ -800,7 +800,7 @@ theorem overflow_cycle (bin_cells : List Sym) (d : Nat)
     · -- run equality: overflow_sweep + overflow_carry
       unfold CycleStart tmRun
       simp only [rep_zero, List.append_nil]
-      rw [show 4*d+2*dd+8 = (4*d+3)+(2*dd+5) from by omega, run_add, overflow_sweep]
+      tm_follow (overflow_sweep d) using (2*dd+5)
       simp only [listHd_rep_s3_term, listTl_rep_s3_term]
       rw [overflow_carry]
       simp only [listHd_overflow_right, overflow_right_shift]

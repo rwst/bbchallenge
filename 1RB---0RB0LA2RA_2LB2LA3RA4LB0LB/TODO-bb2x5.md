@@ -55,3 +55,8 @@ Follow-ups identified by comparing `bb2x5.lean` against BusyCoq's
 - (5) Added `parseTM` + `tm!` macro. Verified by a `decide` example in
   `machine.lean` that `tm! "1RB---0RB0LA2RA_2LB2LA3RA4LB0LB"` agrees
   pointwise with the manual `tm` definition.
+- Follow-up: extended `tm_follow` to strip forall binders so unapplied
+  lemmas (`entry_d2`, `borrow_sweep_d1`, …) can be used rw-style.
+  Retrofit all 10 composition sites in `cycle_*_general`,
+  `carry_overflow_*`, `cycle_nonzero`, `overflow_cycle` from
+  `rw [show … from by omega, run_add, lemma]` to `tm_follow lemma using N`.

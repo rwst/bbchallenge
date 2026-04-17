@@ -234,8 +234,13 @@ private def tmFollowCore (h : TSyntax `term) (rest? : Option (TSyntax `term)) :
   goal.withContext do
   let hExpr ← Term.elabTerm h none
   let hType := (← inferType hExpr).consumeMData
-  let some (_, hLhs, _) := hType.eq?
-    | throwError "tm_follow: hypothesis is not an equality"
+  -- Accept both fully-applied equalities and forall-of-equalities (like `rw`).
+  -- Strip forall binders; the inner equality may contain loose bvars, but the
+  -- step-count `k1` we need is usually a closed subterm.
+  let mut ty := hType
+  while ty.isForall do ty := ty.bindingBody!
+  let some (_, hLhs, _) := ty.eq?
+    | throwError "tm_follow: hypothesis type does not reduce to an equality"
   let hLhs := hLhs.consumeMData
   unless hLhs.isAppOf ``BB2x5.run do
     throwError "tm_follow: hypothesis LHS must be `run _ _ _`"
