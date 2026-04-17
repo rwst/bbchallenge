@@ -1,141 +1,28 @@
 import Mathlib.Data.Nat.Basic
 import Mathlib.Data.List.Basic
 import Mathlib.Tactic.NormNum
+import bb2x5
 
 /-!
 # Nonhalting proof for TM 1RB---0RB0LA2RA_2LB2LA3RA4LB0LB
 
 A 2-state 5-symbol Turing machine. Transition (A,1) is undefined (halt).
 
-Since BusyLean only supports binary alphabets (Sym := Bool), we build a
-standalone 5-symbol framework here.
+The generic 5-symbol framework (Config, step, run, Multistep, tm_follow,
+nonhalt_of_progress, rep, repPair) lives in `bb2x5.lean`. This file contains
+only the TM-specific content.
 
 See `macro.md` for a verbal description of the macro rules.
 -/
 
 set_option autoImplicit false
 
+open BB2x5
+
 namespace TM5
 
 -- ============================================================
--- Section 1: 5-Symbol TM Framework
--- ============================================================
-
-inductive Dir where | L | R
-  deriving DecidableEq, Repr
-
-abbrev Sym := Fin 5
-
--- Named symbols for readability
-@[reducible] def s0 : Sym := 0
-@[reducible] def s1 : Sym := 1
-@[reducible] def s2 : Sym := 2
-@[reducible] def s3 : Sym := 3
-@[reducible] def s4 : Sym := 4
-
-abbrev St := Fin 2
-
-@[reducible] def stA : St := 0
-@[reducible] def stB : St := 1
-
-structure Config where
-  state : Option St
-  head  : Sym
-  left  : List Sym
-  right : List Sym
-  deriving DecidableEq, Repr
-
-def Config.halted (c : Config) : Prop := c.state = none
-
-def listHd (l : List Sym) : Sym := l.headD 0
-def listTl (l : List Sym) : List Sym := l.tail
-
-@[simp] theorem listHd_cons (x : Sym) (xs : List Sym) : listHd (x :: xs) = x := rfl
-@[simp] theorem listHd_nil : listHd ([] : List Sym) = 0 := rfl
-@[simp] theorem listTl_cons (x : Sym) (xs : List Sym) : listTl (x :: xs) = xs := rfl
-@[simp] theorem listTl_nil : listTl ([] : List Sym) = [] := rfl
-
-/-- One step of a 2-state 5-symbol TM. -/
-def step (tr : St → Sym → Option (St × Sym × Dir)) (c : Config) : Config :=
-  match c.state with
-  | none => c
-  | some q =>
-    match tr q c.head with
-    | none => { state := none, head := c.head, left := c.left, right := c.right }
-    | some (q', s, d) =>
-      match d with
-      | .R => { state := some q', head := listHd c.right,
-                left := s :: c.left, right := listTl c.right }
-      | .L => { state := some q', head := listHd c.left,
-                left := listTl c.left, right := s :: c.right }
-
-/-- Run a TM for `n` steps. -/
-def run (tr : St → Sym → Option (St × Sym × Dir)) (c : Config) : Nat → Config
-  | 0     => c
-  | n + 1 => run tr (step tr c) n
-
-@[simp] theorem run_zero (tr : St → Sym → Option (St × Sym × Dir)) (c : Config) :
-    run tr c 0 = c := rfl
-
-theorem run_succ (tr : St → Sym → Option (St × Sym × Dir)) (c : Config) (n : Nat) :
-    run tr c (n + 1) = run tr (step tr c) n := rfl
-
-theorem run_add (tr : St → Sym → Option (St × Sym × Dir)) (c : Config) (m n : Nat) :
-    run tr c (m + n) = run tr (run tr c m) n := by
-  induction m generalizing c with
-  | zero => simp
-  | succ m ih => simp only [Nat.succ_add, run_succ]; exact ih (step tr c)
-
-theorem step_halted (tr : St → Sym → Option (St × Sym × Dir)) (c : Config)
-    (h : c.state = none) : step tr c = c := by
-  simp only [step]; rw [h]
-
-theorem run_halted (tr : St → Sym → Option (St × Sym × Dir)) (c : Config)
-    (h : c.state = none) (n : Nat) : run tr c n = c := by
-  induction n with
-  | zero => rfl
-  | succ n ih => rw [run_succ, step_halted _ _ h, ih]
-
-theorem run_state_none (tr : St → Sym → Option (St × Sym × Dir)) (c : Config)
-    (m : Nat) (h : c.state = none) : (run tr c m).state = none := by
-  rw [run_halted _ _ h]; exact h
-
-theorem run_alive_of_later (tr : St → Sym → Option (St × Sym × Dir))
-    (c : Config) (m k : Nat)
-    (hmk : m ≤ k) (hk : (run tr c k).state ≠ none) :
-    (run tr c m).state ≠ none := by
-  intro hm
-  apply hk
-  rw [show k = m + (k - m) from by omega, run_add]
-  exact run_state_none tr _ _ hm
-
--- ============================================================
--- Section 2: Nonhalt by Progress Invariant
--- ============================================================
-
-/-- If every P-config advances to another P-config in positive steps with
-    non-halted state, then the machine never halts from any P-config. -/
-theorem nonhalt_of_progress (tr : St → Sym → Option (St × Sym × Dir))
-    (P : Config → Prop)
-    (hprog : ∀ c, P c → ∃ k, 0 < k ∧ P (run tr c k) ∧ (run tr c k).state ≠ none)
-    (c : Config) (hc : P c) : ∀ m, (run tr c m).state ≠ none := by
-  intro m
-  induction m using Nat.strongRecOn generalizing c with
-  | _ m ihm =>
-    match m with
-    | 0 =>
-      obtain ⟨k, _, _, hk_state⟩ := hprog c hc
-      exact run_alive_of_later tr c 0 k (Nat.zero_le _) hk_state
-    | m' + 1 =>
-      obtain ⟨k, hk_pos, hk_P, hk_state⟩ := hprog c hc
-      by_cases hge : m' + 1 ≤ k
-      · exact run_alive_of_later tr c (m' + 1) k hge hk_state
-      · have hlt : k < m' + 1 := Nat.lt_of_not_le hge
-        rw [show m' + 1 = k + (m' + 1 - k) from by omega, run_add]
-        exact ihm (m' + 1 - k) (by omega) (run tr c k) hk_P
-
--- ============================================================
--- Section 3: The TM 1RB---0RB0LA2RA_2LB2LA3RA4LB0LB
+-- Section 1: The TM 1RB---0RB0LA2RA_2LB2LA3RA4LB0LB
 -- ============================================================
 
 /-- Transition function.
@@ -175,28 +62,8 @@ abbrev tmRun := run tm
 @[simp] theorem tm_B4 : tm stB s4 = some (stB, s0, .L) := rfl
 
 -- ============================================================
--- Section 4: Helpers
+-- Section 4: Helpers (rep, repPair come from BB2x5)
 -- ============================================================
-
-/-- Repeat a symbol `n` times. -/
-def rep (s : Sym) (n : Nat) : List Sym := List.replicate n s
-
-@[simp] theorem rep_zero (s : Sym) : rep s 0 = [] := rfl
-@[simp] theorem rep_succ (s : Sym) (n : Nat) : rep s (n + 1) = s :: rep s n := rfl
-
-/-- Repeat a pair of symbols `n` times as a flat list. -/
-def repPair (a b : Sym) : Nat → List Sym
-  | 0 => []
-  | n + 1 => a :: b :: repPair a b n
-
-@[simp] theorem repPair_zero (a b : Sym) : repPair a b 0 = [] := rfl
-@[simp] theorem repPair_succ (a b : Sym) (n : Nat) :
-    repPair a b (n + 1) = a :: b :: repPair a b n := rfl
-
-theorem repPair_length (a b : Sym) (n : Nat) : (repPair a b n).length = 2 * n := by
-  induction n with
-  | zero => simp
-  | succ n ih => simp [ih]; omega
 
 /-- Valid ternary pairs: alternating first-of-pair elements from {s0,s2,s4} with s2. -/
 def ValidTern : List Sym → Prop
@@ -1003,8 +870,8 @@ theorem overflow_odd_k1 (bin_rest : List Sym) (d : Nat) :
     show List.replicate (2*d) s2 ++ [s2] = List.replicate (2*d+1) s2
     rw [show [s2] = List.replicate 1 s2 from rfl,
         show 2*d+1 = 2*d + 1 from by omega, ← List.replicate_add]
-  rw [hright, show 6 * d + 10 = (6 * d + 9) + 1 from by omega, run_add,
-      odd_overflow_cascade d ((s3 :: s2 :: bin_rest) ++ [s3, s1])]
+  rw [hright]
+  tm_follow (odd_overflow_cascade d ((s3 :: s2 :: bin_rest) ++ [s3, s1])) using 1
   simp only [listHd_cons, listTl_cons, List.cons_append]
   tm_step; simp only [run_zero]
   -- Right sides: s0 :: rep s2 (2*(d+2)) = (s0 :: s2 :: rep s2 (2*(d+1))) ++ [s2]
