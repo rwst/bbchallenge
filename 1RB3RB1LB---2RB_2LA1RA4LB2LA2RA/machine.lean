@@ -134,6 +134,150 @@ macro "tm_step" : tactic => `(tactic| (
 /-- Every even natural number `x` satisfies `x = 2 * (x / 2)`. -/
 def AllEven (xs : List Nat) : Prop := ∀ x ∈ xs, Even x
 
+/-- Each element is a positive even number `2 * k + 2` for some `k`.
+    Strictly stronger than `AllEven`: excludes zero digits.
+    The macro rules R3/R4 require this on the middle list — a zero middle
+    digit creates consecutive `[s1, s2, s1, s2]` separators on the tape, and
+    the TM's behaviour there does NOT match the claimed rule output (e.g.
+    `[1, 0, 2]` actually reaches `[3, 2]`, not `[0, 0, 2, 0]`). -/
+def AllPosEven (xs : List Nat) : Prop := ∀ y ∈ xs, ∃ k, y = 2 * k + 2
+
+/-- Tape representation of a middle digit list: each digit `y` becomes
+    `rep s4 y ++ [s1, s2]` (block + trailing separator). The result is what
+    appears on the right tape between the first separator (after the
+    leading block) and the last block. -/
+def middlePrefix : List Nat → List Sym
+  | []      => []
+  | y :: ys => rep s4 y ++ [s1, s2] ++ middlePrefix ys
+
+@[simp] theorem middlePrefix_nil : middlePrefix [] = [] := rfl
+
+@[simp] theorem middlePrefix_cons (y : Nat) (ys : List Nat) :
+    middlePrefix (y :: ys) = rep s4 y ++ [s1, s2] ++ middlePrefix ys := rfl
+
+/-- Step-count contribution of traversing `middle` forward-and-backward:
+    each digit `yᵢ` contributes `2·yᵢ + 8` steps total. -/
+def middle_cost : List Nat → Nat
+  | []      => 0
+  | y :: ys => (2 * y + 8) + middle_cost ys
+
+@[simp] theorem middle_cost_nil : middle_cost [] = 0 := rfl
+
+@[simp] theorem middle_cost_cons (y : Nat) (ys : List Nat) :
+    middle_cost (y :: ys) = (2 * y + 8) + middle_cost ys := rfl
+
+/-- One-sided (forward OR backward) traversal cost: `yᵢ + 4` per digit.
+    The total `middle_cost` is `2 * middle_half_cost`. -/
+def middle_half_cost : List Nat → Nat
+  | []      => 0
+  | y :: ys => (y + 4) + middle_half_cost ys
+
+@[simp] theorem middle_half_cost_nil : middle_half_cost [] = 0 := rfl
+
+@[simp] theorem middle_half_cost_cons (y : Nat) (ys : List Nat) :
+    middle_half_cost (y :: ys) = (y + 4) + middle_half_cost ys := rfl
+
+/-- Accumulated left context produced by traversing `middle` forward:
+    each digit `y` adds `rep s2 y ++ s3 :: s1 ::` in front (in processing
+    order, so the last-processed digit's stack is outermost). Defined as
+    a fold so the induction peels one digit at a time. -/
+def stack_L : List Nat → List Sym → List Sym
+  | [],      L => L
+  | y :: ys, L => stack_L ys (rep s2 y ++ s3 :: s1 :: L)
+
+@[simp] theorem stack_L_nil (L : List Sym) : stack_L [] L = L := rfl
+
+@[simp] theorem stack_L_cons (y : Nat) (ys : List Nat) (L : List Sym) :
+    stack_L (y :: ys) L = stack_L ys (rep s2 y ++ s3 :: s1 :: L) := rfl
+
+/-- Total cost is twice the half cost (forward + backward contribute equally). -/
+theorem middle_cost_eq_two_half (middle : List Nat) :
+    middle_cost middle = 2 * middle_half_cost middle := by
+  induction middle with
+  | nil => simp
+  | cons y ys ih => simp [ih]; omega
+
+/-- `middlePrefix` with one element appended: pushes the digit and separator
+    onto the end of the existing prefix. -/
+theorem middlePrefix_snoc (middle : List Nat) (x : Nat) :
+    middlePrefix (middle ++ [x]) = middlePrefix middle ++ rep s4 x ++ [s1, s2] := by
+  induction middle with
+  | nil => simp [middlePrefix]
+  | cons y ys ih => simp [middlePrefix, ih, List.append_assoc]
+
+/-- `macroRight` with a single element appended: the prefix factorization. -/
+theorem macroRight_snoc (middle : List Nat) (x : Nat) :
+    macroRight (middle ++ [x]) = middlePrefix middle ++ rep s4 x := by
+  induction middle with
+  | nil => simp [macroRight]
+  | cons y ys ih =>
+    cases ys with
+    | nil => simp [macroRight, middlePrefix]
+    | cons z zs =>
+      simp [macroRight, middlePrefix, List.append_assoc] at ih ⊢
+      rw [ih]
+
+/-- `macroRight` of `middle ++ [a, b]` expands as
+    `middlePrefix middle ++ rep s4 a ++ [s1, s2] ++ rep s4 b`. -/
+theorem macroRight_snoc2 (middle : List Nat) (a b : Nat) :
+    macroRight (middle ++ [a, b]) =
+      middlePrefix middle ++ rep s4 a ++ [s1, s2] ++ rep s4 b := by
+  rw [show (middle ++ [a, b] : List Nat) = (middle ++ [a]) ++ [b] from by simp,
+      macroRight_snoc, middlePrefix_snoc]
+
+/-- Right-tape unfolding for R3's input config `(2n+1) :: middle ++ [2m+2]`. -/
+theorem macroRight_R3_input (n : Nat) (middle : List Nat) (m : Nat) :
+    macroRight ((2 * n + 1) :: (middle ++ [2 * m + 2])) =
+      rep s4 (2 * n + 1) ++ [s1, s2] ++ middlePrefix middle ++ rep s4 (2 * m + 2) := by
+  cases middle with
+  | nil => simp [macroRight]
+  | cons y ys =>
+    show macroRight ((2 * n + 1) :: y :: (ys ++ [2 * m + 2])) = _
+    rw [macroRight_cons_cons]
+    rw [show (y :: (ys ++ [2 * m + 2]) : List Nat) = (y :: ys) ++ [2 * m + 2] from rfl,
+        macroRight_snoc]
+    simp [List.append_assoc]
+
+/-- Right-tape unfolding for R3's output config `(2n) :: middle ++ [2m+2, 0]`. -/
+theorem macroRight_R3_output (n : Nat) (middle : List Nat) (m : Nat) :
+    macroRight ((2 * n) :: (middle ++ [2 * m + 2, 0])) =
+      rep s4 (2 * n) ++ [s1, s2] ++ middlePrefix middle ++ rep s4 (2 * m + 2) ++ [s1, s2] := by
+  cases middle with
+  | nil => simp [macroRight]
+  | cons y ys =>
+    show macroRight ((2 * n) :: y :: (ys ++ [2 * m + 2, 0])) = _
+    rw [macroRight_cons_cons]
+    rw [show (y :: (ys ++ [2 * m + 2, 0]) : List Nat) = (y :: ys) ++ [2 * m + 2, 0] from rfl,
+        macroRight_snoc2]
+    simp [List.append_assoc]
+
+/-- Right-tape unfolding for R4's input config `(2n+1) :: middle ++ [2m+1]`. -/
+theorem macroRight_R4_input (n : Nat) (middle : List Nat) (m : Nat) :
+    macroRight ((2 * n + 1) :: (middle ++ [2 * m + 1])) =
+      rep s4 (2 * n + 1) ++ [s1, s2] ++ middlePrefix middle ++ rep s4 (2 * m + 1) := by
+  cases middle with
+  | nil => simp [macroRight]
+  | cons y ys =>
+    show macroRight ((2 * n + 1) :: y :: (ys ++ [2 * m + 1])) = _
+    rw [macroRight_cons_cons]
+    rw [show (y :: (ys ++ [2 * m + 1]) : List Nat) = (y :: ys) ++ [2 * m + 1] from rfl,
+        macroRight_snoc]
+    simp [List.append_assoc]
+
+/-- Right-tape unfolding for R4's output config `(2n) :: middle ++ [2m+1, 1]`. -/
+theorem macroRight_R4_output (n : Nat) (middle : List Nat) (m : Nat) :
+    macroRight ((2 * n) :: (middle ++ [2 * m + 1, 1])) =
+      rep s4 (2 * n) ++ [s1, s2] ++ middlePrefix middle ++ rep s4 (2 * m + 1) ++ [s1, s2]
+        ++ rep s4 1 := by
+  cases middle with
+  | nil => simp [macroRight, List.append_assoc]
+  | cons y ys =>
+    show macroRight ((2 * n) :: y :: (ys ++ [2 * m + 1, 1])) = _
+    rw [macroRight_cons_cons]
+    rw [show (y :: (ys ++ [2 * m + 1, 1]) : List Nat) = (y :: ys) ++ [2 * m + 1, 1] from rfl,
+        macroRight_snoc2]
+    simp [List.append_assoc]
+
 /-- Tail-agnostic core for R1: starting with `s1 :: s2 :: rep s4 a ++ TAIL` on
     the right (state B, head s1, left empty), 9 TM steps yield
     `rep s4 (a+3) ++ TAIL`. -/
@@ -212,6 +356,30 @@ theorem sweep_s2_carry (k : Nat) (R : List Sym) :
     have hrep : rep s2 (k + 1) = s2 :: rep s2 k := by
       show List.replicate _ _ = _; rfl
     rw [hrep]
+    rw [show k + 1 + 1 = (k + 1) + 1 from by omega]
+    tm_step
+    rw [ih (s4 :: R)]
+    have hR : rep s4 (k + 1 + 1) = rep s4 (k + 1) ++ [s4] := by
+      show List.replicate _ _ = _
+      rw [List.replicate_add]; rfl
+    rw [hR, List.append_assoc]; rfl
+
+/-- Left-context-generalized `sweep_s2_carry`. Same behaviour but the trailing
+    `s1` on the left has an arbitrary context `L` beyond it, preserved to the
+    final state. Setting `L = []` recovers `sweep_s2_carry`. -/
+theorem sweep_s2_carry_L (k : Nat) (L R : List Sym) :
+    run tm ({ state := some stB, head := s2, left := rep s2 k ++ s1 :: L,
+              right := R } : Config) (k + 1) =
+      { state := some stB, head := s1, left := L,
+        right := rep s4 (k + 1) ++ R } := by
+  induction k generalizing R with
+  | zero =>
+    simp only [rep_zero, List.nil_append]
+    tm_step; simp [run_zero, rep_succ]
+  | succ k ih =>
+    have hrep : rep s2 (k + 1) = s2 :: rep s2 k := by
+      show List.replicate _ _ = _; rfl
+    rw [hrep, List.cons_append]
     rw [show k + 1 + 1 = (k + 1) + 1 from by omega]
     tm_step
     rw [ih (s4 :: R)]
@@ -416,7 +584,11 @@ theorem bounce_at_blank_from_A (L : List Sym) :
 
 /-- Sweep left through `k` cells of `s2` then consume a single `s3` marker.
     `k+2` steps: the `s2`s become `s4`s on the right (rebuilding a `rep s4`
-    block there) and the `s3` is absorbed (`B,s3→2LA`). -/
+    block there) and the `s3` is absorbed (`B,s3→2LA`).
+
+    Already left-generalized via the `L` parameter: any left context beyond
+    the `s3` marker is decomposed as `listHd L :: listTl L` in the output,
+    so callers can pass `L = s1 :: L'` and get `head := s1, left := L'`. -/
 theorem sweep_s2_to_s3 (k : Nat) (L R : List Sym) :
     run tm ({ state := some stB, head := s2, left := rep s2 k ++ s3 :: L,
               right := R } : Config) (k + 2) =
@@ -469,6 +641,29 @@ theorem finalize_tail (n : Nat) (R : List Sym) :
     rw [show 2 * (n + 1) + 1 = (2 * n + 1) + 1 + 1 from by omega]
     tm_step
     rw [sweep_s2_carry (2 * n + 1) (s1 :: R)]
+    rfl
+
+/-- Left-context-generalized `finalize_tail`. Starting at state A head s2 with
+    `rep s2 (2n) ++ s1 :: L` on the left, `2n+1` steps end at state B head s1
+    with left `L` (preserved) and right prefixed by `rep s4 (2n) ++ [s1]`.
+    Setting `L = []` recovers `finalize_tail`. -/
+theorem finalize_tail_L (n : Nat) (L R : List Sym) :
+    run tm ({ state := some stA, head := s2, left := rep s2 (2 * n) ++ s1 :: L,
+              right := R } : Config) (2 * n + 1) =
+      { state := some stB, head := s1, left := L,
+        right := rep s4 (2 * n) ++ (s1 :: R) } := by
+  cases n with
+  | zero =>
+    simp only [Nat.mul_zero, rep_zero, List.nil_append]
+    tm_step; simp [run_zero]
+  | succ n =>
+    have hrep : rep s2 (2 * (n + 1)) = s2 :: rep s2 (2 * n + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (n + 1) = 2 * n + 1 + 1 from by omega]; rfl
+    rw [hrep, List.cons_append]
+    rw [show 2 * (n + 1) + 1 = (2 * n + 1) + 1 + 1 from by omega]
+    tm_step
+    rw [sweep_s2_carry_L (2 * n + 1) L (s1 :: R)]
     rfl
 
 /-
@@ -553,10 +748,9 @@ Remaining:
 - `rule_R3` for middle ≠ []:  induction on middle; each step peels one
   `cross_even_digit_forward` off the front of the input and one
   `cross_even_digit_backward` (+ trailing `backward_carry`) off the back
-  of the output. Challenge: `AllEven middle` allows `0`, but the TM's
-  behavior with a zero middle digit differs (the block is empty). A
-  stronger hypothesis `∀ x ∈ middle, 2 ≤ x` may be needed, or a special
-  case for zero digits.
+  of the output. The hypothesis is now `AllPosEven middle` (every digit
+  `2k+2`) — a zero middle digit makes the rule actually false (verified
+  empirically: `[1, 0, 2]` reaches `[3, 2]`, not `[0, 0, 2, 0]`).
 - `rule_R4`: need `rule_R4_nil` via composition. Backward phase differs
   qualitatively from R3 (state A → backward_carry ≠ sweep_s2_to_s3). Needs
   case-split on `m=0` vs `m≥1` or a unified helper.
@@ -679,55 +873,703 @@ theorem cross_even_digit_backward (y : Nat) (L_next R : List Sym) :
   rw [sweep_s2_to_s3 (2 * y) (s1 :: L_next) (s1 :: R)]
   simp only [listHd_cons, listTl_cons, List.cons_append]
 
+/-- Forward traversal of a list of positive-even middle digits. Starting
+    at state B head s1 with left `L` and right `s2 :: (middlePrefix middle ++ Rtail)`,
+    `middle_half_cost middle` steps end at state B head s1 with left
+    `stack_L middle L` and right `s2 :: Rtail`. Each digit `y = 2k+2`
+    contributes `y + 4` steps via `cross_even_digit_forward k`. -/
+theorem forward_pass (middle : List Nat) (hmid : AllPosEven middle) (L Rtail : List Sym) :
+    run tm ({ state := some stB, head := s1, left := L,
+              right := s2 :: (middlePrefix middle ++ Rtail) } : Config)
+        (middle_half_cost middle) =
+      { state := some stB, head := s1, left := stack_L middle L,
+        right := s2 :: Rtail } := by
+  induction middle generalizing L with
+  | nil =>
+    simp only [middlePrefix_nil, middle_half_cost_nil, stack_L_nil, List.nil_append, run_zero]
+  | cons y ys ih =>
+    obtain ⟨k, hk⟩ := hmid y (by simp)
+    subst hk
+    rw [middlePrefix_cons, middle_half_cost_cons, stack_L_cons]
+    rw [show 2 * k + 2 + 4 + middle_half_cost ys = (2 * k + 6) + middle_half_cost ys
+        from by omega, run_add]
+    rw [show (rep s4 (2 * k + 2) ++ [s1, s2] ++ middlePrefix ys ++ Rtail : List Sym) =
+            rep s4 (2 * k + 2) ++ [s1, s2] ++ (middlePrefix ys ++ Rtail)
+        from by rw [List.append_assoc]]
+    rw [cross_even_digit_forward k L (middlePrefix ys ++ Rtail)]
+    exact ih (fun z hz => hmid z (by simp [hz])) _
+
+/-- Backward traversal of a list of positive-even middle digits. Starting
+    at state A head s1 with left `stack_L middle L` (the accumulated stack
+    from the forward pass) and right `s2 :: Rsuf`, `middle_half_cost middle + 3`
+    steps end at state A with head `listHd L`, left `listTl L`, and right
+    `s2 :: (middlePrefix middle ++ s4 :: Rsuf)` — i.e., the middle digits
+    have been rebuilt on the right tape and one element popped from `L`. -/
+theorem backward_pass (middle : List Nat) (hmid : AllPosEven middle) (L Rsuf : List Sym) :
+    run tm ({ state := some stA, head := s1, left := stack_L middle L,
+              right := s2 :: Rsuf } : Config)
+        (middle_half_cost middle + 3) =
+      { state := some stA, head := listHd L, left := listTl L,
+        right := s2 :: (middlePrefix middle ++ s4 :: Rsuf) } := by
+  induction middle generalizing L Rsuf with
+  | nil =>
+    simp only [stack_L_nil, middlePrefix_nil, middle_half_cost_nil, Nat.zero_add, List.nil_append]
+    exact backward_carry L Rsuf
+  | cons y ys ih =>
+    obtain ⟨k, hk⟩ := hmid y (by simp)
+    subst hk
+    rw [stack_L_cons, middle_half_cost_cons, middlePrefix_cons]
+    -- Peel the INNERMOST layer (y = 2k+2) last: first apply IH for ys with
+    -- transformed L' = rep s2 (2k+2) ++ s3 :: s1 :: L, then do cedb + bc for y.
+    rw [show 2 * k + 2 + 4 + middle_half_cost ys + 3
+          = (middle_half_cost ys + 3) + (2 * k + 6) from by omega, run_add]
+    rw [ih (fun z hz => hmid z (by simp [hz])) (rep s2 (2 * k + 2) ++ s3 :: s1 :: L) Rsuf]
+    -- After IH: state A, head = s2 (from rep s2 (2k+2)), left = rep s2 (2k+1) ++ s3 :: s1 :: L,
+    -- right = s2 :: (middlePrefix ys ++ s4 :: Rsuf).
+    have hrep : rep s2 (2 * k + 2) = s2 :: rep s2 (2 * k + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * k + 2 = 2 * k + 1 + 1 from by omega]; rfl
+    rw [hrep]
+    simp only [List.cons_append, listHd_cons, listTl_cons]
+    -- Now cedb (2k+3 steps) + backward_carry (3 steps). Total = 2k+6.
+    rw [show 2 * k + 6 = (2 * k + 3) + 3 from by omega, run_add]
+    rw [cross_even_digit_backward k L (s2 :: (middlePrefix ys ++ s4 :: Rsuf))]
+    simp only [List.cons_append]
+    rw [backward_carry L (rep s4 (2 * k + 1) ++ s1 :: s2 :: (middlePrefix ys ++ s4 :: Rsuf))]
+    -- Target right: s2 :: (rep s4 (2k+2) ++ [s1, s2] ++ middlePrefix ys ++ s4 :: Rsuf)
+    -- Actual right: s2 :: s4 :: (rep s4 (2k+1) ++ s1 :: s2 :: (middlePrefix ys ++ s4 :: Rsuf))
+    -- Equal since s4 :: rep s4 (2k+1) = rep s4 (2k+2), and re-associate.
+    have hrep4 : rep s4 (2 * k + 2) = s4 :: rep s4 (2 * k + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * k + 2 = 2 * k + 1 + 1 from by omega]; rfl
+    rw [hrep4]
+    simp [List.append_assoc]
+
+/-- R3 for `middle = [2x+2]` (single positive even middle digit):
+    `[2n+1, 2x+2, 2m+2] → [2n, 2x+2, 2m+2, 0]` in `4n+4m+4x+28` steps.
+    Direct composition using `cross_even_digit_forward/backward`. -/
+theorem rule_R3_single (n m x : Nat) :
+    tmRun (MacroConfig [2 * n + 1, 2 * x + 2, 2 * m + 2]) (4 * n + 4 * m + 4 * x + 28) =
+      MacroConfig [2 * n, 2 * x + 2, 2 * m + 2, 0] := by
+  show run tm _ _ = _
+  simp only [MacroConfig, macroRight_cons_cons, macroRight_singleton]
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first, List.cons_append, List.cons_append]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 4 * x + 28 = (4 * n + 4 * m + 4 * x + 27) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 4 * x + 27 = (2 * n + 1) + (2 * n + 4 * m + 4 * x + 26)
+        from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (rep s4 (2 * x + 2) ++ s1 :: s2 :: rep s4 (2 * m + 2)))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 3: cross_even_digit_forward x (2x+6 steps)
+  rw [show 2 * n + 4 * m + 4 * x + 26 = (2 * x + 6) + (2 * n + 4 * m + 2 * x + 20)
+        from by omega, run_add]
+  rw [show (s1 :: s2 :: rep s4 (2 * m + 2) : List Sym) = [s1, s2] ++ rep s4 (2 * m + 2)
+        from rfl, ← List.append_assoc]
+  rw [cross_even_digit_forward x (rep s2 (2 * n + 1) ++ [s1]) (rep s4 (2 * m + 2))]
+  -- Now state B head s1, left = rep s2 (2x+2) ++ s3 :: s1 :: rep s2 (2n+1) ++ [s1],
+  -- right = s2 :: rep s4 (2m+2)
+  have h_last : rep s4 (2 * m + 2) = s4 :: rep s4 (2 * m + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * m + 2 = 2 * m + 1 + 1 from by omega]; rfl
+  rw [h_last]
+  -- Phase 4: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 2 * x + 20 = 4 + (2 * n + 4 * m + 2 * x + 16) from by omega, run_add,
+      cross_sep_enter_block (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m + 1))]
+  -- Phase 5: sweep_s4_from_B_even m (2m+2 steps)
+  rw [show 2 * n + 4 * m + 2 * x + 16 = (2 * m + 2) + (2 * n + 2 * m + 2 * x + 14)
+        from by omega, run_add]
+  rw [show rep s4 (2 * m + 1) = rep s4 (2 * m + 1) ++ ([] : List Sym) from by simp]
+  rw [sweep_s4_from_B_even m
+        (s3 :: s1 :: (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))) []]
+  simp only [listHd_nil, listTl_nil]
+  -- Phase 6: bounce_at_blank (2 steps)
+  have h_rep2m : rep s2 (2 * m + 2) = s2 :: rep s2 (2 * m + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * m + 2 = 2 * m + 1 + 1 from by omega]; rfl
+  rw [h_rep2m, List.cons_append]
+  rw [show 2 * n + 2 * m + 2 * x + 14 = 2 + (2 * n + 2 * m + 2 * x + 12) from by omega, run_add,
+      bounce_at_blank (rep s2 (2 * m + 1) ++ s3 :: s1 ::
+        (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1])))]
+  -- Phase 7: sweep_s2_to_s3 (2m) (2m+2 steps)
+  have h_rep2m1 : rep s2 (2 * m + 1) = s2 :: rep s2 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_rep2m1]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  rw [show 2 * n + 2 * m + 2 * x + 12 = (2 * m + 2) + (2 * n + 2 * x + 10)
+        from by omega, run_add,
+      sweep_s2_to_s3 (2 * m) (s1 :: (rep s2 (2 * x + 2) ++ s3 :: s1 ::
+        (rep s2 (2 * n + 1) ++ [s1]))) [s1, s2]]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  -- Phase 8: backward_carry (3 steps)
+  rw [show 2 * n + 2 * x + 10 = 3 + (2 * n + 2 * x + 7) from by omega, run_add,
+      backward_carry (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m + 1) ++ [s1, s2])]
+  have h_rep2x : rep s2 (2 * x + 2) = s2 :: rep s2 (2 * x + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * x + 2 = 2 * x + 1 + 1 from by omega]; rfl
+  rw [h_rep2x]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  -- Phase 9: cross_even_digit_backward x (2x+3 steps)
+  rw [show 2 * n + 2 * x + 7 = (2 * x + 3) + (2 * n + 4) from by omega, run_add,
+      cross_even_digit_backward x (rep s2 (2 * n + 1) ++ [s1])
+        (s2 :: s4 :: (rep s4 (2 * m + 1) ++ [s1, s2]))]
+  simp only [List.cons_append]
+  -- Phase 10: backward_carry (3 steps)
+  rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+      backward_carry (rep s2 (2 * n + 1) ++ [s1])
+        (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 :: (rep s4 (2 * m + 1) ++ [s1, s2]))]
+  have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [hrepn]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  -- Phase 11: finalize_tail n (2n+1 steps)
+  rw [finalize_tail n (s2 :: s4 :: (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 ::
+        (rep s4 (2 * m + 1) ++ [s1, s2])))]
+  -- Target: macroRight [2n, 2x+2, 2m+2, 0]
+  --   = rep s4 (2n) ++ [s1, s2] ++ rep s4 (2x+2) ++ [s1, s2] ++ rep s4 (2m+2) ++ [s1, s2]
+  -- Actual: rep s4 (2n) ++ s1 :: (s2 :: s4 :: (rep s4 (2x+1) ++ s1 :: s4 ::
+  --            (rep s4 (2m+1) ++ [s1, s2])))
+  --       = rep s4 (2n) ++ [s1, s2] ++ (s4 :: rep s4 (2x+1)) ++ [s1] ++ (s4 :: rep s4 (2m+1))
+  --           ++ [s1, s2]
+  --       = rep s4 (2n) ++ [s1, s2] ++ rep s4 (2x+2) ++ [s1, s2] ++ rep s4 (2m+2) ++ [s1, s2]
+  simp
+
+/-- R3 for arbitrary `AllPosEven middle`: `[2n+1, middle, 2m+2] → [2n, middle, 2m+2, 0]`
+    in `4n+4m+16 + middle_cost middle` steps. Composes forward_pass and
+    backward_pass around the rule_R3_nil skeleton. -/
+theorem rule_R3_general (n m : Nat) (middle : List Nat) (hmid : AllPosEven middle) :
+    tmRun (MacroConfig ((2 * n + 1) :: (middle ++ [2 * m + 2])))
+        (4 * n + 4 * m + 16 + middle_cost middle) =
+      MacroConfig ((2 * n) :: (middle ++ [2 * m + 2, 0])) := by
+  show run tm _ _ = _
+  simp only [MacroConfig]
+  rw [macroRight_R3_input, macroRight_R3_output, middle_cost_eq_two_half]
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first, List.cons_append, List.cons_append]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 16 + 2 * middle_half_cost middle =
+      (4 * n + 4 * m + 15 + 2 * middle_half_cost middle) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 15 + 2 * middle_half_cost middle
+        = (2 * n + 1) + (2 * n + 4 * m + 14 + 2 * middle_half_cost middle)
+        from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (middlePrefix middle ++ rep s4 (2 * m + 2)))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 3: forward_pass middle (middle_half_cost middle steps)
+  rw [show 2 * n + 4 * m + 14 + 2 * middle_half_cost middle
+        = middle_half_cost middle + (2 * n + 4 * m + 14 + middle_half_cost middle)
+        from by omega, run_add,
+      forward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1]) (rep s4 (2 * m + 2))]
+  -- Expose s4 from rep s4 (2m+2)
+  have h_last : rep s4 (2 * m + 2) = s4 :: rep s4 (2 * m + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * m + 2 = 2 * m + 1 + 1 from by omega]; rfl
+  rw [h_last]
+  -- Phase 4: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 14 + middle_half_cost middle
+        = 4 + (2 * n + 4 * m + 10 + middle_half_cost middle) from by omega, run_add,
+      cross_sep_enter_block (stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m + 1))]
+  -- Phase 5: sweep_s4_from_B_even m (2m+2 steps)
+  rw [show 2 * n + 4 * m + 10 + middle_half_cost middle
+        = (2 * m + 2) + (2 * n + 2 * m + 8 + middle_half_cost middle)
+        from by omega, run_add]
+  rw [show rep s4 (2 * m + 1) = rep s4 (2 * m + 1) ++ ([] : List Sym) from by simp]
+  rw [sweep_s4_from_B_even m
+        (s3 :: s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1])) []]
+  simp only [listHd_nil, listTl_nil]
+  -- Phase 6: bounce_at_blank (2 steps)
+  have h_rep2m : rep s2 (2 * m + 2) = s2 :: rep s2 (2 * m + 1) := by
+    show List.replicate _ _ = _
+    rw [show 2 * m + 2 = 2 * m + 1 + 1 from by omega]; rfl
+  rw [h_rep2m, List.cons_append]
+  rw [show 2 * n + 2 * m + 8 + middle_half_cost middle
+        = 2 + (2 * n + 2 * m + 6 + middle_half_cost middle) from by omega, run_add,
+      bounce_at_blank (rep s2 (2 * m + 1) ++ s3 :: s1 ::
+        stack_L middle (rep s2 (2 * n + 1) ++ [s1]))]
+  -- Phase 7: sweep_s2_to_s3 (2m) (2m+2 steps)
+  have h_rep2m1 : rep s2 (2 * m + 1) = s2 :: rep s2 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_rep2m1]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  rw [show 2 * n + 2 * m + 6 + middle_half_cost middle
+        = (2 * m + 2) + (2 * n + 4 + middle_half_cost middle)
+        from by omega, run_add,
+      sweep_s2_to_s3 (2 * m) (s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+        [s1, s2]]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  -- Phase 8: backward_pass middle (middle_half_cost middle + 3 steps)
+  rw [show 2 * n + 4 + middle_half_cost middle
+        = (middle_half_cost middle + 3) + (2 * n + 1)
+        from by omega, run_add,
+      backward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1])
+        (rep s4 (2 * m + 1) ++ [s1, s2])]
+  have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [hrepn]
+  simp only [listHd_cons, listTl_cons, List.cons_append]
+  -- Phase 9: finalize_tail n (2n+1 steps)
+  rw [finalize_tail n
+        (s2 :: (middlePrefix middle ++ s4 :: (rep s4 (2 * m + 1) ++ [s1, s2])))]
+  -- Show final right = rep s4 (2n) ++ [s1, s2] ++ middlePrefix middle ++ rep s4 (2m+2) ++ [s1, s2]
+  -- Note: s4 :: rep s4 (2m+1) = rep s4 (2m+2) by h_last (reversed).
+  simp [List.append_assoc, ← h_last]
+
 /-- **Rule R3**  `[2n+1, 2a₁, 2a₂, …, 2aⱼ, 2m+2]  →  [2n, 2a₁, …, 2aⱼ, 2m+2, 0]`.
-    Here `middle` is an arbitrary list of even digits. Currently proved only
-    for `middle = []`; the inductive case over `middle` is still open. -/
-theorem rule_R3 (n m : Nat) (middle : List Nat) (hmid : AllEven middle) :
+    `middle` is a list of positive even digits. -/
+theorem rule_R3 (n m : Nat) (middle : List Nat) (hmid : AllPosEven middle) :
     ∃ steps, 0 < steps ∧
       tmRun (MacroConfig ((2 * n + 1) :: (middle ++ [2 * m + 2]))) steps =
         MacroConfig ((2 * n) :: (middle ++ [2 * m + 2, 0])) := by
-  cases middle with
-  | nil =>
-    refine ⟨4 * n + 4 * m + 16, by omega, ?_⟩
-    simpa using rule_R3_nil n m
-  | cons y ys =>
-    sorry
+  refine ⟨4 * n + 4 * m + 16 + middle_cost middle, by omega, ?_⟩
+  exact rule_R3_general n m middle hmid
 
 /-- Concrete base case for R4 (n=0, m=0, middle=[]): `[1, 1] → [0, 1, 1]` in 18 steps. -/
 theorem rule_R4_base : tmRun (MacroConfig [1, 1]) 18 = MacroConfig [0, 1, 1] := by
   native_decide
 
-/-- **Rule R4**  `[2n+1, 2a₁, …, 2aⱼ, 2m+1]  →  [2n, 2a₁, …, 2aⱼ, 2m+1, 1]`.
+/-- R4 for `middle = []`: `[2n+1, 2m+1] → [2n, 2m+1, 1]` in `4n+4m+18` steps.
+    Structurally similar to `rule_R3_nil` but the forward sweep through the
+    last block has odd length (ending in state A rather than B). The backward
+    phase diverges qualitatively between `m = 0` and `m ≥ 1`. -/
+theorem rule_R4_nil (n m : Nat) :
+    tmRun (MacroConfig [2 * n + 1, 2 * m + 1]) (4 * n + 4 * m + 18) =
+      MacroConfig [2 * n, 2 * m + 1, 1] := by
+  show run tm _ _ = _
+  simp only [MacroConfig, macroRight_cons_cons, macroRight_singleton]
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first, List.cons_append, List.cons_append]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 18 = (4 * n + 4 * m + 17) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 17 = (2 * n + 1) + (2 * n + 4 * m + 16) from by omega, run_add,
+      sweep_s4_odd_A n [s1] (s1 :: s2 :: rep s4 (2 * m + 1))]
+  simp only [listHd_cons, listTl_cons]
+  have h_last : rep s4 (2 * m + 1) = s4 :: rep s4 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_last]
+  -- Phase 3: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 16 = 4 + (2 * n + 4 * m + 12) from by omega, run_add,
+      cross_sep_enter_block (rep s2 (2 * n + 1) ++ [s1]) (rep s4 (2 * m))]
+  -- Phase 4: sweep_s4_from_B_odd m (2m+1 steps)
+  rw [show 2 * n + 4 * m + 12 = (2 * m + 1) + (2 * n + 2 * m + 11) from by omega, run_add]
+  rw [show rep s4 (2 * m) = rep s4 (2 * m) ++ ([] : List Sym) from by simp]
+  rw [sweep_s4_from_B_odd m (s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1])) []]
+  simp only [listHd_nil, listTl_nil]
+  -- Phase 5: bounce_at_blank_from_A (2 steps)
+  rw [show 2 * n + 2 * m + 11 = 2 + (2 * n + 2 * m + 9) from by omega, run_add,
+      bounce_at_blank_from_A
+        (rep s2 (2 * m + 1) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))]
+  -- Phase 6+7+8: post-bounce. Case split on m.
+  cases m with
+  | zero =>
+    simp only [Nat.mul_zero, Nat.zero_add]
+    have hrep : rep s2 1 = [s2] := rfl
+    rw [hrep, List.cons_append]
+    -- Peel 5 individual steps
+    rw [show 2 * n + 9 = 2 * n + 4 + 1 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step; tm_step
+    -- Now state A, head s1, left = rep s2 (2n+1) ++ [s1], right = [s2, s1, s2, s4]
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1]) [s1, s2, s4]]
+    have hrep2 : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrep2]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n [s2, s4, s1, s2, s4]]
+    simp [rep_succ]
+  | succ m' =>
+    have hrep : rep s2 (2 * (m' + 1) + 1) = s2 :: s2 :: rep s2 (2 * m' + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (m' + 1) + 1 = 2 * m' + 1 + 1 + 1 from by omega]; rfl
+    rw [hrep, List.cons_append, List.cons_append]
+    -- Peel 4 individual steps to reach state B, head s2
+    rw [show 2 * n + 2 * (m' + 1) + 9 = 2 * n + 2 * m' + 7 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step
+    -- Now state B, head s2, left = rep s2 (2m'+1) ++ s3 :: s1 :: (rep s2 (2n+1) ++ [s1]),
+    -- right = [s1, s2, s4]
+    rw [show 2 * n + 2 * m' + 7 = (2 * m' + 1 + 2) + (2 * n + 4) from by omega, run_add,
+        sweep_s2_to_s3 (2 * m' + 1) (s1 :: (rep s2 (2 * n + 1) ++ [s1])) [s1, s2, s4]]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4])]
+    have hrep2 : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrep2]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: s4 :: (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4]))]
+    have heq : 2 * m' + 1 + 1 = 2 * (m' + 1) := by omega
+    rw [heq]
+    simp [rep_succ]
 
-    TODO: Step count formula is `4n + 4m + 18 + Σ middle_cost` where
-    `middle_cost(2y) = 4y + 8`. Needs variants:
-    - `sweep_s4_from_B_odd` — odd-length sweep ending in state A.
-    - `bounce_at_blank_from_A` — A-variant bounce (uses `A,s0 → 1RB`).
-    The backward phase writes the trailing `1` instead of `0`. -/
-theorem rule_R4 (n m : Nat) (middle : List Nat) (hmid : AllEven middle) :
+/-- R4 for `middle = [2x+2]` (single positive even middle digit):
+    `[2n+1, 2x+2, 2m+1] → [2n, 2x+2, 2m+1, 1]` in `4n+4m+4x+30` steps.
+    Parallels `rule_R3_single` but with `sweep_s4_from_B_odd` and
+    `bounce_at_blank_from_A`; the backward phase splits on `m=0` vs `m≥1`. -/
+theorem rule_R4_single (n m x : Nat) :
+    tmRun (MacroConfig [2 * n + 1, 2 * x + 2, 2 * m + 1]) (4 * n + 4 * m + 4 * x + 30) =
+      MacroConfig [2 * n, 2 * x + 2, 2 * m + 1, 1] := by
+  show run tm _ _ = _
+  simp only [MacroConfig, macroRight_cons_cons, macroRight_singleton]
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first, List.cons_append, List.cons_append]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 4 * x + 30 = (4 * n + 4 * m + 4 * x + 29) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 4 * x + 29 = (2 * n + 1) + (2 * n + 4 * m + 4 * x + 28)
+        from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (rep s4 (2 * x + 2) ++ s1 :: s2 :: rep s4 (2 * m + 1)))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 3: cross_even_digit_forward x (2x+6 steps)
+  rw [show 2 * n + 4 * m + 4 * x + 28 = (2 * x + 6) + (2 * n + 4 * m + 2 * x + 22)
+        from by omega, run_add]
+  rw [show (s1 :: s2 :: rep s4 (2 * m + 1) : List Sym) = [s1, s2] ++ rep s4 (2 * m + 1)
+        from rfl, ← List.append_assoc]
+  rw [cross_even_digit_forward x (rep s2 (2 * n + 1) ++ [s1]) (rep s4 (2 * m + 1))]
+  have h_last : rep s4 (2 * m + 1) = s4 :: rep s4 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_last]
+  -- Phase 4: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 2 * x + 22 = 4 + (2 * n + 4 * m + 2 * x + 18) from by omega, run_add,
+      cross_sep_enter_block (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m))]
+  -- Phase 5: sweep_s4_from_B_odd m (2m+1 steps)
+  rw [show 2 * n + 4 * m + 2 * x + 18 = (2 * m + 1) + (2 * n + 2 * m + 2 * x + 17)
+        from by omega, run_add]
+  rw [show rep s4 (2 * m) = rep s4 (2 * m) ++ ([] : List Sym) from by simp]
+  rw [sweep_s4_from_B_odd m
+        (s3 :: s1 :: (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))) []]
+  simp only [listHd_nil, listTl_nil]
+  -- Phase 6: bounce_at_blank_from_A (2 steps)
+  rw [show 2 * n + 2 * m + 2 * x + 17 = 2 + (2 * n + 2 * m + 2 * x + 15) from by omega, run_add,
+      bounce_at_blank_from_A (rep s2 (2 * m + 1) ++ s3 :: s1 ::
+        (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1])))]
+  -- Phase 7+: case on m for backward phase (same shape as rule_R4_nil)
+  cases m with
+  | zero =>
+    simp only [Nat.mul_zero, Nat.zero_add, Nat.add_zero]
+    have hrep_m : rep s2 1 = [s2] := rfl
+    rw [hrep_m, List.cons_append, List.nil_append]
+    -- Peel 5 individual steps
+    rw [show 2 * n + 2 * x + 15 = 2 * n + 2 * x + 10 + 1 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step; tm_step
+    -- Now state A, head s1, left = rep s2 (2x+2) ++ s3 :: s1 :: rep s2 (2n+1) ++ [s1],
+    -- right = [s2, s1, s2, s4]
+    rw [show 2 * n + 2 * x + 10 = 3 + (2 * n + 2 * x + 7) from by omega, run_add,
+        backward_carry (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+          [s1, s2, s4]]
+    have h_rep2x : rep s2 (2 * x + 2) = s2 :: rep s2 (2 * x + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * x + 2 = 2 * x + 1 + 1 from by omega]; rfl
+    rw [h_rep2x]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    -- cross_even_digit_backward x (2x+3 steps)
+    rw [show 2 * n + 2 * x + 7 = (2 * x + 3) + (2 * n + 4) from by omega, run_add,
+        cross_even_digit_backward x (rep s2 (2 * n + 1) ++ [s1]) (s2 :: s4 :: [s1, s2, s4])]
+    simp only [List.cons_append]
+    -- backward_carry (3 steps)
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 :: [s1, s2, s4])]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: s4 :: (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 :: [s1, s2, s4]))]
+    simp [rep_succ]
+  | succ m' =>
+    have hrep_m : rep s2 (2 * (m' + 1) + 1) = s2 :: s2 :: rep s2 (2 * m' + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (m' + 1) + 1 = 2 * m' + 1 + 1 + 1 from by omega]; rfl
+    rw [hrep_m, List.cons_append, List.cons_append]
+    -- Peel 4 individual steps to reach state B, head s2
+    rw [show 2 * n + 2 * (m' + 1) + 2 * x + 15 = 2 * n + 2 * m' + 2 * x + 13 + 1 + 1 + 1 + 1
+        from by omega]
+    tm_step; tm_step; tm_step; tm_step
+    -- Now state B, head s2, left = rep s2 (2m'+1) ++ s3 :: s1 :: (rep s2 (2x+2) ++ s3 :: s1 ::
+    --                                       rep s2 (2n+1) ++ [s1]), right = [s1, s2, s4]
+    rw [show 2 * n + 2 * m' + 2 * x + 13 = (2 * m' + 1 + 2) + (2 * n + 2 * x + 10)
+          from by omega, run_add,
+        sweep_s2_to_s3 (2 * m' + 1)
+          (s1 :: (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1])))
+          [s1, s2, s4]]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    -- backward_carry (3 steps) + peel rep s2 (2x+2) into s2 :: ...
+    rw [show 2 * n + 2 * x + 10 = 3 + (2 * n + 2 * x + 7) from by omega, run_add,
+        backward_carry (rep s2 (2 * x + 2) ++ s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+          (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4])]
+    have h_rep2x : rep s2 (2 * x + 2) = s2 :: rep s2 (2 * x + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * x + 2 = 2 * x + 1 + 1 from by omega]; rfl
+    rw [h_rep2x]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    -- cross_even_digit_backward x (2x+3 steps)
+    rw [show 2 * n + 2 * x + 7 = (2 * x + 3) + (2 * n + 4) from by omega, run_add,
+        cross_even_digit_backward x (rep s2 (2 * n + 1) ++ [s1])
+          (s2 :: s4 :: (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4]))]
+    simp only [List.cons_append]
+    -- backward_carry (3 steps)
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 ::
+            (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4]))]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: s4 :: (rep s4 (2 * x + 1) ++ s1 :: s2 :: s4 ::
+          (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4])))]
+    have heq : 2 * m' + 1 + 1 = 2 * (m' + 1) := by omega
+    rw [heq]
+    simp [rep_succ]
+
+/-- R4 for arbitrary `AllPosEven middle`: `[2n+1, middle, 2m+1] → [2n, middle, 2m+1, 1]`
+    in `4n+4m+18 + middle_cost middle` steps. Composes forward_pass and
+    backward_pass around the rule_R4_nil skeleton, with the m=0/m≥1 case split. -/
+theorem rule_R4_general (n m : Nat) (middle : List Nat) (hmid : AllPosEven middle) :
+    tmRun (MacroConfig ((2 * n + 1) :: (middle ++ [2 * m + 1])))
+        (4 * n + 4 * m + 18 + middle_cost middle) =
+      MacroConfig ((2 * n) :: (middle ++ [2 * m + 1, 1])) := by
+  show run tm _ _ = _
+  simp only [MacroConfig]
+  rw [macroRight_R4_input, macroRight_R4_output, middle_cost_eq_two_half]
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first, List.cons_append, List.cons_append]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 18 + 2 * middle_half_cost middle =
+      (4 * n + 4 * m + 17 + 2 * middle_half_cost middle) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 17 + 2 * middle_half_cost middle
+        = (2 * n + 1) + (2 * n + 4 * m + 16 + 2 * middle_half_cost middle)
+        from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (middlePrefix middle ++ rep s4 (2 * m + 1)))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 3: forward_pass middle (middle_half_cost middle steps)
+  rw [show 2 * n + 4 * m + 16 + 2 * middle_half_cost middle
+        = middle_half_cost middle + (2 * n + 4 * m + 16 + middle_half_cost middle)
+        from by omega, run_add,
+      forward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1]) (rep s4 (2 * m + 1))]
+  have h_last : rep s4 (2 * m + 1) = s4 :: rep s4 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_last]
+  -- Phase 4: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 16 + middle_half_cost middle
+        = 4 + (2 * n + 4 * m + 12 + middle_half_cost middle) from by omega, run_add,
+      cross_sep_enter_block (stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m))]
+  -- Phase 5: sweep_s4_from_B_odd m (2m+1 steps)
+  rw [show 2 * n + 4 * m + 12 + middle_half_cost middle
+        = (2 * m + 1) + (2 * n + 2 * m + 11 + middle_half_cost middle)
+        from by omega, run_add]
+  rw [show rep s4 (2 * m) = rep s4 (2 * m) ++ ([] : List Sym) from by simp]
+  rw [sweep_s4_from_B_odd m
+        (s3 :: s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1])) []]
+  simp only [listHd_nil, listTl_nil]
+  -- Phase 6: bounce_at_blank_from_A (2 steps)
+  rw [show 2 * n + 2 * m + 11 + middle_half_cost middle
+        = 2 + (2 * n + 2 * m + 9 + middle_half_cost middle) from by omega, run_add,
+      bounce_at_blank_from_A (rep s2 (2 * m + 1) ++ s3 :: s1 ::
+        stack_L middle (rep s2 (2 * n + 1) ++ [s1]))]
+  cases m with
+  | zero =>
+    simp only [Nat.mul_zero, Nat.zero_add, Nat.add_zero]
+    have hrep_m : rep s2 1 = [s2] := rfl
+    rw [hrep_m, List.cons_append, List.nil_append]
+    -- Peel 5 direct steps
+    rw [show 2 * n + 9 + middle_half_cost middle
+          = 2 * n + 4 + middle_half_cost middle + 1 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step; tm_step
+    -- Now state A, head s1, left = stack_L middle (rep s2 (2n+1) ++ [s1]),
+    -- right = [s2, s1, s2, s4]
+    -- Apply backward_pass middle (middle_half_cost middle + 3 steps) then finalize_tail
+    rw [show 2 * n + 4 + middle_half_cost middle
+          = (middle_half_cost middle + 3) + (2 * n + 1) from by omega, run_add,
+        backward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1]) [s1, s2, s4]]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: (middlePrefix middle ++ s4 :: [s1, s2, s4]))]
+    simp [rep_succ, List.append_assoc]
+  | succ m' =>
+    have hrep_m : rep s2 (2 * (m' + 1) + 1) = s2 :: s2 :: rep s2 (2 * m' + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (m' + 1) + 1 = 2 * m' + 1 + 1 + 1 from by omega]; rfl
+    rw [hrep_m, List.cons_append, List.cons_append]
+    -- Peel 4 direct steps
+    rw [show 2 * n + 2 * (m' + 1) + 9 + middle_half_cost middle
+          = 2 * n + 2 * m' + 7 + middle_half_cost middle + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step
+    -- Now state B, head s2, left = rep s2 (2m'+1) ++ s3 :: s1 :: stack_L middle (...),
+    -- right = [s1, s2, s4]
+    rw [show 2 * n + 2 * m' + 7 + middle_half_cost middle
+          = (2 * m' + 1 + 2) + (2 * n + 4 + middle_half_cost middle)
+          from by omega, run_add,
+        sweep_s2_to_s3 (2 * m' + 1)
+          (s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1])) [s1, s2, s4]]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [show 2 * n + 4 + middle_half_cost middle
+          = (middle_half_cost middle + 3) + (2 * n + 1) from by omega, run_add,
+        backward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4])]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n
+         (s2 :: (middlePrefix middle ++ s4 :: (rep s4 (2 * m' + 1 + 1) ++ [s1, s2, s4])))]
+    have heq : 2 * m' + 1 + 1 = 2 * (m' + 1) := by omega
+    rw [heq]
+    simp [rep_succ, List.append_assoc]
+
+/-- **Rule R4**  `[2n+1, 2a₁, …, 2aⱼ, 2m+1]  →  [2n, 2a₁, …, 2aⱼ, 2m+1, 1]`.
+    `middle` is a list of positive even digits. -/
+theorem rule_R4 (n m : Nat) (middle : List Nat) (hmid : AllPosEven middle) :
     ∃ steps, 0 < steps ∧
       tmRun (MacroConfig ((2 * n + 1) :: (middle ++ [2 * m + 1]))) steps =
         MacroConfig ((2 * n) :: (middle ++ [2 * m + 1, 1])) := by
-  sorry
+  refine ⟨4 * n + 4 * m + 18 + middle_cost middle, by omega, ?_⟩
+  exact rule_R4_general n m middle hmid
 
 /-- Concrete base case for R5 (n=0, m=1, x=0, middle=[], rest=[]):
     `[1, 3, 0] → [0, 3, 1]` in 20 steps. -/
 theorem rule_R5_base : tmRun (MacroConfig [1, 3, 0]) 20 = MacroConfig [0, 3, 1] := by
   native_decide
 
+/-- R5 for `middle = []` with arbitrary trailing tape `Tail`:
+    `4n+4m+16` steps take `rep s4 (2n+1) ++ [s1, s2] ++ rep s4 (2m+1) ++ [s1, s2] ++
+    rep s4 x ++ Tail` to `rep s4 (2n) ++ [s1, s2] ++ rep s4 (2m+1) ++ [s1, s2] ++
+    rep s4 (x+1) ++ Tail`. The head does NOT reach blank — it turns around
+    after the `2m+1` block. -/
+theorem rule_R5_core_tail (n m x : Nat) (Tail : List Sym) :
+    run tm ({state := some stB, head := s1, left := [],
+             right := rep s4 (2 * n + 1) ++ [s1, s2] ++ rep s4 (2 * m + 1) ++ [s1, s2] ++
+                      rep s4 x ++ Tail} : Config) (4 * n + 4 * m + 16) =
+      {state := some stB, head := s1, left := [],
+       right := rep s4 (2 * n) ++ [s1, s2] ++ rep s4 (2 * m + 1) ++ [s1, s2] ++
+                rep s4 (x + 1) ++ Tail} := by
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first]
+  simp only [List.cons_append, List.append_assoc]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 16 = (4 * n + 4 * m + 15) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 15 = (2 * n + 1) + (2 * n + 4 * m + 14) from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (rep s4 (2 * m + 1) ++ s1 :: s2 :: (rep s4 x ++ Tail)))]
+  simp only [listHd_cons, listTl_cons]
+  have h_mid : rep s4 (2 * m + 1) = s4 :: rep s4 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_mid]
+  simp only [List.cons_append]
+  -- Phase 3: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 14 = 4 + (2 * n + 4 * m + 10) from by omega, run_add,
+      cross_sep_enter_block (rep s2 (2 * n + 1) ++ [s1])
+        (rep s4 (2 * m) ++ s1 :: s2 :: (rep s4 x ++ Tail))]
+  -- Phase 4: sweep_s4_from_B_odd m (2m+1 steps)
+  rw [show 2 * n + 4 * m + 10 = (2 * m + 1) + (2 * n + 2 * m + 9) from by omega, run_add,
+      sweep_s4_from_B_odd m (s3 :: s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+        (s1 :: s2 :: (rep s4 x ++ Tail))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 5-8: 4 direct steps modify the x-block to x+1; case on m
+  cases m with
+  | zero =>
+    simp only [Nat.mul_zero, Nat.zero_add, Nat.add_zero]
+    have hrep_m : rep s2 1 = [s2] := rfl
+    rw [hrep_m, List.cons_append, List.nil_append]
+    rw [show 2 * n + 9 = 2 * n + 4 + 1 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step; tm_step
+    rw [show (s4 :: (rep s4 x ++ Tail) : List Sym) = rep s4 (x + 1) ++ Tail from rfl]
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1]) (s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: s4 :: s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    simp [rep_succ]
+  | succ m' =>
+    have hrep_m : rep s2 (2 * (m' + 1) + 1) = s2 :: s2 :: rep s2 (2 * m' + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (m' + 1) + 1 = 2 * m' + 1 + 1 + 1 from by omega]; rfl
+    rw [hrep_m, List.cons_append, List.cons_append]
+    rw [show 2 * n + 2 * (m' + 1) + 9 = 2 * n + 2 * m' + 7 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step
+    rw [show (s4 :: (rep s4 x ++ Tail) : List Sym) = rep s4 (x + 1) ++ Tail from rfl]
+    rw [show 2 * n + 2 * m' + 7 = (2 * m' + 1 + 2) + (2 * n + 4) from by omega, run_add,
+        sweep_s2_to_s3 (2 * m' + 1) (s1 :: (rep s2 (2 * n + 1) ++ [s1]))
+          (s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [show 2 * n + 4 = 3 + (2 * n + 1) from by omega, run_add,
+        backward_carry (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * m' + 1 + 1) ++ s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n
+         (s2 :: s4 :: (rep s4 (2 * m' + 1 + 1) ++ s1 :: s2 :: (rep s4 (x + 1) ++ Tail)))]
+    have heq : 2 * m' + 1 + 1 = 2 * (m' + 1) := by omega
+    rw [heq]
+
+/-- R5 for `middle = []` and `rest = []`: `[2n+1, 2m+1, x] → [2n, 2m+1, x+1]`
+    in `4n+4m+16` steps. Derived from `rule_R5_core_tail` with empty tail. -/
+theorem rule_R5_simple (n m x : Nat) :
+    tmRun (MacroConfig [2 * n + 1, 2 * m + 1, x]) (4 * n + 4 * m + 16) =
+      MacroConfig [2 * n, 2 * m + 1, x + 1] := by
+  have h := rule_R5_core_tail n m x []
+  show run tm _ _ = _
+  simp only [MacroConfig, macroRight_cons_cons, macroRight_singleton, List.append_assoc]
+  convert h using 2 <;> simp
+
 /-- **Rule R5**  `[2n+1, 2a₁, …, 2aⱼ, 2m+1, x, …rest]
                  →  [2n, 2a₁, …, 2aⱼ, 2m+1, x+1, …rest]`.
-    The first odd digit after position 0 is at the end of `middle ++ [2m+1]`;
-    the rule increments the digit immediately following it.
+    Proved for `middle = []` (any `rest`) via `rule_R5_core_tail`; the case
+    `middle ≠ []` requires middle-digit traversal like R3/R4 cons cases.
 
-    TODO: Fundamentally different from R3/R4 — the head does not reach the
-    right edge; it turns around just past the first odd digit `2m+1`.
-    Needs a new helper `cross_odd_digit` capturing the turnaround. -/
-theorem rule_R5 (n m x : Nat) (middle rest : List Nat) (hmid : AllEven middle) :
+    Requires `AllPosEven middle` for the same reason as R3/R4 — a zero middle
+    digit makes the rule false. -/
+theorem rule_R5 (n m x : Nat) (middle rest : List Nat) (hmid : AllPosEven middle) :
     ∃ steps, 0 < steps ∧
       tmRun (MacroConfig ((2 * n + 1) :: (middle ++ (2 * m + 1) :: x :: rest))) steps =
         MacroConfig ((2 * n) :: (middle ++ (2 * m + 1) :: (x + 1) :: rest)) := by
-  sorry
+  cases middle with
+  | nil =>
+    refine ⟨4 * n + 4 * m + 16, by omega, ?_⟩
+    show run tm _ _ = _
+    cases rest with
+    | nil =>
+      simp only [List.nil_append, MacroConfig, macroRight_cons_cons, macroRight_singleton]
+      have h := rule_R5_core_tail n m x []
+      simpa using h
+    | cons r₀ rs =>
+      simp only [List.nil_append, MacroConfig, macroRight_cons_cons]
+      have h := rule_R5_core_tail n m x (s1 :: s2 :: macroRight (r₀ :: rs))
+      simpa [List.append_assoc] using h
+  | cons _ _ =>
+    -- middle ≠ []: requires traversing even middle digits via
+    -- `cross_even_digit_forward/backward` like R3/R4 cons cases.
+    sorry
 
 -- Rule R2 is a halt precondition, not a transition. We will prove that
 -- configurations of the form `[2n+1, evens…, 0]` are unreachable from `[1, 1]`,
