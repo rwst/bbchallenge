@@ -1542,34 +1542,161 @@ theorem rule_R5_simple (n m x : Nat) :
   simp only [MacroConfig, macroRight_cons_cons, macroRight_singleton, List.append_assoc]
   convert h using 2 <;> simp
 
+/-- R5 with arbitrary `AllPosEven middle` and arbitrary trailing tape `Tail`.
+    Composes `forward_pass` + R5's local x-block rewrite + `backward_pass`
+    around the `rule_R5_core_tail` skeleton. The step count is
+    `4n+4m+16 + middle_cost middle`. -/
+theorem rule_R5_core_with_middle (n m x : Nat) (middle : List Nat) (hmid : AllPosEven middle)
+    (Tail : List Sym) :
+    run tm ({ state := some stB, head := s1, left := [],
+              right := rep s4 (2 * n + 1) ++ [s1, s2] ++ middlePrefix middle ++
+                        rep s4 (2 * m + 1) ++ [s1, s2] ++ rep s4 x ++ Tail } : Config)
+        (4 * n + 4 * m + 16 + middle_cost middle) =
+      { state := some stB, head := s1, left := [],
+        right := rep s4 (2 * n) ++ [s1, s2] ++ middlePrefix middle ++
+                 rep s4 (2 * m + 1) ++ [s1, s2] ++ rep s4 (x + 1) ++ Tail } := by
+  have h_first : rep s4 (2 * n + 1) = s4 :: rep s4 (2 * n) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_first]
+  simp only [List.cons_append, List.append_assoc]
+  rw [middle_cost_eq_two_half]
+  -- Phase 1: enter (1 step)
+  rw [show 4 * n + 4 * m + 16 + 2 * middle_half_cost middle
+        = (4 * n + 4 * m + 15 + 2 * middle_half_cost middle) + 1 from by omega]
+  tm_step
+  -- Phase 2: sweep_s4_odd_A n (2n+1 steps)
+  rw [show 4 * n + 4 * m + 15 + 2 * middle_half_cost middle
+        = (2 * n + 1) + (2 * n + 4 * m + 14 + 2 * middle_half_cost middle)
+        from by omega, run_add,
+      sweep_s4_odd_A n [s1]
+        (s1 :: s2 :: (middlePrefix middle ++ (rep s4 (2 * m + 1) ++
+          s1 :: s2 :: (rep s4 x ++ Tail))))]
+  simp only [listHd_cons, listTl_cons]
+  -- Phase 3: forward_pass middle (middle_half_cost steps)
+  rw [show 2 * n + 4 * m + 14 + 2 * middle_half_cost middle
+        = middle_half_cost middle + (2 * n + 4 * m + 14 + middle_half_cost middle)
+        from by omega, run_add]
+  rw [show (rep s4 (2 * m + 1) ++ s1 :: s2 :: (rep s4 x ++ Tail) : List Sym) =
+          rep s4 (2 * m + 1) ++ ([s1, s2] ++ (rep s4 x ++ Tail))
+        from by simp [List.append_assoc]]
+  rw [forward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1])
+        (rep s4 (2 * m + 1) ++ ([s1, s2] ++ (rep s4 x ++ Tail)))]
+  have h_mid : rep s4 (2 * m + 1) = s4 :: rep s4 (2 * m) := by
+    show List.replicate _ _ = _; rfl
+  rw [h_mid]
+  simp only [List.cons_append, List.nil_append]
+  -- Phase 4: cross_sep_enter_block (4 steps)
+  rw [show 2 * n + 4 * m + 14 + middle_half_cost middle
+        = 4 + (2 * n + 4 * m + 10 + middle_half_cost middle) from by omega, run_add,
+      cross_sep_enter_block (stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+        (rep s4 (2 * m) ++ s1 :: s2 :: (rep s4 x ++ Tail))]
+  -- Phase 5: sweep_s4_from_B_odd m (2m+1 steps)
+  rw [show 2 * n + 4 * m + 10 + middle_half_cost middle
+        = (2 * m + 1) + (2 * n + 2 * m + 9 + middle_half_cost middle)
+        from by omega, run_add,
+      sweep_s4_from_B_odd m
+        (s3 :: s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+        (s1 :: s2 :: (rep s4 x ++ Tail))]
+  simp only [listHd_cons, listTl_cons]
+  cases m with
+  | zero =>
+    simp only [Nat.mul_zero, Nat.zero_add, Nat.add_zero]
+    have hrep_m : rep s2 1 = [s2] := rfl
+    rw [hrep_m, List.cons_append, List.nil_append]
+    -- Peel 5 direct steps
+    rw [show 2 * n + 9 + middle_half_cost middle
+          = 2 * n + 4 + middle_half_cost middle + 1 + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step; tm_step
+    -- Now state A, head s1, left = stack_L middle (rep s2 (2n+1) ++ [s1]),
+    -- right = s2 :: s1 :: s2 :: s4 :: rep s4 x ++ Tail
+    rw [show (s4 :: (rep s4 x ++ Tail) : List Sym) = rep s4 (x + 1) ++ Tail from rfl]
+    -- Apply backward_pass middle
+    rw [show 2 * n + 4 + middle_half_cost middle
+          = (middle_half_cost middle + 3) + (2 * n + 1) from by omega, run_add,
+        backward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1])
+          (s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: (middlePrefix middle ++ s4 ::
+          s1 :: s2 :: (rep s4 (x + 1) ++ Tail)))]
+    simp [rep_succ, List.append_assoc]
+  | succ m' =>
+    have hrep_m : rep s2 (2 * (m' + 1) + 1) = s2 :: s2 :: rep s2 (2 * m' + 1) := by
+      show List.replicate _ _ = _
+      rw [show 2 * (m' + 1) + 1 = 2 * m' + 1 + 1 + 1 from by omega]; rfl
+    rw [hrep_m, List.cons_append, List.cons_append]
+    -- Peel 4 direct steps
+    rw [show 2 * n + 2 * (m' + 1) + 9 + middle_half_cost middle
+          = 2 * n + 2 * m' + 7 + middle_half_cost middle + 1 + 1 + 1 + 1 from by omega]
+    tm_step; tm_step; tm_step; tm_step
+    rw [show (s4 :: (rep s4 x ++ Tail) : List Sym) = rep s4 (x + 1) ++ Tail from rfl]
+    -- Now state B head s2, left = rep s2 (2m'+1) ++ s3 :: s1 :: stack_L middle (...),
+    -- right = s1 :: s2 :: rep s4 (x+1) ++ Tail
+    rw [show 2 * n + 2 * m' + 7 + middle_half_cost middle
+          = (2 * m' + 1 + 2) + (2 * n + 4 + middle_half_cost middle)
+          from by omega, run_add,
+        sweep_s2_to_s3 (2 * m' + 1)
+          (s1 :: stack_L middle (rep s2 (2 * n + 1) ++ [s1]))
+          (s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    -- Apply backward_pass middle
+    rw [show 2 * n + 4 + middle_half_cost middle
+          = (middle_half_cost middle + 3) + (2 * n + 1) from by omega, run_add,
+        backward_pass middle hmid (rep s2 (2 * n + 1) ++ [s1])
+          (rep s4 (2 * m' + 1 + 1) ++ s1 :: s2 :: (rep s4 (x + 1) ++ Tail))]
+    have hrepn : rep s2 (2 * n + 1) = s2 :: rep s2 (2 * n) := by
+      show List.replicate _ _ = _; rfl
+    rw [hrepn]
+    simp only [listHd_cons, listTl_cons, List.cons_append]
+    rw [finalize_tail n (s2 :: (middlePrefix middle ++ s4 ::
+          (rep s4 (2 * m' + 1 + 1) ++ s1 :: s2 :: (rep s4 (x + 1) ++ Tail))))]
+    have heq : 2 * m' + 1 + 1 = 2 * (m' + 1) := by omega
+    rw [heq]
+
+/-- Trailing tape for R5's rest list: empty tail if rest is empty, else the
+    `[s1, s2]` separator plus macroRight of the rest. -/
+def R5_tail : List Nat → List Sym
+  | []      => []
+  | r :: rs => s1 :: s2 :: macroRight (r :: rs)
+
+/-- Unfold `macroRight ((a) :: middle ++ (m') :: x :: rest)` into the explicit
+    block/separator structure. Used for both R5 input (a = 2n+1, m' = 2m+1)
+    and R5 output (a = 2n, m' = 2m+1). -/
+theorem macroRight_R5_unfold (a : Nat) (middle : List Nat) (m' x : Nat) (rest : List Nat) :
+    macroRight (a :: (middle ++ m' :: x :: rest)) =
+      rep s4 a ++ [s1, s2] ++ middlePrefix middle ++ rep s4 m' ++ [s1, s2] ++
+        rep s4 x ++ R5_tail rest := by
+  induction middle generalizing a with
+  | nil =>
+    cases rest with
+    | nil =>
+      show macroRight (a :: [m', x]) = _
+      simp [macroRight, middlePrefix, R5_tail, List.append_assoc]
+    | cons r rs =>
+      show macroRight (a :: m' :: x :: (r :: rs)) = _
+      rw [macroRight_cons_cons, macroRight_cons_cons, macroRight_cons_cons]
+      simp [middlePrefix, R5_tail, List.append_assoc]
+  | cons y ys ih =>
+    show macroRight (a :: (y :: (ys ++ m' :: x :: rest))) = _
+    rw [macroRight_cons_cons]
+    rw [ih y]
+    simp [middlePrefix, List.append_assoc]
+
 /-- **Rule R5**  `[2n+1, 2a₁, …, 2aⱼ, 2m+1, x, …rest]
                  →  [2n, 2a₁, …, 2aⱼ, 2m+1, x+1, …rest]`.
-    Proved for `middle = []` (any `rest`) via `rule_R5_core_tail`; the case
-    `middle ≠ []` requires middle-digit traversal like R3/R4 cons cases.
-
-    Requires `AllPosEven middle` for the same reason as R3/R4 — a zero middle
-    digit makes the rule false. -/
+    `middle` is a list of positive even digits; `rest` is arbitrary. -/
 theorem rule_R5 (n m x : Nat) (middle rest : List Nat) (hmid : AllPosEven middle) :
     ∃ steps, 0 < steps ∧
       tmRun (MacroConfig ((2 * n + 1) :: (middle ++ (2 * m + 1) :: x :: rest))) steps =
         MacroConfig ((2 * n) :: (middle ++ (2 * m + 1) :: (x + 1) :: rest)) := by
-  cases middle with
-  | nil =>
-    refine ⟨4 * n + 4 * m + 16, by omega, ?_⟩
-    show run tm _ _ = _
-    cases rest with
-    | nil =>
-      simp only [List.nil_append, MacroConfig, macroRight_cons_cons, macroRight_singleton]
-      have h := rule_R5_core_tail n m x []
-      simpa using h
-    | cons r₀ rs =>
-      simp only [List.nil_append, MacroConfig, macroRight_cons_cons]
-      have h := rule_R5_core_tail n m x (s1 :: s2 :: macroRight (r₀ :: rs))
-      simpa [List.append_assoc] using h
-  | cons _ _ =>
-    -- middle ≠ []: requires traversing even middle digits via
-    -- `cross_even_digit_forward/backward` like R3/R4 cons cases.
-    sorry
+  refine ⟨4 * n + 4 * m + 16 + middle_cost middle, by omega, ?_⟩
+  show run tm _ _ = _
+  simp only [MacroConfig]
+  rw [macroRight_R5_unfold (2 * n + 1) middle (2 * m + 1) x rest,
+      macroRight_R5_unfold (2 * n) middle (2 * m + 1) (x + 1) rest]
+  exact rule_R5_core_with_middle n m x middle hmid (R5_tail rest)
 
 -- Rule R2 is a halt precondition, not a transition. We will prove that
 -- configurations of the form `[2n+1, evens…, 0]` are unreachable from `[1, 1]`,
@@ -1596,7 +1723,16 @@ def IsCanonical (c : Config) : Prop :=
 
 /-- Rules R1, R3, R4, R5, R6 collectively advance every valid canonical
     configuration to another valid canonical configuration. Rule R2 is
-    excluded by the invariant in `ValidDigits`. -/
+    excluded by the invariant in `ValidDigits`.
+
+    **Status**: The proof requires a strengthened `ValidDigits` invariant
+    (current version is too weak — it allows `[0, a]` and doesn't ensure
+    `AllPosEven middle` which R3/R4 now require). See `TODO_canonical_progress.md`
+    for the full analysis. Concretely, we'd need additional clauses:
+    - `xs.head? = some 0 → 3 ≤ xs.length`
+    - `xs = (2*n+1) :: middle ++ [last] ∧ last ≠ 0 ∧ AllEven middle → AllPosEven middle`
+    - `xs = (2*n+2) :: a :: rest ∧ rest.getLast? = some 0 → Even a`
+    Each rule then requires a preservation lemma, plus the progress witness. -/
 theorem canonical_progress :
     ∀ c, IsCanonical c →
       ∃ k, 0 < k ∧ IsCanonical (tmRun c k) ∧ (tmRun c k).state ≠ none := by
