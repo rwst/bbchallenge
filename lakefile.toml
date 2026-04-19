@@ -35,3 +35,8 @@ roots = ["machine"]
 name = "Pillai"
 srcDir = "1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---"
 roots = ["BakerWustholz", "RatHeight", "Ellison", "Pomme", "Hensel", "machine", "Bootstrap"]
+
+[[lean_lib]]
+name = "ParityBouncer"
+srcDir = "1RB1RF_1LC1LF_0RE1LD_0LB1LD_---1RC_1RA0RD"
+roots = ["machine"]

@@ -685,32 +685,25 @@ lemma tm_DBL_z2 (m p : Nat) (hm : m ≥ 2) :
 lemma DBL_steps (z : Nat) : 6 * z * z = 6 * z^2 := by ring
 
 -- ------------------------------------------------------------
--- Parity-flip and boundary cycles (empirical inventory).
--- Each of these has been observed in the simulator; the exact Δstep
--- and Δm depend on z and on the specific residue of m mod (a small
--- modulus). We record them as *sorries* awaiting micro-level proof.
+-- Non-DBL transitions: highly irregular; no uniform (z, m) rule.
 -- ------------------------------------------------------------
-
-/-- **Small-m boundary rule (observed at m = 1)**: when `m = 1` and
-    `z ≥ 4`, the DBL rule's hypothesis `m + 2 ≥ 2z` fails. Simulator
-    data at `(z, 1) = (8, 1)` shows an `(z+2, 2z-1)` transition takes
-    `194` steps (z=8 → z+2=10, 2z-1=15, final (10, 1) observed at step
-    416 from (8, 1) at step 222; Δstep = 194).
-
-    Not yet proved; statement below is the empirically conjectured
-    shape. May require tightening of conditions on `z` mod 4. -/
-lemma tm_small_m_odd (z : Nat) (_hz : z ≥ 4) (p : Nat) :
-    ∃ steps p',
-      run M (C_Config z 1 p) steps = C_Config (z + 2) (2 * z - 1) p' := by
-  sorry
-
--- NOTE on parity flips. The transitions where the bouncer reaches the
--- right end (ΔL ∈ {3, 5}) have highly irregular (z, m) → (z', m')
--- fingerprints; see `sim4.py` output around steps 10089, 14303,
--- 220812, 241480, etc. Stating them as clean Lean lemmas requires a
--- case split on the precise way the right-end extension happens. We
--- defer these for now; the DBL rule + small-m boundary cover the
--- overwhelming majority of macro cycles.
+--
+-- When the DBL hypothesis `m + 2 ≥ 2z` fails, the TM enters a
+-- small-m or parity-flip regime whose outgoing (z', m') depends on
+-- details of the tape beyond just (z, m). Simulator data
+-- (see `sim6.py`, `sim-results.md`):
+--
+--   (2, 1)   →  (2, 4)   in 21 steps     [parity flip; start of cycle]
+--   (8, 3)   →  (10, 1)  in 194 steps    [small-m, Δz = +2]
+--   (10, 1)  →  (8, 7)   in 196 steps    [small-m, Δz = −2]
+--   (12, 3)  →  (6, 17)  in 292 steps    [Δz = −6, parity-flip-like]
+--   (54, 1)  →  (48, 15) in 5384 steps   [Δz = −6]
+--
+-- These transitions have no uniform (z, m) fingerprint: two different
+-- `(z_1, m_1)` states with the same small-m shape can evolve to very
+-- different (z', m'). A full formal account would need separate
+-- lemmas for each observed fingerprint. We leave them as future work
+-- — only the DBL rule is proven in this file.
 
 -- ============================================================
 -- Initialisation
