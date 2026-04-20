@@ -1198,6 +1198,259 @@ theorem stm_simulates_math (a b : Nat) :
     exact stm_rule_gt b m
 
 -- ============================================================
+-- Halting ↔ mathematical condition
+-- ============================================================
+
+/-- Helper: once an SConfig is halted at step `m`, it remains halted at every later step. -/
+private lemma srun_halted_at_later {c : SConfig 6} {m k : Nat}
+    (hmk : m ≤ k) (hm : (srun bmo1 c m).state = none) :
+    (srun bmo1 c k).state = none := by
+  rw [show k = m + (k - m) from by omega, srun_add, srun_halted bmo1 _ hm]
+  exact hm
+
+/-- Backward bridge: if the math iteration starting from `(a+1, b+1)` reaches `.Halt`
+    in `k` steps, then the TM halts starting from `SA_Config a b`. -/
+private lemma tm_halts_of_math_halts (a b k : Nat)
+    (hk : iterMathState (.A (a + 1) (b + 1)) k = .Halt) :
+    ∃ n, (srun bmo1 (SA_Config a b) n).state = none := by
+  induction k generalizing a b with
+  | zero => simp [iterMathState] at hk
+  | succ k' ih =>
+    -- `iterMathState s (k'+1) = iterMathState (nextMathState s) k'`
+    have hk' : iterMathState (nextMathState (.A (a + 1) (b + 1))) k' = .Halt := hk
+    obtain ⟨n, _, hspec⟩ := stm_simulates_math a b
+    -- Case-split on whether the next math state halts or advances.
+    cases hnext : nextMathState (.A (a + 1) (b + 1)) with
+    | Halt =>
+      rw [hnext] at hspec
+      exact ⟨n, hspec⟩
+    | A α' β' =>
+      rw [hnext] at hspec hk'
+      obtain ⟨hα', hβ', hrun⟩ := hspec
+      have h1 : α' - 1 + 1 = α' := by omega
+      have h2 : β' - 1 + 1 = β' := by omega
+      rw [show (MathState.A α' β' : MathState) = .A (α' - 1 + 1) (β' - 1 + 1) from by
+            rw [h1, h2]] at hk'
+      obtain ⟨m, hm⟩ := ih (α' - 1) (β' - 1) hk'
+      exact ⟨n + m, by rw [srun_add, hrun]; exact hm⟩
+
+/-- Forward bridge: if the TM halts starting from `SA_Config a b`, the math iteration
+    from `(a+1, b+1)` eventually reaches `.Halt`.  Proved by strong induction on the
+    TM step count `n`. -/
+private lemma math_halts_of_tm_halts : ∀ (n : Nat) (a b : Nat),
+    (srun bmo1 (SA_Config a b) n).state = none →
+    ∃ k, iterMathState (.A (a + 1) (b + 1)) k = .Halt := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+    intro a b hn
+    obtain ⟨s, hs_pos, hspec⟩ := stm_simulates_math a b
+    cases hnext : nextMathState (.A (a + 1) (b + 1)) with
+    | Halt =>
+      refine ⟨1, ?_⟩
+      show iterMathState (nextMathState (.A (a + 1) (b + 1))) 0 = .Halt
+      rw [hnext]; rfl
+    | A α' β' =>
+      rw [hnext] at hspec
+      obtain ⟨hα', hβ', hrun⟩ := hspec
+      -- If `n < s`, halted-stays-halted contradicts `hrun` (non-halted at step s).
+      by_cases hns : n < s
+      · exfalso
+        have hsn : (srun bmo1 (SA_Config a b) s).state = none :=
+          srun_halted_at_later (by omega) hn
+        rw [hrun] at hsn
+        simp [SA_Config] at hsn
+      · push_neg at hns
+        -- `srun .. n = srun (SA_Config (α'-1) (β'-1)) (n - s)`.
+        have hshift : srun bmo1 (SA_Config a b) n =
+                      srun bmo1 (SA_Config (α' - 1) (β' - 1)) (n - s) := by
+          conv_lhs => rw [show n = s + (n - s) from by omega]
+          rw [srun_add, hrun]
+        rw [hshift] at hn
+        have hlt : n - s < n := by omega
+        obtain ⟨k', hk'⟩ := ih (n - s) hlt (α' - 1) (β' - 1) hn
+        have h1 : α' - 1 + 1 = α' := by omega
+        have h2 : β' - 1 + 1 = β' := by omega
+        rw [h1, h2] at hk'
+        refine ⟨k' + 1, ?_⟩
+        show iterMathState (nextMathState (.A (a + 1) (b + 1))) k' = .Halt
+        rw [hnext]; exact hk'
+
+/-- **Halting bridge**: the TM `bmo1` halts starting from `SA_Config a b` iff the
+    mathematical iteration `iterMathState` starting from `(a+1, b+1)` eventually
+    reaches `.Halt`.  Combines `math_halts_of_tm_halts` and `tm_halts_of_math_halts`. -/
+theorem tm_sa_halts_iff (a b : Nat) :
+    (∃ n, (srun bmo1 (SA_Config a b) n).state = none) ↔
+    (∃ k, iterMathState (.A (a + 1) (b + 1)) k = .Halt) :=
+  ⟨fun ⟨n, hn⟩ => math_halts_of_tm_halts n a b hn,
+   fun ⟨k, hk⟩ => tm_halts_of_math_halts a b k hk⟩
+
+/-- **Main halting ↔ mathematical condition**: the TM `bmo1` started on a blank tape
+    halts iff the abstract iteration of the macro-rule map, started at `A(1, 2)`,
+    eventually reaches `.Halt`.
+
+Concretely, the RHS asserts that the sequence
+  `(1, 2) → (3, 1) → (7, 2) → (5, 10) → (17, 5) → (12, 22) → …`
+(applying `α > β ↦ (α-β, 4β+2)`, `α < β ↦ (2α+1, β-α)`, `α = β ↦ Halt`)
+eventually hits `α = β`.  Whether this happens for `A(1, 2)` is the open problem
+that the BMO1 cryptid asks. -/
+theorem tm_halts_iff :
+    (∃ n, (run bmo1 (initConfig 6) n).halted) ↔
+    (∃ k, iterMathState (.A 1 2) k = .Halt) := by
+  -- Reduce `halted` to `state = none` and lift `initConfig` to `SA_Config 0 1` via
+  -- `init_to_A12` + `A_Config_toSConfig`.
+  have hiff_sa : (∃ n, (run bmo1 (initConfig 6) n).halted) ↔
+                 (∃ n, (srun bmo1 (SA_Config 0 1) n).state = none) := by
+    constructor
+    · rintro ⟨n, hn⟩
+      -- Before step 10 the TM is non-halted (else `init_to_A12` would give a halted config).
+      -- After step 10, reduce to SA_Config 0 1 via `init_to_A12` + bridge.
+      by_cases h10 : n < 10
+      · -- At step n < 10 the TM is halted; but at step 10 it's at A_Config 0 1 0 1 (non-halted).
+        exfalso
+        have h10state : (run bmo1 (initConfig 6) 10).state = none := by
+          conv_lhs => rw [show 10 = n + (10 - n) from by omega]
+          rw [run_add, run_halted bmo1 _ hn]; exact hn
+        rw [init_to_A12] at h10state
+        simp [A_Config] at h10state
+      · push_neg at h10
+        refine ⟨n - 10, ?_⟩
+        have hstate : (run bmo1 (initConfig 6) n).state =
+                      (run bmo1 (A_Config 0 1 0 1) (n - 10)).state := by
+          conv_lhs => rw [show n = 10 + (n - 10) from by omega]
+          rw [run_add, init_to_A12]
+        have hnone : (run bmo1 (A_Config 0 1 0 1) (n - 10)).state = none := hstate ▸ hn
+        rw [← toSConfig_state, toSConfig_run, A_Config_toSConfig] at hnone
+        exact hnone
+    · rintro ⟨n, hn⟩
+      refine ⟨10 + n, ?_⟩
+      show (run bmo1 (initConfig 6) (10 + n)).state = none
+      rw [run_add, init_to_A12]
+      have := hn
+      rw [← A_Config_toSConfig 0 1 0 1, ← toSConfig_run, toSConfig_state] at this
+      exact this
+  rw [hiff_sa]; exact tm_sa_halts_iff 0 1
+
+-- ============================================================
+-- Pair iteration: unpacked mathematical condition
+-- ============================================================
+
+/-- The mathematical iteration map on positive pairs `(α, β)`, matching the macro
+    rules: `α > β ↦ (α − β, 4β + 2)`, `α < β ↦ (2α + 1, β − α)`, fixed at `α = β`. -/
+def macroMap : Nat × Nat → Nat × Nat
+  | (α, β) =>
+    if α > β then (α - β, 4 * β + 2)
+    else if α < β then (2 * α + 1, β - α)
+    else (α, β)
+
+/-- `k`-fold iteration of `macroMap`. -/
+def iterPair : Nat × Nat → Nat → Nat × Nat
+  | p, 0 => p
+  | p, k + 1 => iterPair (macroMap p) k
+
+/-- `iterMathState` unfolds one step from the right. -/
+lemma iterMathState_succ (s : MathState) (k : Nat) :
+    iterMathState s (k + 1) = nextMathState (iterMathState s k) := by
+  induction k generalizing s with
+  | zero => rfl
+  | succ k' ih => exact ih (nextMathState s)
+
+/-- `iterPair` unfolds one step from the right. -/
+lemma iterPair_succ (p : Nat × Nat) (k : Nat) :
+    iterPair p (k + 1) = macroMap (iterPair p k) := by
+  induction k generalizing p with
+  | zero => rfl
+  | succ k' ih => exact ih (macroMap p)
+
+/-- Reduction of `nextMathState` on the `.A α β` branch as a `rfl` equation (lets
+    `rw` see through the pattern match). -/
+lemma nextMathState_A (α β : Nat) :
+    nextMathState (.A α β) =
+      (if α = 0 ∨ β = 0 then .Halt
+       else if α = β then .Halt
+       else if α > β then .A (α - β) (4 * β + 2)
+       else .A (2 * α + 1) (β - α)) := rfl
+
+/-- Reduction of `macroMap` on a concrete pair as a `rfl` equation. -/
+lemma macroMap_mk (α β : Nat) :
+    macroMap (α, β) =
+      (if α > β then (α - β, 4 * β + 2)
+       else if α < β then (2 * α + 1, β - α)
+       else (α, β)) := rfl
+
+/-- Correspondence: while the math iteration from `.A 1 2` has not halted at step `k`,
+    it agrees with the pair iteration via `macroMap` from `(1, 2)`, and both
+    components remain ≥ 1.  The `(1, 2)` start point never produces `0` entries under
+    any number of iterations — so the only way to halt is `α = β`. -/
+private lemma math_state_eq_pair (k : Nat)
+    (h : iterMathState (.A 1 2) k ≠ .Halt) :
+    ∃ α β : Nat, iterMathState (.A 1 2) k = .A α β ∧
+                 iterPair (1, 2) k = (α, β) ∧ α ≥ 1 ∧ β ≥ 1 := by
+  induction k with
+  | zero => exact ⟨1, 2, rfl, rfl, by decide, by decide⟩
+  | succ k' ih =>
+    have hk' : iterMathState (.A 1 2) k' ≠ .Halt := fun hhalt => by
+      apply h; rw [iterMathState_succ, hhalt]; rfl
+    obtain ⟨α, β, hms, hpair, hα, hβ⟩ := ih hk'
+    -- Non-halting at k'+1 with α, β ≥ 1 forces α ≠ β.
+    have h_not_eq : α ≠ β := by
+      intro heq12
+      apply h
+      rw [iterMathState_succ, hms, nextMathState_A,
+          if_neg (by rintro (h | h) <;> omega), if_pos heq12]
+    by_cases hgt : α > β
+    · refine ⟨α - β, 4 * β + 2, ?_, ?_, by omega, by omega⟩
+      · rw [iterMathState_succ, hms, nextMathState_A,
+            if_neg (by rintro (h | h) <;> omega), if_neg h_not_eq, if_pos hgt]
+      · rw [iterPair_succ, hpair, macroMap_mk, if_pos hgt]
+    · have hlt : α < β := by omega
+      refine ⟨2 * α + 1, β - α, ?_, ?_, by omega, by omega⟩
+      · rw [iterMathState_succ, hms, nextMathState_A,
+            if_neg (by rintro (h | h) <;> omega), if_neg h_not_eq, if_neg hgt]
+      · rw [iterPair_succ, hpair, macroMap_mk, if_neg hgt, if_pos hlt]
+
+/-- **Unpacked halting condition**: the math iteration reaches `.Halt` from `.A 1 2`
+    iff the pair iteration via `macroMap` from `(1, 2)` ever hits a pair with
+    `α = β`.  Reformulates the abstract Halt predicate as a concrete "reach `α = β`"
+    predicate over iterations of the map
+    `α > β ↦ (α − β, 4β + 2)`, `α < β ↦ (2α + 1, β − α)`. -/
+theorem math_halts_iff_pair_eq :
+    (∃ k, iterMathState (.A 1 2) k = .Halt) ↔
+    (∃ k, (iterPair (1, 2) k).1 = (iterPair (1, 2) k).2) := by
+  refine ⟨fun ⟨k, hk⟩ => ?_, fun ⟨k, heq⟩ => ?_⟩
+  · -- Forward: find the smallest halting step via `Nat.find`.
+    have hex : ∃ j, iterMathState (.A 1 2) j = .Halt := ⟨k, hk⟩
+    let j := Nat.find hex
+    have hj : iterMathState (.A 1 2) j = .Halt := Nat.find_spec hex
+    have hmin : ∀ m < j, iterMathState (.A 1 2) m ≠ .Halt :=
+      fun m hm h => Nat.find_min hex hm h
+    have hj_pos : 0 < j := by
+      by_contra hzero
+      push_neg at hzero
+      have hj0 : j = 0 := by omega
+      rw [hj0] at hj; exact absurd hj (by decide)
+    have hj_prev : iterMathState (.A 1 2) (j - 1) ≠ .Halt := hmin (j - 1) (by omega)
+    obtain ⟨α, β, hms, hpair, hα, hβ⟩ := math_state_eq_pair (j - 1) hj_prev
+    refine ⟨j - 1, ?_⟩
+    have hj_eq : j = (j - 1) + 1 := by omega
+    rw [hj_eq, iterMathState_succ, hms, nextMathState_A] at hj
+    rw [if_neg (by rintro (h | h) <;> omega)] at hj
+    by_cases h12 : α = β
+    · rw [hpair]; exact h12
+    · exfalso
+      rw [if_neg h12] at hj
+      split_ifs at hj
+  · -- Backward: pair hits equal → one more math step halts.
+    by_cases hh : iterMathState (.A 1 2) k = .Halt
+    · exact ⟨k, hh⟩
+    · obtain ⟨α, β, hms, hpair, hα, hβ⟩ := math_state_eq_pair k hh
+      refine ⟨k + 1, ?_⟩
+      rw [iterMathState_succ, hms, nextMathState_A,
+          if_neg (by rintro (h | h) <;> omega)]
+      rw [hpair] at heq
+      exact if_pos heq
+
+-- ============================================================
 -- Progress log / TODO
 -- ============================================================
 -- 2026-04-20  First draft; SConfig refactor.
