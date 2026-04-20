@@ -151,6 +151,17 @@ theorem zebra_append (a b : Nat) : zebra a ++ zebra b = zebra (a + b) := by
   | succ a ih =>
     simp only [zebra_succ, List.cons_append, ih, show a + 1 + b = (a + b) + 1 from by omega]
 
+/-- Dual of `zebra_succ`: append a `[false, true]` pair to the *end* of `zebra b`. -/
+theorem zebra_succ_append (b : Nat) : zebra (b + 1) = zebra b ++ [false, true] := by
+  induction b with
+  | zero => rfl
+  | succ k ih =>
+    show zebra (k + 2) = zebra (k + 1) ++ [false, true]
+    rw [show zebra (k + 2) = false :: true :: (zebra k ++ [false, true]) from by
+          show false :: true :: zebra (k + 1) = false :: true :: (zebra k ++ [false, true])
+          rw [ih]]
+    rfl
+
 @[simp] theorem zebra_length (c : Nat) : (zebra c).length = 2 * c := by
   induction c with
   | zero => rfl

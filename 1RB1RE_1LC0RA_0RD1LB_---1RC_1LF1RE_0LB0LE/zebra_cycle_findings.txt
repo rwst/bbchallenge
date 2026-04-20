@@ -1,0 +1,113 @@
+# Zebra Cycle Search — Findings
+# TM: 1RB1RE_1LC0RA_0RD1LB_---1RC_1LF1RE_0LB0LE
+
+## Goal
+
+Find starting state X, step count N, and auxiliary right suffix pattern
+such that running N steps from X with zebra(b+1) on left (at some depth)
+yields an analogous state with zebra(b) on left, WITH the head position
+at the same relative depth and state unchanged.
+
+If found, this gives a simp-provable 'zebra cycle' that closes the
+b-induction for pass_shift.
+
+## 1. Exhaustive cycle search
+Testing many (state, head, prefix, right_init) starting configs for
+step counts N = 2 to 30.  Success = consistent cycle for b=2→1, 3→2, 4→3.
+
+  Candidate: E0-ones1, state=E, prefix=[1], head=0, right_init=[], N=2
+    details: state=E, head=0, right=[0, 1], hp_min=-2, hp_max=0
+  Candidate: E0-noprefix, state=E, prefix=[], head=0, right_init=[], N=30
+    details: state=E, head=0, right=[0, 1, 1, 1, 1], hp_min=-3, hp_max=3
+  Candidate: F1-noprefix, state=F, prefix=[], head=1, right_init=[], N=2
+    details: state=F, head=1, right=[1], hp_min=-2, hp_max=0
+  Candidate: B1-noprefix, state=B, prefix=[], head=1, right_init=[], N=18
+    details: state=B, head=1, right=[0, 1, 0, 1, 1], hp_min=-2, hp_max=3
+
+## 2. Full pass_shift trace for (a=0, b=2, c=0), 21 steps
+
+  step  state  hp   head  left(r→l, to 15)                    right(l→r, to 10)
+     0   E      0   0    [1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+     1   F     -1   1    [1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+     2   E     -2   1    [0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+     3   E     -1   0    [1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+     4   F     -2   1    [0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+     5   E     -3   0    [1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+     6   F     -4   1    [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+     7   E     -5   0    [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 1, 1, 0, 0, 0, 0, 0]
+     8   F     -6   1    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+     9   E     -7   0    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 1, 0, 1, 1, 0, 0, 0]
+    10   F     -8   0    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 0, 1, 0, 1, 1, 0, 0]
+    11   B     -9   1    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 1, 0, 1, 0, 1, 1, 0]
+    12   A     -8   0    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 0, 1, 0, 1, 1, 0, 0]
+    13   B     -7   1    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 1, 0, 1, 1, 0, 0, 0]
+    14   A     -6   0    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+    15   B     -5   1    [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 0, 1, 1, 0, 0, 0, 0, 0]
+    16   A     -4   0    [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+    17   B     -3   1    [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [0, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+    18   A     -2   0    [0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    19   B     -1   1    [1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    20   A      0   1    [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0]  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    21   E      1   0    [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0]  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+## 3. State sequence patterns for pass_shift(a, b, c)
+
+  (a=0, b=0, c=0): EFEEFEFBABABAE (13 steps)
+  (a=0, b=1, c=0): EFEEFEFEFBABABABAE (17 steps)
+  (a=0, b=2, c=0): EFEEFEFEFEFBABABABABAE (21 steps)
+  (a=0, b=3, c=0): EFEEFEFEFEFEFBABABABABABAE (25 steps)
+  (a=0, b=4, c=0): EFEEFEFEFEFEFEFBABABABABABABAE (29 steps)
+  (a=0, b=0, c=1): EFEEFEEFEFBABABAEE (17 steps)
+  (a=0, b=1, c=1): EFEEFEEFEFEFBABABABAEE (21 steps)
+  (a=0, b=2, c=1): EFEEFEEFEFEFEFBABABABABAEE (25 steps)
+  (a=1, b=1, c=1): EFEEFEEFEFEFBABABABAEE (21 steps)
+  (a=2, b=2, c=2): EFEEFEEFEEFEFEFEFBABABABABAEEE (29 steps)
+
+## 4. State sequence for (b=0, 1, 2, 3) with fixed a=0, c=0
+Look for repeating patterns that might indicate the b-cycle.
+
+  b=0: EFEEFEFBABABAE (13 steps, hp in [-5,0])
+  b=1: EFEEFEFEFBABABABAE (17 steps, hp in [-7,0])
+  b=2: EFEEFEFEFEFBABABABABAE (21 steps, hp in [-9,0])
+  b=3: EFEEFEFEFEFEFBABABABABABAE (25 steps, hp in [-11,0])
+  b=4: EFEEFEFEFEFEFEFBABABABABABABAE (29 steps, hp in [-13,0])
+
+## 4b. Alignment of state sequences (b+1 vs b)
+
+  b=0: pfx_len=7, sfx_len=7, extra_middle=4
+    b  middle: 
+    b+1 middle: EFBA
+  b=1: pfx_len=9, sfx_len=9, extra_middle=4
+    b  middle: 
+    b+1 middle: EFBA
+  b=2: pfx_len=11, sfx_len=11, extra_middle=4
+    b  middle: 
+    b+1 middle: EFBA
+  b=3: pfx_len=13, sfx_len=13, extra_middle=4
+    b  middle: 
+    b+1 middle: EFBA
+  b=4: pfx_len=15, sfx_len=15, extra_middle=4
+    b  middle: 
+    b+1 middle: EFBA
+
+## 5. Head trajectories for b=2 vs b=3 (both a=0, c=0)
+
+  b=2: [(0, 'E', 0, 0), (1, 'F', -1, 1), (2, 'E', -2, 1), (3, 'E', -1, 0), (4, 'F', -2, 1), (5, 'E', -3, 0), (6, 'F', -4, 1), (7, 'E', -5, 0), (8, 'F', -6, 1), (9, 'E', -7, 0), (10, 'F', -8, 0), (11, 'B', -9, 1), (12, 'A', -8, 0), (13, 'B', -7, 1), (14, 'A', -6, 0), (15, 'B', -5, 1), (16, 'A', -4, 0), (17, 'B', -3, 1), (18, 'A', -2, 0), (19, 'B', -1, 1), (20, 'A', 0, 1), (21, 'E', 1, 0)]
+  b=3: [(0, 'E', 0, 0), (1, 'F', -1, 1), (2, 'E', -2, 1), (3, 'E', -1, 0), (4, 'F', -2, 1), (5, 'E', -3, 0), (6, 'F', -4, 1), (7, 'E', -5, 0), (8, 'F', -6, 1), (9, 'E', -7, 0), (10, 'F', -8, 1), (11, 'E', -9, 0), (12, 'F', -10, 0), (13, 'B', -11, 1), (14, 'A', -10, 0), (15, 'B', -9, 1), (16, 'A', -8, 0), (17, 'B', -7, 1), (18, 'A', -6, 0), (19, 'B', -5, 1), (20, 'A', -4, 0), (21, 'B', -3, 1), (22, 'A', -2, 0), (23, 'B', -1, 1), (24, 'A', 0, 1), (25, 'E', 1, 0)]
+
+## 6. Test '8-step doubled cycle' hypothesis
+Maybe: consuming 2 zebra pairs at once takes 8 steps.
+
+
+## 7. Test with right containing known pattern
+After phase A's EF pings, right accumulates [0,1]*k.  Maybe cycle needs this.
+
+
+## 8. Head-depth reach for (b_start=3, N variable)
+
+  leftmost_head per step: [0, -1, -2, -2, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11, -11]
+  Step where head reaches -3 (start of zebra 3): 5
+  Step where head reaches -5 (mid-zebra): 7
+  Step where head reaches -7 (end-zebra): 9
+  Step where head reaches -9 (beyond zebra): 11
+

@@ -4,6 +4,24 @@
 
 ## Status (2026-04-14)
 
+**2026-04-20 update — generic tape identities upstreamed from BMO1 proof:**
+- `zebra_succ_append` (dual of `zebra_succ`, append form) — `TapeHelpers.lean`
+- `Side.cons_false_blank : cons false blank = blank` — `StreamDefs.lean` (`@[simp]`)
+- `Side.cons_false_zebra_blank_tail (k)` — `StreamDefs.lean`
+
+These close both the `k = 0` (blank absorption) and `k ≥ 1` (zebra structure) cases
+uniformly whenever a TM writes a `0` at the boundary of `zebra k *> blank∞`.
+
+**Verdict on `rev_zebra`: stays downstream.** `rev_zebra` is currently used only by
+the BMO1 proof (`1RB1RE_1LC0RA_0RD1LB_---1RC_1LF1RE_0LB0LE/machine.lean`). Per the
+existing design philosophy (see `CLAUDE.md:225-227` which uses `rev_zebra` as the
+canonical example of a *machine-specific atom* extending `tape_norm`), it should
+stay in the downstream file. The `rev_zebra_add`/`rev_zebra_cons` sketches below
+(Phase 2) are aspirational — revisit only when a second TM needs them. When that
+happens, upstream the bare def + `rev_zebra_zero_simp` + `rev_zebra_succ_append` to
+`TapeHelpers.lean`; leave BMO1-specific bridge lemmas (`ones1_zebra_false_eq_rev_zebra`,
+`_full_left_list_eq`, `_right_pattern_eq`) in the machine file.
+
 - ✅ **Phase 1** (tape-aware shift matching) — **DONE** in two stages, see `BusyLean/PLAN-tape-unify.md`:
   - **Stage 1 (trailing-empty fallback)**: `esTryShift` retries with each `List Sym` parameter assigned to `[]`, strips `xs ++ []` via `Meta.transform` recognizing both `List.append` (3 args) and `HAppend.hAppend` (6 args), then uses `replaceTargetEq` to coerce the goal type to match the unstripped shift source. Eliminates `_nil` shift variants. Verified on `Inc3_core_base_ev`.
   - **Stage 3 (`tape_split` simp set)**: a separate `BusyLean/TapeSplit.lean` module with context-aware splitting lemmas like `ones_4_peel_2_in : L ++ ones (4 + k) = (L ++ ones 2) ++ ones (2 + k)` (left-associated to match shift sources). Wired in `esTryShift` as a Stage 3 fallback after Stages 0+1 fail; runs `simp only [tape_split]` followed by `simp only [tape_norm]` to re-normalize. Saved/restored around the Stage 3 attempts.

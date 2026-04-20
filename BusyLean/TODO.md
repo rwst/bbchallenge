@@ -1,5 +1,29 @@
 # BusyLean TODO
 
+## Generic tape identities upstreamed from BMO1 (2026-04-20)
+
+Three pure tape identities were moved from `1RB1RE_1LC0RA_0RD1LB_---1RC_1LF1RE_0LB0LE/machine.lean` into the library:
+
+- **`zebra_succ_append (b) : zebra (b+1) = zebra b ++ [false, true]`** — `TapeHelpers.lean`.
+  Dual of `zebra_succ`; appends `[false, true]` to the *end* of `zebra b`.
+- **`Side.cons_false_blank : cons false blank = blank`** — `StreamDefs.lean` (`@[simp]`).
+  Corollary of `prepend_zeros_blank 1`. Triggers automatically via simp wherever a TM
+  writes a `0` at the blank boundary.
+- **`Side.cons_false_zebra_blank_tail (k)`** — `StreamDefs.lean`.
+  Closes both `k = 0` (blank absorption) and `k ≥ 1` (zebra structure) cases uniformly.
+
+### Deferred: `rev_zebra` — stays downstream for now
+
+`rev_zebra` (the `(10)^n` dual of `zebra`) is still defined in BMO1's `machine.lean`.
+Per `CLAUDE.md:225-227`, it is documented as the canonical example of a
+*machine-specific atom* extending `tape_norm`. Only one TM currently uses it, and
+the BMO1-specific bridge lemmas (`ones1_zebra_false_eq_rev_zebra`, `_full_left_list_eq`,
+`_right_pattern_eq`) are niche.
+
+**Upstream trigger**: when a second TM proof needs `rev_zebra`, move the bare def +
+`rev_zebra_zero_simp` + `rev_zebra_succ_append` to `TapeHelpers.lean`. The `PLAN.md`
+sketches (`rev_zebra_add`, `rev_zebra_cons`) remain aspirational until then.
+
 ## High-priority: infrastructure for mxdys-style proofs
 
 The mxdys Coq proof of `1RB1LA_1RC1RE_1LD0RB_1LA0LC_0RF0RD_0RB---` revealed

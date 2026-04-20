@@ -76,6 +76,12 @@ Config n = { state : Option (Fin n), left : List Sym, head : Sym, right : List S
 - `listHead l default` / `listTail l` handle empty lists (read blank / stay empty)
 - `mkConfigFromTape n st L R` — extracts head from tape list `R`, defaulting to `false`
 
+Generic tape identities provided:
+- `zebra_append`, `zebra_succ_append` — fold/split `zebra` via list append
+- `Side.cons_false_blank : cons false blank = blank` — writing a `0` at the blank boundary
+- `Side.cons_false_zebra_blank_tail (k) : cons false (tail (zebra k *> blank)) = zebra k *> blank`
+  — closes both `k = 0` (blank absorption) and `k ≥ 1` (zebra structure) cases uniformly
+
 ## Proving TM behavior
 
 ### Concrete runs

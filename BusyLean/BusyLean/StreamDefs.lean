@@ -107,6 +107,25 @@ def prepend : List Sym → Side → Side
   | zero => rfl
   | succ n ih => ext k; cases k <;> simp [ih, blank]
 
+/-- `cons false blank = blank`: consing a `0` onto a blank tape yields blank.  Corollary
+    of `prepend_zeros_blank 1`.  Useful whenever a TM writes a `0` into the blank region. -/
+@[simp] theorem cons_false_blank : cons false blank = blank :=
+  prepend_zeros_blank 1
+
+/-- Pure tape identity: `cons false (tail (zebra k *> blank)) = zebra k *> blank`.
+    Holds for both `k = 0` (via blank absorption) and `k ≥ 1` (via zebra structure).
+    Used when a TM writes a `0` immediately left of a `zebra k *> blank∞` boundary. -/
+theorem cons_false_zebra_blank_tail (k : Nat) :
+    cons false (tail (prepend (zebra k) blank)) = prepend (zebra k) blank := by
+  cases k with
+  | zero =>
+    simp only [zebra_zero, prepend_nil, tail_blank]
+    exact cons_false_blank
+  | succ k' =>
+    rw [show prepend (zebra (k' + 1)) blank
+           = cons false (cons true (prepend (zebra k') blank)) from rfl,
+        tail_cons]
+
 end Side
 
 /-! ### Stream-based configuration -/
