@@ -1,0 +1,88 @@
+Running with max_steps=10,000,000,000, time budget 1800s
+  event #     500 step=      934606 blocks(n= 13, max= 1433, min=  2) RSS=12MB rate=3538720steps/s
+  event #    1000 step=     1967890 blocks(n=520, max= 1397, min=  2) RSS=12MB rate=3290363steps/s
+  event #    1500 step=     4851946 blocks(n=513, max= 2897, min=  2) RSS=12MB rate=3313473steps/s
+  event #    2000 step=     9736194 blocks(n=516, max= 4397, min=  2) RSS=12MB rate=3314003steps/s
+  event #    2500 step=    16620182 blocks(n=514, max= 5897, min=  2) RSS=12MB rate=3319576steps/s
+  event #    3000 step=    25504534 blocks(n=515, max= 7397, min=  2) RSS=12MB rate=3365620steps/s
+  event #    3500 step=    36388522 blocks(n=513, max= 8897, min=  2) RSS=12MB rate=3378666steps/s
+  event #    4000 step=    49272950 blocks(n=513, max=10397, min=  2) RSS=12MB rate=3386560steps/s
+  event #    4500 step=    64156786 blocks(n=507, max=11897, min=  2) RSS=12MB rate=3389908steps/s
+  event #    5000 step=    81041450 blocks(n=510, max=13397, min=  2) RSS=12MB rate=3398138steps/s
+  event #    5500 step=    99925246 blocks(n=510, max=14897, min=  2) RSS=12MB rate=3407313steps/s
+  event #    6000 step=   120809474 blocks(n=510, max=16397, min=  2) RSS=12MB rate=3413598steps/s
+  event #    6500 step=   143693530 blocks(n=507, max=17897, min=  2) RSS=12MB rate=3414962steps/s
+  event #    7000 step=   168578026 blocks(n=512, max=19397, min=  2) RSS=12MB rate=3415543steps/s
+  event #    7500 step=   195461894 blocks(n=510, max=20897, min=  2) RSS=12MB rate=3405360steps/s
+  event #    8000 step=   224346466 blocks(n=512, max=22397, min=  2) RSS=12MB rate=3410625steps/s
+  event #    8500 step=   255230394 blocks(n=511, max=23897, min=  2) RSS=12MB rate=3413496steps/s
+  event #    9000 step=   288115238 blocks(n=517, max=25397, min=  2) RSS=12MB rate=3407840steps/s
+  event #    9500 step=   322999314 blocks(n=521, max=26897, min=  2) RSS=12MB rate=3402200steps/s
+  event #   10000 step=   359883550 blocks(n=505, max=28397, min=  2) RSS=12MB rate=3403330steps/s
+  event #   10500 step=   398767274 blocks(n=511, max=29897, min=  2) RSS=12MB rate=3376361steps/s
+  event #   11000 step=   439651646 blocks(n=507, max=31397, min=  2) RSS=12MB rate=3353916steps/s
+  event #   11500 step=   482535658 blocks(n=511, max=32897, min=  2) RSS=12MB rate=3336394steps/s
+  event #   12000 step=   527420166 blocks(n=511, max=34397, min=  2) RSS=12MB rate=3316613steps/s
+  event #   12500 step=   574304094 blocks(n=512, max=35897, min=  2) RSS=12MB rate=3300925steps/s
+  event #   13000 step=   623188966 blocks(n=513, max=37397, min=  2) RSS=12MB rate=3287499steps/s
+  event #   13500 step=   674072730 blocks(n=513, max=38897, min=  2) RSS=12MB rate=3273678steps/s
+  event #   14000 step=   726957058 blocks(n=510, max=40397, min=  2) RSS=12MB rate=3260036steps/s
+  event #   14500 step=   781841078 blocks(n=514, max=41897, min=  2) RSS=12MB rate=3250166steps/s
+  event #   15000 step=   838725734 blocks(n=513, max=43397, min=  2) RSS=12MB rate=3254375steps/s
+  event #   15500 step=   897609314 blocks(n=511, max=44897, min=  2) RSS=12MB rate=3268470steps/s
+  event #   16000 step=   958493566 blocks(n=509, max=46397, min=  2) RSS=12MB rate=3283533steps/s
+  event #   16500 step=  1021377586 blocks(n=507, max=47897, min=  2) RSS=12MB rate=3297523steps/s
+  event #   17000 step=  1086262958 blocks(n=517, max=49397, min=  2) RSS=12MB rate=3309240steps/s
+  event #   17500 step=  1153146746 blocks(n=511, max=50897, min=  2) RSS=12MB rate=3318210steps/s
+  event #   18000 step=  1222031138 blocks(n=510, max=52397, min=  2) RSS=12MB rate=3323696steps/s
+  event #   18500 step=  1292915118 blocks(n=512, max=53897, min=  2) RSS=12MB rate=3325429steps/s
+  event #   19000 step=  1365799598 blocks(n=511, max=55397, min=  2) RSS=12MB rate=3325659steps/s
+  event #   19500 step=  1440683462 blocks(n=508, max=56897, min=  2) RSS=12MB rate=3326885steps/s
+  event #   20000 step=  1517568082 blocks(n=518, max=58397, min=  2) RSS=12MB rate=3326908steps/s
+  event #   20500 step=  1596451854 blocks(n=508, max=59897, min=  2) RSS=12MB rate=3327919steps/s
+  event #   21000 step=  1677336130 blocks(n=504, max=61397, min=  2) RSS=12MB rate=3327886steps/s
+  event #   21500 step=  1760220058 blocks(n=509, max=62897, min=  2) RSS=12MB rate=3333306steps/s
+  event #   22000 step=  1845104302 blocks(n=507, max=64397, min=  2) RSS=12MB rate=3336962steps/s
+  event #   22500 step=  1931988418 blocks(n=507, max=65897, min=  2) RSS=12MB rate=3341215steps/s
+  event #   23000 step=  2020872554 blocks(n=506, max=67397, min=  2) RSS=12MB rate=3344687steps/s
+  event #   23500 step=  2111756698 blocks(n=505, max=68897, min=  2) RSS=12MB rate=3347794steps/s
+  event #   24000 step=  2204640982 blocks(n=507, max=70397, min=  2) RSS=12MB rate=3349818steps/s
+  event #   24500 step=  2299525190 blocks(n=508, max=71897, min=  2) RSS=12MB rate=3352590steps/s
+  event #   25000 step=  2396409422 blocks(n=511, max=73397, min=  2) RSS=12MB rate=3354974steps/s
+  event #   25500 step=  2495294142 blocks(n=510, max=74897, min=  2) RSS=12MB rate=3355617steps/s
+  event #   26000 step=  2596178250 blocks(n=506, max=76397, min=  2) RSS=12MB rate=3357813steps/s
+  event #   26500 step=  2699062234 blocks(n=505, max=77897, min=  2) RSS=12MB rate=3359280steps/s
+  event #   27000 step=  2803946182 blocks(n=505, max=79397, min=  2) RSS=12MB rate=3360755steps/s
+  event #   27500 step=  2910830430 blocks(n=506, max=80897, min=  2) RSS=12MB rate=3360111steps/s
+  event #   28000 step=  3019714462 blocks(n=505, max=82397, min=  2) RSS=12MB rate=3361046steps/s
+  event #   28500 step=  3130598814 blocks(n=512, max=83897, min=  2) RSS=12MB rate=3360906steps/s
+  event #   29000 step=  3243482746 blocks(n=508, max=85397, min=  2) RSS=12MB rate=3359897steps/s
+  event #   29500 step=  3358367534 blocks(n=508, max=86897, min=  2) RSS=12MB rate=3359136steps/s
+  event #   30000 step=  3475251594 blocks(n=514, max=88397, min=  2) RSS=12MB rate=3359741steps/s
+  event #   30500 step=  3594135786 blocks(n=513, max=89897, min=  2) RSS=12MB rate=3361583steps/s
+  event #   31000 step=  3715019910 blocks(n=515, max=91397, min=  2) RSS=12MB rate=3363131steps/s
+  event #   31500 step=  3837904058 blocks(n=503, max=92897, min=  2) RSS=12MB rate=3362596steps/s
+  event #   32000 step=  3962787918 blocks(n=503, max=94397, min=  2) RSS=12MB rate=3361174steps/s
+  event #   32500 step=  4089672222 blocks(n=502, max=95897, min=  2) RSS=12MB rate=3362024steps/s
+  event #   33000 step=  4218556338 blocks(n=506, max=97397, min=  2) RSS=12MB rate=3359673steps/s
+  event #   33500 step=  4349441850 blocks(n=505, max=98897, min=  2) RSS=12MB rate=3355298steps/s
+  event #   34000 step=  4482325910 blocks(n=505, max=100397, min=  2) RSS=12MB rate=3354998steps/s
+  event #   34500 step=  4617210078 blocks(n=506, max=101897, min=  2) RSS=12MB rate=3348664steps/s
+  event #   35000 step=  4754094210 blocks(n=504, max=103397, min=  2) RSS=12MB rate=3344418steps/s
+  event #   35500 step=  4892978638 blocks(n=502, max=104897, min=  2) RSS=12MB rate=3344233steps/s
+  event #   36000 step=  5033862870 blocks(n=507, max=106397, min=  2) RSS=12MB rate=3346072steps/s
+  event #   36500 step=  5176746946 blocks(n=497, max=107897, min=  2) RSS=12MB rate=3348531steps/s
+  event #   37000 step=  5321630986 blocks(n=512, max=109397, min=  2) RSS=12MB rate=3350165steps/s
+  event #   37500 step=  5468515534 blocks(n=516, max=110897, min=  2) RSS=12MB rate=3351490steps/s
+  event #   38000 step=  5617399590 blocks(n=511, max=112397, min=  2) RSS=12MB rate=3353703steps/s
+  event #   38500 step=  5768283854 blocks(n=508, max=113897, min=  2) RSS=12MB rate=3354860steps/s
+  event #   39000 step=  5921167974 blocks(n=511, max=115397, min=  2) RSS=12MB rate=3354445steps/s
+  (time budget exhausted at 1800s)
+
+=== Summary ===
+Final step: 6,041,006,139  elapsed: 1800.0s
+Events: 39,387
+Block size mod 3 distribution: 0→0  1→0  2→19773584
+Max block size: 116558   Min block size: 2
+Violations: 0
+Peak RSS: 12 MB

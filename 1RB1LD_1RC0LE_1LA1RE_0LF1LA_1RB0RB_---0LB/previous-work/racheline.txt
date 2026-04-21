@@ -1,0 +1,36 @@
+if it halts, it seems to do so after at least around 1.24^1.24^530 steps (around 10^(3*10^48)). it's a shift-overflow counter but the counting is chaotic, like in the two chaotic counter 3x3 holdouts. here's my python code for figuring out the sequence of states hitting a given bit, in case anyone wants to see if they can do something with it (0 is E, 1 is A and 2 is D):
+
+<syntaxhighlight lang="python" line="1">
+a = [0]
+ats = [1]
+atlen = 1
+for _ in range(77):
+    b = []
+    bts = []
+    btlen = 0
+    t = 0
+    bit = 0
+    starting = 1
+    while starting or bit:
+        starting = 0
+        for i in range(len(a)):
+            s = a[i]
+            t += ats[i]
+            btlen += ats[i]
+            if s == 0:
+                bit = 1 - bit
+                b.append(bit)
+                bts.append(t)
+                t = 0
+            elif s == 1 and bit:
+                b.append(2)
+                bts.append(t)
+                t = 0
+            elif s == 2:
+                b.append(bit)
+                bts.append(t)
+                t = 0
+        t += atlen - ats[-1]
+    a = b
+    ats = bts
+

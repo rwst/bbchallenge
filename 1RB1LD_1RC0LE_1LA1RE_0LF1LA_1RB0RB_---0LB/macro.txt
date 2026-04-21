@@ -1,0 +1,149 @@
+Machine: 1RB1LD_1RC0LE_1LA1RE_0LF1LA_1RB0RB_---0LB
+
+Transition table:
+           0        1
+      A   1RB      1LD
+      B   1RC      0LE
+      C   1LA      1RE
+      D   0LF      1LA
+      E   1RB      0RB
+      F   ---      0LB    (halt)
+
+Only halting transition: F,0 → ---.  F is reached only via D,0→0LF,
+so halting requires D's left-sweep to end on a 0 whose L cell is also 0.
+
+=======================================================================
+Configuration notation
+=======================================================================
+
+Let [b₁, b₂, ..., bₙ, (k)] denote the tape at an E-turnaround:
+
+    0^inf  1^b₁  0  1^b₂  0  ...  0  1^bₙ  0  1^k  E>  0  0^inf
+
+where E> means state E reading the cell immediately right of the rightmost 1.
+Block sizes are read left-to-right (b₁ = leftmost block, bₙ = second-rightmost,
+k = rightmost block).  Reading right-to-left from the head, the Side expression is:
+
+    left  = ones k *> [false] *> ones bₙ *> [false] *> ... *> [false] *> ones b₁ *> blank∞
+    right = blank∞
+
+In machine.lean this is written as `M_Config L k` where
+`L = ones bₙ *> [false] *> ... *> ones b₁ *> blank∞` packages the prefix.
+
+Invariant carried by all proven rules:
+  - every bᵢ ≥ 2 and k ≥ 2;
+  - all observed block sizes satisfy bᵢ ≡ 2 (mod 3);
+    (empirically verified over 19,773,584 block samples with 0 violations;
+     not yet formally proved — see machine.lean notes on ClosedSet approach).
+
+=======================================================================
+Proven macro rules (see machine.lean)
+=======================================================================
+
+In each rule, "..." on the left matches any (possibly empty) block prefix.
+Parameters: j ≥ 0 ranges over ℕ; L : Side is an arbitrary leftward Side.
+Block sizes in [..] positions can be any ≥ 2 value ≡ 2 (mod 3).
+
+--- Simple bump (rightmost block ≡ 2 mod 6) ---
+
+General: [..., (6j+2)]             ->   [..., (6j+5)]
+         in 16j+17 steps.                     [simple_bump]
+
+    Proof: 5-phase decomposition, induction on j.
+      Phase 1 (3 steps):  right-push   E→B→C→A                [phase1_right_push]
+      Phase 2 (6j+4):     A/D left-sweep to separator        [phase2_sweep]
+                                                      using [AD_sweep_to_sep]
+      Phase 3 (4 steps):  C-cycle prelude                    [phase3_prelude]
+      Phase 4 (10j+5):    iterated C→C 5-step cycle          [phase4_cycle]
+                                                      using [ones_cycle5_iter]
+      Phase 5 (1 step):   final C,1→1RE                       [phase5_final]
+
+Bump0:   [..., (2)]                  ->   [..., (5)]
+         in 17 steps.                         [simple_bump_base]
+
+Bump1:   [..., (8)]                  ->   [..., (11)]
+         in 33 steps.                         [simple_bump_j1]
+
+--- Carry rule:  [..., 2, 2, 5] → [..., 5, 8] ---
+
+Carry0:  [..., 2, 2, (5)]            ->   [..., 5, (8)]
+         in 45 steps.                         [carry_22_5]
+
+Carry1:  [..., 2, 2, (11)]           ->   [..., 5, (14)]
+         in 61 steps.                         [carry_22_11]
+
+    (Base cases of the family [..., 2, 2, k] → [..., 5, k+3]
+     with closed form dt = (8k+95)/3 for k = 6j+5.)
+
+--- Swap rule:  [..., 2, 5, k] → [..., 5, 2, k+3] ---
+
+Swap11:  [..., 2, 5, (11)]           ->   [..., 5, 2, (14)]
+         in 73 steps.                         [swap_25_11]
+
+    (Base case of the family [..., 2, 5, k] → [..., 5, 2, k+3]
+     with closed form dt = (8k+131)/3 for k = 6j+5.)
+
+--- Carry rule:  [..., 8, 5, k] → [..., 11, 2, k+3] ---
+
+Carry8:  [..., 8, 5, (35)]           ->   [..., 11, 2, (38)]
+         in 153 steps.                        [carry_85_35]
+
+    (Base case of the family [..., 8, 5, k] → [..., 11, 2, k+3]
+     with closed form dt = (8k+179)/3 for k = 6j+5.)
+
+=======================================================================
+Structural lemmas (used in simple_bump)
+=======================================================================
+
+Aux1:    5-step C→C cycle, moves 3 ones from right to inner-left
+         [C at head=1, left = ones n *> [false] *> L,
+                       right = ones (m+3) *> R]
+         -> [C at head=1, left = ones (n+3) *> [false] *> L,
+                          right = ones m *> R]
+         in 5 steps.                          [ones_cycle5]
+
+Aux2:    N iterations of Aux1, moving 3N ones.
+         in 5N steps.                         [ones_cycle5_iter]
+
+Aux3:    A/D left-sweep hitting a [false] separator.
+         [A at head=1, left = ones (2n+1) *> [false] *> L,
+                       right = R]
+         -> [A at head=0, left = L,
+                          right = ones (2n+1) *> Side.cons true R]
+         in 2n+2 steps.                       [AD_sweep_to_sep]
+
+=======================================================================
+Startup
+=======================================================================
+
+Init52:  blank tape  ->  [5, (2)]
+         in 59 steps.                         [init_to_M_52]
+
+Init55:  blank tape  ->  [5, (5)]
+         in 76 steps.      (= Init52 + Bump0) [init_to_M_55]
+
+=======================================================================
+Empirical (simulated, not formally proved)
+=======================================================================
+
+Deep simulation (`deep_sim.py`, 30 min, 12 MB RSS):
+  - 6.04 × 10⁹ raw TM steps
+  - 39,387 E-turnaround events
+  - 19,773,584 block-size samples
+  - 0 violations of bᵢ ≡ 2 (mod 3)
+  - max block size 116,558; block count ~500 throughout
+
+Rule families observed (`classify_rules.py`, 500M steps):
+  - 335 distinct macro-rule families
+  - All match closed form dt = (8k + C_family) / 3, Δk = +3
+  - C_family depends only on the few rightmost blocks
+  - Families above (simple_bump, carry_22, swap_25, carry_85) are the
+    four most frequent; see classify_rules output for the full list.
+
+Shape-schema enumeration (`shape_summary.py`, 2M configs):
+  - 12 "core" active-region schemata across 6 states (see machine.lean)
+  - ~20–25 total including edge/transient schemata
+  - Foundation for a potential ClosedSet-style nonhalt proof
+
+See machine.lean for full proofs and the ClosedSet / regularity /
+schemata-enumeration discussion.
