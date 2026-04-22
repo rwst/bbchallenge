@@ -1,0 +1,1 @@
+-- (scratch file removed; contents merged into machine.lean)

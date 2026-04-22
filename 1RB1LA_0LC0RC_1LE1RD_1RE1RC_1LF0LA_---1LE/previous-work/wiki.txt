@@ -1,0 +1,56 @@
+Its single-argument-rules have been simulated for 10M iterations without reaching any 2^k or 3*2^k.<ref>https://discord.com/channels/960643023006490684/1239205785913790465/1491589796663918684</ref>
+
+== Analysis by Daniel Yuan ==
+https://discord.com/channels/960643023006490684/1448375857046360094/1490792769483051228
+<pre>
+A(m,n) = 1^m E> 1^n
+
+So I would say either
+
+(0, 0) --> halt
+(1, n) --> halt
+(0, n) --> (2, n-1) for n >= 1
+(2m, n) --> (3m+n-1, 2) for m >= 1
+(2m+1, n) --> (m-1, m+n+3) for m >= 1
+
+or
+
+(0, 0) --> halt
+(1, n) --> halt
+(0, n+1) --> (2, n)
+(2m+2, n) --> (3m+n+2, 2)
+(2m+3, n) --> (m, m+n+4)
+
+
+I like converting this into these rules:
+
+(3, 0) --> halt
+(4, n) --> halt
+(3, n+1) --> (5, n)
+(2m-1, n) --> (3m+n-4, 2) for m >= 3
+(2m, n) --> (m, m+n+1) for m >= 3
+
+That way we can see the effect of m dividing by 2
+We can even reduce this to one number
+Let A(n) = (n, 2)
+
+
+Start at A(5), (the equivalent of (2, 2) using the original rules), then follow these rules:
+
+A(2^k) --> halt
+A(3*2^k) = (3*2^k, 2) --> (3, 3*(2^k-1)+2+k) --> (3, 3*(2^k)-1+k) --> (5, 3*(2^k)-2+k) --> (3*(2^k)+3+k), 2) --> A(3*2^k+3+k)
+A((2m-1)*2^k) = ((2m-1)*2^k, 2) --> (2m-1, (2m-1)*(2^k-1)+2+k) --> (m-1+(2m-1)*2^k+k, 2) --> A((2m-1)*2^k+k+m-1) for m >= 3
+</pre>
+
+== Analysis by hipparcos ==
+https://discord.com/channels/960643023006490684/1448375857046360094/1490909482493149306
+
+in practice I think we only ever hit the <math>A((2m-1)*2^k) \rightarrow A((2m-1)*2^k+k+m-1)</math> for <math>m \geq 3</math> rule
+
+so I think we can let <math>a = m-1</math> and write this as the problem:
+
+Let <math>f(b) = b + k + a</math>, where <math>k</math> and <math>a</math> are non-negative integers satisfying <math>b = (2a+1) \cdot 2^k</math>.
+
+Now consider the iterated application of the function <math>f^{n+1}(b) = f(f^n(b))</math>, <math>f^0(b) = b</math>. Does there exist a non-negative integer <math>n</math> such that <math>f^n(5)</math> equals a power of 2 or 3 times a power of 2?
+
+
