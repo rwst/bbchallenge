@@ -1,0 +1,62 @@
+{{machine|1RB0RD_0RC1RE_1RD0LA_1LE1LC_1RF0LD_---0RA}}{{unsolved|Does Lucy's Moonlight halt? If so, how many steps does it take to halt?}}
+{{TM|1RB0RD_0RC1RE_1RD0LA_1LE1LC_1RF0LD_---0RA}}, called '''Lucy's Moonlight''', is a [[probviously]] halting tetrational [[BB(6)]] [[Cryptid]] found by Racheline on 1 Mar 2025 ([https://discord.com/channels/960643023006490684/1239205785913790465/1345551751016878272 Discord link]). It has a 5% chance of beating the former BB(6) champion {{TM|1RB0LD_1RC0RF_1LC1LA_0LE1RZ_1LF0RB_0RC0RE}} (if we treat [[Collatz-like]] behavior as random).
+
+== Analysis by Racheline ==
+https://discord.com/channels/960643023006490684/1345810396136865822/1345820781363597312<pre>
+A(x,y) := 0^inf (1011)^x 10 <A (01)^y 0^inf
+B(x) := 0^inf 1^x B> 0^inf
+
+A(x+1,3y) -> A(x,8y+3)
+A(x+2,3y+1) -> A(x,8y+11)
+A(x+2,3y+2) -> A(x,8y+12)
+A(0,y) -> B(2y+1)
+A(1,3y+1) -> A(4y+4,4)
+A(1,3y+2) -> halt
+B(3y) -> B(8y-2)
+B(3y+1) -> A(2y,4)
+B(3y+2) -> B(8y+6)
+
+a is the sequence such that A(x,a_n) goes to A(x',a_(n+1)) in one step assuming x>=2
+b is the sequence such that A(x,a_0) goes to A(x-b_n,a_n) in n rules (without using the A(0,y) or A(1,y) rules) assuming x>=b_n
+c is the sequence such that A(c_n,a_0) goes to A(c_(n+1),a_0) after only one application of the A(0,y) or A(1,y) rules
+
+f(3n) = 8n+3
+f(3n+1) = 8n+11
+f(3n+2) = 8n+12
+a_0 = 4
+a_(n+1) = f(a_n)
+b_0 = 0
+b_(n+1) = b_n+(1 if 3|a_n else 2)
+
+g(n) = 8ceil(n/3)-2     (i.e. g(3n) = 8n-2 and g(3n+2) = 8n+6)
+h(n) = largest i such that b_i <= n
+c_0 = 14
+if b_h(c_n) = c_n, then c_(n+1) = 2m where m is minimal such that 3m+1 = g^k(2a_h(c_n)+1) for some k
+otherwise if a_h(c_n) = 3m+1, then c_(n+1) = 4m+4
+otherwise halt after roughly (8/3)^(6c_n/5) steps
+</pre>
+
+== Analysis by Shawn Ligocki ==
+https://discord.com/channels/960643023006490684/1345810396136865822/1346329322851401868<pre>
+1RB0RD_0RC1RE_1RD0LA_1LE1LC_1RF0LD_---0RA
+
+C(a, b, c) = 0^inf 1011^a 1^b 10^c C> 0^inf
+C(a, b) = C(a, b, 1) = 0^inf 1011^a 1^b 10 C> 0^inf
+
+C(a+1, 3k)   --> C(a, 8k+6)
+C(a+2, 3k+1) --> C(a, 8k+16)
+C(a+2, 3k+2) --> C(a, 8k+22)
+
+C(0,   3k)   --> C(2k, 8)
+C(0,   3k+1) --> C(0, 8k+5)
+C(1,   3k+1) --> Halt(6k+14)
+C(0,   3k+2) --> C(0, 8k+5)
+C(1,   3k+2) --> C(2k+4, 8)
+
+Start  --(2)-->  C(0, 0)
+</pre>Racheline's <math>c_n</math> values correspond to the values at which we get configs <math>C(c_n, 8)</math> in my analysis. The first three are:
+
+* <math>c_0 = 14</math>
+* <math>c_1 = 11\,292</math>
+* <math>c_2 = </math> <math>\approx 10^{2901.92}</math>
+
