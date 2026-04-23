@@ -60,3 +60,8 @@ roots = ["machine"]
 name = "LucysMoonlight"
 srcDir = "1RB0RD_0RC1RE_1RD0LA_1LE1LC_1RF0LD_---0RA"
 roots = ["machine"]
+
+[[lean_lib]]
+name = "Counter6"
+srcDir = "1RB1RA_0RC1RC_1LD0LF_0LE1LE_1RA0LB_---0LC"
+roots = ["machine"]

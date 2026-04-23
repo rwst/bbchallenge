@@ -1,0 +1,82 @@
+== Analysis by @mxdys ==
+https://discord.com/channels/960643023006490684/1239205785913790465/1266406840103866399
+
+<pre>
+1RB1RA_0RC1RC_1LD0LF_0LE1LE_1RA1LD_---0LC
+
+N(n,m) := 0^inf 1^5 A> 0^(2n+1) 1^m 01 0^inf
+
+start from N(4,4)
+N(2n,m+2)   --> N(3n+3,m)
+N(2n+1,m+1) --> N(3n+4,m)
+N(2n+4,0)   --> halt
+N(2n+4,1)   --> N(4,6n+20)
+N(2n+5,0)   --> N(4,6n+22)
+
+example:
+(4,4),(9,2),(16,1),(4,56),(9,54),(16,53),(27,51),(43,50),(67,49),(103,48),(157,47),(238,46),(360,44),...
+</pre>This has been simulated out to 3 "resets" (rules which increase m): https://discord.com/channels/960643023006490684/1226543091264126976/1405047857970679840<pre>
+N(4, 4)
+N(4, 56)
+N(4, 210273200)
+N(4, 1.326953 * 10^24684623)
+</pre>The number of iterations until the next reset is <math>> 6 \times 10^{24\,684\,622}</math> and would lead to an n value of <math>> 10^{10^{24\,684\,622}} > 10^{10^{10^7}}</math>. Currently there is no known way to simulate this in faster than linear time and to store the values in any way other than directly as bits, thus it is completely infeasible to simulate this to the next reset.
+
+== Analysis by [[User:sligocki|Shawn Ligocki]] ==
+https://discord.com/channels/960643023006490684/1239205785913790465/1267700760892674200
+
+<pre>
+1RB1RA_0RC1RC_1LD0LF_0LE1LE_1RA0LB_---0LC
+
+C(a, b, c) = $ 1^2a+1 C> 0^2b 1^c 01 $
+
+Level 1:
+  C(a, b+2, c) -> C(a+3, b, c)
+  C(a, 1, c+2) -> C(1, a+3, c)
+  C(a, 0, c+1) -> C(1, a+1, c)
+
+  C(a, 0, 0) -> C(1, 2, 2a+3)
+  C(a, 1, 1) -> C(1, 2, 2a+7)
+  C(a, 1, 0) -> Halt(2a+5)
+
+Level 2:
+  C(1, 2b,   c+1) -> C(1, 3b+2, c)
+  C(1, 2b+1, c+2) -> C(1, 3b+4, c)
+
+  C(1, 2b,   0) -> C(1, 2, 6b+5)
+  C(1, 2b+1, 1) -> C(1, 2, 6b+9)
+  C(1, 2b+1, 0) -> Halt(6b+7)
+
+
+C(1, 0, 0)  @11
+C(1, 2, 5)  @55
+  ...
+C(1, 17, 1)
+C(1, 2, 57)
+  ...
+C(1, 70_091_065, 1)
+C(1, 2, 210_273_201)
+  ...
+</pre>
+
+Rules validated in https://github.com/sligocki/busy-beaver/blob/main/rust/src/validator.rs#L1042
+
+Example growth:
+<pre>
+          0  C(1, 2, 5)  [0s]
+          4  C(1, 2, 57)  [0s]
+         45  C(1, 2, 210_273_201)  [0s]
+    100_000  C(1, 10^17_602, 210_123_530)  [1s]
+    200_000  C(1, 10^35_211, 209_973_408)  [4s]
+    300_000  C(1, 10^52_820, 209_823_652)  [10s]
+    400_000  C(1, 10^70_429, 209_673_652)  [17s]
+    500_000  C(1, 10^88_039, 209_523_616)  [27s]
+    600_000  C(1, 10^105_648, 209_373_548)  [38s]
+    700_000  C(1, 10^123_257, 209_223_420)  [52s]
+    800_000  C(1, 10^140_866, 209_073_477)  [68s]
+    900_000  C(1, 10^158_475, 208_923_310)  [86s]
+  1_000_000  C(1, 10^176_084, 208_773_236)  [107s]
+</pre>
+
+Interestingly, both of the 2 reset's I've been able to simulate to both follow the C(1, 2b+1, 1) -> C(1, 2, 6b+9) path.
+

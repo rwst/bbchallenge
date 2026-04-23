@@ -1,0 +1,69 @@
+== Halting conjecture for 1RB1RA_0RC1RC_1LD0LF_0LE1LE_1RA0LB_---0LC ==
+
+Let the macro state be C(a, b, c) := $ 1^{2a+1} C> 0^{2b} 1^c 01 $ (Shawn
+Ligocki notation).  The atomic-rule transition function is:
+
+<math display="block">
+f(a, b, c) =
+\begin{cases}
+\mbox{HALT}, & \mbox{for } b = 1 \land c = 0, \\
+(1,\ 0,\ 2a+4), & \mbox{for } b = 0 \land c = 0, \\
+(1,\ a+1,\ c-1), & \mbox{for } b = 0 \land c \geq 1, \\
+(a+2,\ 0,\ 0), & \mbox{for } b = 1 \land c = 1, \\
+(a+2,\ 0,\ c-1), & \mbox{for } b = 1 \land c \geq 2, \\
+(a+1,\ 1,\ c+1), & \mbox{for } b = 2, \\
+(a+3,\ b-2,\ c), & \mbox{for } b \geq 3.
+\end{cases}
+</math>
+
+<math display="block">
+\text{Conjecture: } \neg \exist \, k, \quad f^k(1, 0, 0) = \text{HALT}
+</math>
+
+By the Lean theorem <code>tm_halt_iff</code>, this conjecture is <i>exactly
+equivalent</i> to the Turing machine not halting from the blank tape.
+
+== Level-2 reduction (a = 1 invariant) ==
+
+Empirically (and provable from f's rules) the orbit enters the a = 1
+subset permanently by step 55.  Restricting to a = 1 and composing atomic
+steps yields the Level-2 transition function on (b, c):
+
+<math display="block">
+g(b, c) =
+\begin{cases}
+\mbox{HALT}, & \mbox{for } b = 2b'+1 \land c = 0, \\
+(3b'+2,\ c), & \mbox{for } b = 2b' \land c \geq 1, \\
+(3b'+4,\ c), & \mbox{for } b = 2b'+1 \land c \geq 2, \\
+(2,\ 6b'+5), & \mbox{for } b = 2b' \land c = 0, \\
+(2,\ 6b'+9), & \mbox{for } b = 2b'+1 \land c = 1.
+\end{cases}
+</math>
+
+<math display="block">
+\text{Conjecture: } \neg \exist \, k, \quad g^k(0, 5) = \text{HALT}
+</math>
+
+Starting point (0, 5) corresponds to C(1, 0, 5), which f reaches from
+C(1, 0, 0) in one step (via the b=0, c=0 branch applied to a=1: f(1, 0, 0)
+= (1, 0, 6), and then the first Level-2 step begins).
+
+The Level-2 conjecture implies the Level-1 conjecture (and hence the
+Turing machine not halting), but not vice versa — it additionally asserts
+the a = 1 invariant, which is a separate combinatorial fact that can also
+be derived from f.
+
+== Observed Level-2 orbit ==
+
+<pre>
+          0  g → (2, 5)           [C(1, 2, 5)]
+          4  g^4 → (2, 57)        [C(1, 2, 57)]
+         45  g^45 → (2, 210_273_201)       [C(1, 2, 210_273_201)]
+  ...
+    100_000  (10^17_602, 210_123_530)
+    500_000  (10^88_039, 209_523_616)
+  1_000_000  (10^176_084, 208_773_236)
+  ...
+</pre>
+
+(Step counts are g-iterations, not TM steps; from Ligocki's simulator.)
