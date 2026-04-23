@@ -1,0 +1,81 @@
+Halting transition: <code>F,0 -> ---</code>.  F is reached only via
+<code>C,0 -> 1LF</code>, so halting requires C's left-sweep to land
+on a 0 whose L cell is also 0.
+
+Let <code>[b₁, b₂, ..., bₙ, (1)]</code> denote the tape at an
+E-turnaround (all observed turnarounds have rightmost block = 1):
+<pre>
+    0^inf  1^b₁  0  1^b₂  0  ...  0  1^bₙ  0  1  E>  0  0^inf
+</pre>
+where <code>E></code> means state E reading the cell immediately
+right of the rightmost 1.  Block sizes are read left-to-right.
+
+In addition to the E-turnaround, the only proven macro-regime
+configurations are mid-run states used by the bump family:
+
+* <code>M_Config L K j M</code> — head = 1 on the 2nd cell (from
+  left) of the middle 1-block.  Tape shape:
+<pre>
+    L  0  1^K  0  1 [E,1]1^j  0  1^M  0  0^inf
+</pre>
+  (Block 2 has size <code>j + 2</code>.  Used as the loop invariant
+  of the 5-step bump cycle.)
+
+* <code>S_Config L K M</code> — head = 0 on the 0-separator between
+  a size-1 block 2 and block 3.  Tape shape:
+<pre>
+    L  0  1^K  0  1 [E,0]1^M  0  0^inf
+</pre>
+  (Post-iteration state, one 5-step bump before the final finish.)
+
+* <code>R_Config L K</code> — 3-block E-turnaround at blocks
+  <code>[K, 2, 1]</code>:
+<pre>
+    L  0  1^K  0  1^2  0  1 [E,0] 0^inf
+</pre>
+
+* <code>R4_Config L K</code> — 4-block E-turnaround at blocks
+  <code>[2, K, 2, 1]</code>:
+<pre>
+    L  0  1^2  0  1^K  0  1^2  0  1 [E,0] 0^inf
+</pre>
+
+In each rule, "<code>...</code>" on the left matches any (possibly
+empty) block prefix L.  Parameters: j, n, K, M ≥ 0 unless noted.
+
+<pre>
+--- 5-step bump family (middle block shrinks by 1 per cycle) ---
+
+    Generic form: the head at the 2nd cell of block 2 acts as a
+    shift register; each 5-step cycle transfers one 1 from the
+    middle block to the left block, via:
+      1.  E,1 -> 1LE  (pop 1 from left of head)
+      2.  E,1 -> 1LE  (pop the block-1/block-2 boundary 1)
+      3.  E,0 -> 1RB  (extend left block by 1, now on 1)
+      4.  B,1 -> 0RD  (write new 0 separator)
+      5.  D,1 -> 1RE  (re-enter E-state)
+
+    All rules in this family hold for any L : Side (fully local).
+
+Bump5:   M_Config L K (j+1) M  ->  M_Config L (K+1) j M
+         (shifts one 1 from block 2 into block 1)
+         in 5 steps.                          [bump5]
+
+Term5:   M_Config L K 0 M  ->  S_Config L (K+1) M
+         (block 2 collapses to size 1; head lands on 0-sep)
+         in 5 steps.                          [bump5_term]
+
+Iter:    M_Config L K (j+n) M  ->  M_Config L (K+n) j M
+         in 5n steps.                         [bump5_iter]
+
+IterTerm: M_Config L K n M  ->  S_Config L (K+n+1) M
+         in 5(n+1) steps.                     [bump5_iter_term]
+
+Finish3: S_Config L K 2  ->  R_Config L K
+         (3-step E->B->D->E mini-cycle landing at right blank)
+         in 3 steps.                          [finish3_M2]
+
+Full:    M_Config L K n 2  ->  R_Config L (K + n + 1)
+         (blocks [..., K, n+2, 2]  ->  [..., K+n+1, 2, 1])
+         in 5(n+1) + 3 = 5n + 8 steps.        [macro_to_R]
+

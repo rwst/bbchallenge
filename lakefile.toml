@@ -65,3 +65,8 @@ roots = ["machine"]
 name = "Counter6"
 srcDir = "1RB1RA_0RC1RC_1LD0LF_0LE1LE_1RA0LB_---0LC"
 roots = ["machine"]
+
+[[lean_lib]]
+name = "ShiftOv6"
+srcDir = "1RB0LC_1LC0RD_1LF1LA_1LB1RE_1RB1LE_---0LE"
+roots = ["machine"]
