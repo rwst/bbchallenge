@@ -70,3 +70,8 @@ roots = ["machine"]
 name = "ShiftOv6"
 srcDir = "1RB0LC_1LC0RD_1LF1LA_1LB1RE_1RB1LE_---0LE"
 roots = ["machine"]
+
+[[lean_lib]]
+name = "Racheline6"
+srcDir = "1RB0RE_1LC1LD_0RA0LD_1LB0LA_1RF1RA_---1LB"
+roots = ["machine"]

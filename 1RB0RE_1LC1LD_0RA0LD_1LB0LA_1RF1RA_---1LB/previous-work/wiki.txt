@@ -1,0 +1,48 @@
+==Analysis by Racheline==
+<pre>
+1RB0RE_1LC1LD_0RA0LD_1LB0LA_1RF1RA_---1LB
+A(n,m) = 0^inf (01)^(3n-4) A> (01)^m 0^inf
+
+A(2n,m) -> A(3n,m-2)
+A(2n+1,m) -> A(3n+1,m-1)
+A(n,0) -> A(2,3n-4)
+A(n,-1) -> halt
+start from A(2,0)
+
+it's kinda like the original halting cryptid candidate - we can rewrite it like this:
+a_0 = 2 and a_(i+1) = HydraMap(a_i)
+b_0 = 0 and b_(i+1) = b_i+(1 if a_i is odd otherwise 2)
+c_0 = 0 and c_(i+1) = 3a_j-4 where j is such that b_j = c_i
+
+a: 2, 3, 4, 6, 9, 13, 19, 28, 42, 63, 94, 141, ...
+b: 0, 2, 3, 5, 7,  8,  9, 10, 12, 14, 15,  17, ...
+c: 0, 2, 5, 14, 185, 22205951667644132025548, ...
+</pre>
+
+==Python Code by N1vi==
+<syntaxhighlight lang="python" line="1">
+import time
+import sys
+
+sys.set_int_max_str_digits(1000000)
+
+p=[4,7] #seq, replace with [2,0] for 1RB0RE_1LC1LD_0RA0LD_1LB0LA_1RF1RA_---1LB
+s=-1 #step, do not change
+
+while p[1]>=0:
+	s+=1
+	#print(p) #uncomment to allow printing
+	#time.sleep(0.1) #uncomment to add time between printing
+	if p[1]==0:
+		p=[2,p[0]*3-4]
+	elif p[0]%2:
+		p[0]=p[0]//2*3+1
+		p[1]-=1
+	else:
+		p[0]=p[0]//2*3
+		p[1]-=2
+
+#print(f'10^{len(str(p[0]))}') #approx
+print(p[0]) #exact
+</syntaxhighlight>
+

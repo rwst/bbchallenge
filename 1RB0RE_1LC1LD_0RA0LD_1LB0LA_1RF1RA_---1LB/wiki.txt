@@ -1,0 +1,97 @@
+==Correspondence with halting (Lean-proven)==
+
+The Lean formalization in <code>machine.lean</code> establishes the
+following exact correspondence between TM halting and the macro rules
+(theorem <code>tm_halt_iff</code>):
+
+<math display="block">
+f : \mathbb{N}^2 \to \mathbb{N}^2 \cup \{\mathrm{HALT}\}
+</math>
+
+<math display="block">
+f(n, m) =
+\begin{cases}
+\mathrm{HALT}, & \text{for } m = 1 \text{ and } n \text{ even},\\
+(2,\; 3n - 4), & \text{for } m = 0,\\
+\left(\tfrac{3n}{2},\; m - 2\right), & \text{for } n \text{ even and } m \ge 2,\\
+\left(\tfrac{3(n-1)}{2} + 1,\; m - 1\right), & \text{for } n \text{ odd and } m \ge 1.
+\end{cases}
+</math>
+
+<math display="block">
+\text{Conjecture: } \neg\,\exists\, k, \quad f^{k}(2,\,0) = \mathrm{HALT}
+</math>
+
+The starting point is <math>(n, m) = (2, 0)</math>, which is the first
+macro configuration reached from the blank tape (after 22 TM steps).
+
+Each case of <math>f</math> corresponds to a Lean theorem giving the
+exact step count:
+
+{| class="wikitable"
+! Case !! Macro rule !! TM steps (<math>dt</math>) !! Lean theorem
+|-
+| <math>m = 1</math>, <math>n = 2k+2</math> (<math>k \ge 0</math>)
+| <math>A(n, 1) \to \mathrm{HALT}</math>
+| <math>72k^2 + 120k + 34</math>
+| <code>rule_halt</code>
+|-
+| <math>m = 0</math>
+| <math>A(n, 0) \to A(2, 3n-4)</math>
+| <math>12n + 6</math>
+| <code>rule_reset</code>
+|-
+| <math>n = 2k+2</math>, <math>m \ge 2</math>
+| <math>A(2n, m) \to A(3n, m-2)</math>
+| <math>72k^2 + 156k + 54</math>
+| <code>rule_even</code>
+|-
+| <math>n = 2k+3</math>, <math>m \ge 1</math>
+| <math>A(2n+1, m) \to A(3n+1, m-1)</math>
+| <math>72k^2 + 192k + 110</math>
+| <code>rule_odd</code>
+|}
+
+The main Lean theorem:
+
+<syntaxhighlight lang="lean">
+theorem tm_halt_iff :
+    (∃ k, (run tm (initConfig 6) k).state = none) ↔ macroHalts ⟨0, 0⟩
+</syntaxhighlight>
+
+where <code>macroHalts</code> is the inductive closure of a deterministic
+<code>nextMacro : MacroState → Option MacroState</code> matching the
+four cases of <math>f</math> above, and <code>⟨0, 0⟩</code> corresponds
+to <math>(n, m) = (2, 0)</math> (the parametrization uses
+<math>n' = n - 2</math> internally).
+
+Thus the BB(6) halting question for <code>1RB0RE_1LC1LD_0RA0LD_1LB0LA_1RF1RA_---1LB</code>
+reduces exactly to the orbit conjecture on <math>f</math> above.
+
+==Single-variable reformulation==
+
+The <math>f</math> above can be re-cast as an iteration on a single
+integer. Encoding the pair <math>(n, m)</math> as
+<math>N = 2^{m+1} \cdot (n - 1) + (2^{m+1} - 1)</math> — i.e., <math>N</math>
+has <math>m+1</math> trailing 1-bits in binary, then a 0-bit, then
+the binary of <math>(n-1)</math> above — gives a single-number state
+from which the four cases are distinguishable by <math>N \bmod</math>
+small powers of 2. This matches Racheline's hydra-style reformulation
+(see <code>previous-work/wiki.txt</code>):
+
+<math display="block">
+\begin{aligned}
+a_0 &= 2,\quad a_{i+1} = \mathrm{HydraMap}(a_i), \\
+\mathrm{HydraMap}(a) &= \begin{cases}
+3a/2, & a \text{ even},\\
+3(a-1)/2 + 1, & a \text{ odd},
+\end{cases} \\
+b_0 &= 0,\quad b_{i+1} = b_i + \begin{cases} 1 & a_i \text{ odd} \\ 2 & a_i \text{ even} \end{cases} \\
+c_0 &= 0,\quad c_{i+1} = 3 a_j - 4 \text{ where } b_j = c_i.
+\end{aligned}
+</math>
+
+The halting condition "some even <math>a</math> with <math>m = 1</math>"
+becomes a statement about simultaneous <math>(a_i, b_i, c_j)</math>
+relationships; the single-<math>f</math> form above is more directly
+decidable from <math>(n, m)</math>.
