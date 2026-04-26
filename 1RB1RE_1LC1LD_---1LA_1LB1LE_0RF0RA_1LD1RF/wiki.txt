@@ -1,0 +1,56 @@
+== Mathematical formulation of halting for 1RB1RE_1LC1LD_---1LA_1LB1LE_0RF0RA_1LD1RF ==
+
+The TM admits a macro-step description on configurations <math>A(m, n)</math>
+encoding the tape <math>0^\infty\, 1^m\, (01)^n\, 0\, [A]\!>\, 0^\infty</math>
+(state A, head facing right on a blank, with <math>m \geq 1</math> in canonical
+form).  Iterating the 10 proved macro rules gives a single transition map
+<math>f : \mathbb{N}_{\geq 1} \times \mathbb{N} \to (\mathbb{N}_{\geq 1} \times \mathbb{N}) \cup \{\mathrm{HALT}\}</math>:
+
+<math display="block">
+f(m, n) =
+\begin{cases}
+\mathrm{HALT}, & m = 1,\ n \equiv 0 \pmod 2,\\
+(3n + 4,\ 1), & m = 1,\ n \equiv 1 \pmod 2,\\
+\mathrm{HALT}, & m = 2,\\
+(3n + 6,\ 1), & m = 3,\ n \equiv 0 \pmod 2,\\
+(3n + 7,\ 1), & m = 3,\ n \equiv 1 \pmod 2,\\
+\bigl(1,\ 3\lfloor n/2 \rfloor + 3\bigr), & m = 4,\ n \equiv 0 \pmod 2,\\
+\bigl(1,\ 3\lfloor n/2 \rfloor + 5\bigr), & m = 4,\ n \equiv 1 \pmod 2,\\
+\bigl(m - 4,\ 3\lfloor n/2 \rfloor + 4\bigr), & m \geq 5,\ n \equiv 0 \pmod 2,\\
+\bigl(m - 4,\ 3\lfloor n/2 \rfloor + 6\bigr), & m \geq 5,\ n \equiv 1 \pmod 2.
+\end{cases}
+</math>
+
+The TM, started on the blank tape, reaches the macro state <math>A(1, 1)</math>
+after 15 steps (proved as <code>init_to_A11</code> in <code>machine.lean</code>).
+Each macro step <math>f(m, n)</math> corresponds to a fixed number
+<math>\Delta t(m, n) = 6\lfloor n/2 \rfloor^2 + A\lfloor n/2 \rfloor + B</math>
+of TM steps (with <math>(A, B)</math> depending on the rule).  Hence:
+
+<math display="block">
+\text{The TM halts from blank} \iff \exists\, k \geq 0,\ f^k(1, 1) = \mathrm{HALT}.
+</math>
+
+(Proved in both directions as <code>tm_halt_iff_math</code> in
+<code>machine.lean</code>.)
+
+<math display="block">
+\text{Conjecture:} \quad \neg \exists\, k,\ f^k(1, 1) = \mathrm{HALT}.
+</math>
+
+== Compressed orbit ==
+
+Define <math>B(M) := A(M, 1)</math>.  The map <math>f</math> restricted to
+<math>B</math>-states (cascading through a chain of shift rules until reaching
+a small-<math>m</math> rule) yields a sub-orbit:
+
+<math display="block">
+B(1) \to B(7) \to B(24) \to B(301) \to B(459{,}271{,}258{,}863{,}235) \to \cdots
+</math>
+
+In Racheline's <math>k = n + 9</math> notation the shift cascade follows the
+HydraMap <math>k \mapsto \lfloor 3k/2 \rfloor</math> on <math>k = 10</math>,
+with the <math>m = 4</math> step contributing a <math>-1</math> correction.
+The <math>B</math>-orbit grows superexponentially, so the conjecture (above)
+asserts that this Hydra-like growth never meets the halting set
+<math>\{(m, n) : m = 1,\ n \text{ even}\} \cup \{(m, n) : m = 2\}</math>.

@@ -1,0 +1,29 @@
+== Analysis by Racheline ==
+<pre>
+1RB1RE_1LC1LD_---1LA_1LB1LE_0RF0RA_1LD1RF
+A(m, n+9) = 0^inf 1^m (01)^n 0 A> 0^inf
+
+rules:
+A(m+4, 2n) -> A(m, 3n)
+A(m+4, 2n+1) -> A(m, 3n+1)
+A(0, 2n) -> halt
+A(0, 2n+1) -> A(6n-23, 10)
+A(1, 2n) -> A(6n-23, 10)
+A(1, 2n+1) -> halt
+A(2, n) -> halt
+A(3, 2n) -> A(6n-20, 10)
+A(3, 2n+1) -> A(6n-18, 10)
+start from A(1, 10)
+
+B(m) = A(m, 10)
+B(4m) -> B(3 * HydraMap^m(10) - 26) if HydraMap^m(10) is odd
+B(4m+1) -> B(3 * HydraMap^m(10) - 23) if HydraMap^m(10) is even
+B(4m-1) -> B(2 * HydraMap^m(10) - 20)
+in all other cases, halt
+start from B(1)
+
+iterating HydraMap on 10:
+10, 15, 22, 33, 49, 73, 109, 163, 244, 366, 549, 823, 1234, ...
+B(1) -> B(3*10-23) = B(7) -> B(2*22-20) = B(24) -> B(3*109-26) = B(301) -> B(3*153090419621086-23) = B(459271258863235) -> B(2*HydraMap^114817814715809(10)-20)
+</pre>
+
