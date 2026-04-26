@@ -75,3 +75,8 @@ roots = ["machine"]
 name = "Racheline6"
 srcDir = "1RB0RE_1LC1LD_0RA0LD_1LB0LA_1RF1RA_---1LB"
 roots = ["machine"]
+
+[[lean_lib]]
+name = "RachelineII"
+srcDir = "1RB1LE_0LC0LB_1RD1LC_1RD1RA_1RF0LA_---1RE"
+roots = ["machine"]

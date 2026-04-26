@@ -1,0 +1,29 @@
+== Mathematical statement of halting ==
+
+The macro analysis of the TM <code>1RB1LE_0LC0LB_1RD1LC_1RD1RA_1RF0LA_---1RE</code> reduces its halting problem to iteration of an explicit partial function on pairs of natural numbers.  Write a state as a pair <math>(n, m) \in \mathbb{N}^2</math>, corresponding to the macro configuration <math>A(n+6, m)</math>.  Define
+
+<math display="block">
+f(n, m) =
+\begin{cases}
+\mathrm{HALT}, & m = 2,\ n \text{ even},\\[2pt]
+(0,\ 0), & m \in \{0, 1\},\ m + n \text{ even},\\[2pt]
+(0,\ 3(m + n)), & m \in \{0, 1\},\ m + n \text{ odd},\\[2pt]
+(0,\ 3n + 5), & m = 2,\ n \text{ odd},\\[2pt]
+\bigl(\tfrac{3n}{2} + 3,\ m - 3\bigr), & m \geq 3,\ n \text{ even},\\[2pt]
+\bigl(\tfrac{3n + 5}{2},\ m - 2\bigr), & m \geq 3,\ n \text{ odd}.
+\end{cases}
+</math>
+
+The fixed point <math>f(0, 0) = (0, 0)</math> corresponds to a translated cycler that runs forever without halting.
+
+The blank tape reaches the macro state <math>(1, 0)</math> after 3 TM steps, so the TM halts iff iteration of <math>f</math> from <math>(1, 0)</math> ever reaches <math>\mathrm{HALT}</math>.
+
+<math display="block">
+\text{Conjecture: } \neg \exists\, k,\quad f^{k}(1, 0) = \mathrm{HALT}.
+</math>
+
+Equivalently, since <math>f(1, 0) = (0, 3)</math> (the wiki's starting macro <math>A(6, 3)</math>, reached at TM step 10):
+
+<math display="block">
+\text{Conjecture: } \neg \exists\, k,\quad f^{k}(0, 3) = \mathrm{HALT}.
+</math>
