@@ -1,0 +1,129 @@
+Machine: 1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF
+
+Transition table:
+           0        1
+      A   1RB      1LA
+      B   1RC      0RF
+      C   1RD      ---    (halt)
+      D   0LE      1RB
+      E   ---      0LA    (halt)
+      F   1LD      1RF
+
+=======================================================================
+Configuration notation
+=======================================================================
+
+Let [0^inf, a₁, ..., aₖ, (c), b₁, ..., bₘ, 0^inf] denote the tape
+
+    0^inf  1^aₖ  0  ...  0  1^a₁  0  1^(c-1)  A>  1  0  0  1^b₁  0  ...  0  1^bₘ  0^inf
+
+(A> means state A reading the rightmost 1 of the cursor run.)
+
+The special cursor (0) denotes "state A reading the left 0 of a 00 gap":
+
+    [0^inf, a₁, ..., aₖ, (0), b₁, ..., bₘ, 0^inf] =
+    0^inf  1^aₖ  0  ...  0  1^a₁  A>  0  0  1^b₁  0  ...  0  1^bₘ  0^inf
+
+Invariant carried by all proven rules:
+  - every aᵢ ≥ 1, every bⱼ ≥ 1;
+  - cursor (c) with c ≥ 2, or cursor (0) with at least one left run and one right run;
+  - for (0) configurations, the right side does NOT begin with (1, z+1, ...)
+    — such a shape would trigger rule Halt.
+
+=======================================================================
+Proven macro rules (see machine.lean)
+=======================================================================
+
+In each rule, "..." on the left/right matches any (possibly empty) prefix/suffix
+of runs unless explicitly restricted. All shown run-length parameters (a, b, c,
+d, r, z, mᵢ) are ≥ 0 unless noted; so e.g. "c+3" means the cursor is ≥ 3.
+
+--- Right-sweep with neighbors (cursor ≥ 3) ---
+
+Sweep:    [..., a, (c+3), d, ...]   ->   [..., a+1, (c+1), d+1, ...]
+          in 2c+13 steps.                         [macro_sweep]
+
+SweepL:   [(c+3), d, ...]           ->   [1, (c+1), d+1, ...]
+          in 2c+13 steps.                         [macro_sweep_left_empty]
+
+SweepR:   [..., a, (c+3)]           ->   [..., a+1, (c+1), 1]
+          in 2c+13 steps.                         [macro_sweep_right_empty]
+
+SweepS:   [(c+3)]                   ->   [1, (c+1), 1]
+          in 2c+13 steps.                         [macro_sweep_solo]
+
+--- Right-sweep terminating at cursor 2 ---
+
+SweepE:   [..., a, (2), d, ...]     ->   [..., a+1, (0), d+1, ...]
+          in 11 steps.                            [macro_sweep_to_zero]
+
+SweepLE:  [(2), d, ...]             ->   [1, (0), d+1, ...]
+          in 11 steps.                            [macro_sweep_to_zero_left_empty]
+
+SweepRE:  [..., a, (2)]             ->   [..., a+1, (0), 1]
+          in 11 steps.                            [macro_sweep_to_zero_right_empty]
+
+SweepSE:  [(2)]                     ->   [1, (0), 1]
+          in 11 steps.                            [macro_sweep_solo_to_zero]
+
+--- Cursor = 1 shift (auxiliary; never arises under the invariant) ---
+
+Shift:    [..., a+1, (1), d, ...]   ->   [..., (a+1), 1, d, ...]
+          in 6 steps.                             [macro_shift]
+
+--- Zero-cursor bounce rules (right side has only one run) ---
+
+EraDone:  [..., a+1, (0), 1]        ->   [..., (a+6)]
+          in 8 steps.                             [macro_era_complete]
+
+Bounce:   [..., a, (0), z+4]        ->   [..., a+4, (z+1), 1]
+          in z+13 steps.                          [macro_zero_bounce]
+
+BounceE:  [..., a, (0), 3]          ->   [..., a+4, (0), 1]
+          in 12 steps.                            [macro_zero_bounce_to_zero]
+
+--- Zero-cursor rules where right side begins with 2 ---
+
+Two:      [..., a, (0), 2, d, ...]  ->   [..., (a+3), d+1, ...]
+          in 8 steps.                             [macro_zero_two]
+
+TwoS:     [..., a, (0), 2]          ->   [..., (a+3), 1]
+          in 8 steps.                             [macro_zero_two_solo]
+
+--- Multi-run bounces (two or more right-side runs, first ≥ 3) ---
+
+Multi2:   [..., a, (0), r+3, z+2]
+          ->   [..., a+4, r+1, (z+1), 1]
+          in r+z+17 steps.                        [macro_multi_bounce_2]
+
+Multi2E:  [..., a, (0), r+3, 1]
+          ->   [..., a+4, r+1, (0), 1]
+          in r+16 steps.                          [macro_multi_bounce_2_to_zero]
+
+MultiN:   [..., a, (0), r+3, m₁, ..., mₖ, z+2]   (k ≥ 1, every mᵢ ≥ 1)
+          ->   [..., a+4, r+1, m₁, ..., mₖ, (z+1), 1]
+          in r+z + 3k + (m₁+...+mₖ) + 17 steps.   [macro_multi_bounce_general]
+
+MultiNE:  [..., a, (0), r+3, m₁, ..., mₖ, 1]     (k ≥ 1, every mᵢ ≥ 1)
+          ->   [..., a+4, r+1, m₁, ..., mₖ, (0), 1]
+          in r + 3k + (m₁+...+mₖ) + 16 steps.     [macro_multi_bounce_general_to_zero]
+
+--- Halting ---
+
+Halt:     [..., (0), 1, z+1, ...]   ->   HALT
+          within 6 steps (C reads 1, undefined). [macro_halt]
+
+=======================================================================
+Startup
+=======================================================================
+
+Init:     blank tape  ->  1^5 all-ones, D at rightmost 1
+          in 19 steps.                            [sweeper_init_to_era0]
+
+EraToM:   1^{n+1} all-ones with D at rightmost 1  ->  [(n+2)]
+          in 5 steps.                             [era_to_macro]
+
+Combining Init + EraToM(n=4) + SweepS(c=3):
+
+InitM:    blank tape  ->  [1, (4), 1]
+          in 43 steps.                            [init_to_macro]
