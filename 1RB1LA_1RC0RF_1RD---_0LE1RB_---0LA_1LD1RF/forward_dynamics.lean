@@ -406,4 +406,159 @@ theorem thm_reach_multi_bounce_last_2_long {a r' e : Nat} {L' middle_init : List
   · rw [run_add, h_mb]; exact hprog_shift
   · rw [run_add, h_mb]; exact hne_shift
 
+-- ============================================================
+-- Structural analysis of shift_to_macro_prog
+-- ============================================================
+
+/-- **Strong shift lemma**: `shift_to_macro_prog`'s witness has explicit
+    structure — it splits `L` into a prefix `L_pre` of all 1s, a first
+    ≥ 2 element `v`, and a suffix `L_suf`. The raw-TM run reaches
+    `M_Config L_suf v R_out` for some `R_out`. -/
+theorem shift_to_macro_prog_strong (L R : List Nat)
+    (h_R_ne : R ≠ []) (h_R_ge1 : AllGe1 R) (h_L_ge1 : AllGe1 L)
+    (h_nonone : ∃ x ∈ L, x ≥ 2) :
+    ∃ (k : Nat) (L_pre : List Nat) (v : Nat) (L_suf : List Nat) (R_out : List Nat),
+      0 < k ∧
+      L = L_pre ++ v :: L_suf ∧ (∀ x ∈ L_pre, x = 1) ∧ v ≥ 2 ∧
+      run sweeper (M_Config L 1 R) k = M_Config L_suf v R_out ∧
+      MacroInvariant (.M L_suf v R_out) := by
+  induction L generalizing R with
+  | nil =>
+    exfalso
+    obtain ⟨x, hx, _⟩ := h_nonone
+    exact List.not_mem_nil hx
+  | cons a L_tail ih =>
+    have ha : a ≥ 1 := (AllGe1_cons.mp h_L_ge1).1
+    obtain ⟨d, R_tail, rfl⟩ := List.exists_cons_of_ne_nil h_R_ne
+    have h_L_tail_ge1 : AllGe1 L_tail := (AllGe1_cons.mp h_L_ge1).2
+    obtain ⟨a', rfl⟩ : ∃ a', a = a' + 1 := ⟨a - 1, by omega⟩
+    by_cases h_a' : a' = 0
+    · subst h_a'
+      have h_R_new_ge1 : AllGe1 (1 :: d :: R_tail) :=
+        AllGe1_cons.mpr ⟨by omega, h_R_ge1⟩
+      have h_R_new_ne : (1 :: d :: R_tail : List Nat) ≠ [] := List.cons_ne_nil _ _
+      have h_tail_nonone : ∃ x ∈ L_tail, x ≥ 2 := by
+        obtain ⟨x, hx, hx_ge2⟩ := h_nonone
+        rcases List.mem_cons.mp hx with rfl | hx
+        · omega
+        · exact ⟨x, hx, hx_ge2⟩
+      obtain ⟨k_rest, L_pre_rest, v, L_suf, R_out, hk_rest, h_split, h_pre_one,
+              hv, hrun_rest, hinv'⟩ :=
+        ih (1 :: d :: R_tail) h_R_new_ne h_R_new_ge1 h_L_tail_ge1 h_tail_nonone
+      refine ⟨6 + k_rest, 1 :: L_pre_rest, v, L_suf, R_out, by omega, ?_, ?_,
+              hv, ?_, hinv'⟩
+      · simp [h_split, List.cons_append]
+      · intro x hx
+        rcases List.mem_cons.mp hx with rfl | hx
+        · rfl
+        · exact h_pre_one x hx
+      · rw [run_add, macro_shift 0 d L_tail R_tail, hrun_rest]
+    · have ha' : a' ≥ 1 := Nat.one_le_iff_ne_zero.mpr h_a'
+      refine ⟨6, [], a' + 1, L_tail, 1 :: d :: R_tail, by omega, rfl, ?_,
+              by omega, macro_shift a' d L_tail R_tail, ?_⟩
+      · intro x hx; exact (List.not_mem_nil hx).elim
+      · refine ⟨h_L_tail_ge1, by omega, AllGe1_cons.mpr ⟨by omega, h_R_ge1⟩,
+                List.cons_ne_nil _ _⟩
+
+/-- Corollary: if `L` contains an element `x ≥ 5`, the shift output is
+    never `M([], 3, R)` for any R. (For `x = v` we have c = v ≥ 5; for
+    `x ∈ L_suf` we have L ≠ [].) -/
+theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
+    (h_R_ne : R ≠ []) (h_R_ge1 : AllGe1 R) (h_L_ge1 : AllGe1 L)
+    (h_nonone : ∃ x ∈ L, x ≥ 2)
+    (h_has_5 : ∃ x ∈ L, x ≥ 5) :
+    ∃ (k : Nat) (cfg' : MacroConfig),
+      0 < k ∧
+      run sweeper (M_Config L 1 R) k = cfg'.toConfig ∧
+      MacroInvariant cfg' ∧
+      ∀ R', cfg' ≠ .M [] 3 R' := by
+  obtain ⟨k, L_pre, v, L_suf, R_out, hk, h_split, h_pre_one, hv, hrun, hinv'⟩ :=
+    shift_to_macro_prog_strong L R h_R_ne h_R_ge1 h_L_ge1 h_nonone
+  refine ⟨k, .M L_suf v R_out, hk, ?_, hinv', ?_⟩
+  · rw [hrun, MacroConfig.toConfig_M]
+  · intro R' hcfg
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hLsuf, hv_eq, _⟩ := hcfg
+    obtain ⟨x, hx, hx_ge5⟩ := h_has_5
+    rw [h_split] at hx
+    rcases List.mem_append.mp hx with hx_pre | hx_post
+    · have hx_eq_1 := h_pre_one x hx_pre
+      omega
+    · rcases List.mem_cons.mp hx_post with rfl | hx_suf
+      · omega
+      · rw [hLsuf] at hx_suf
+        exact List.not_mem_nil hx_suf
+
+/-- **Safe R3 closure**: like `thm_reach_multi_bounce_last_2_long` but
+    additionally returns the structural exclusion `cfg' ≠ M([], 3, R)`
+    via `shift_to_macro_prog_excludes_R1`. The `L_after` list always
+    contains `a + 4 ≥ 5` (since `a ≥ 1` from `MacroInvariant`), so the
+    safety property holds. Used in `orbit_progress`'s R3 case to
+    discharge `step_R3`'s safety precondition. -/
+theorem thm_reach_multi_bounce_last_2_long_safe
+    {a r' e : Nat} {L' middle_init : List Nat}
+    (hinv : MacroInvariant
+      (.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2]))) :
+    ∃ (k : Nat) (cfg' : MacroConfig), 0 < k ∧
+      run sweeper
+        (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k =
+        cfg'.toConfig ∧
+      MacroInvariant cfg' ∧
+      ∀ R, cfg' ≠ .M [] 3 R := by
+  -- Same setup as thm_reach_multi_bounce_last_2_long.
+  have hL := hinv.1
+  have hR := hinv.2.1
+  have ha : a ≥ 1 := (AllGe1_cons.mp hL).1
+  have hL' : AllGe1 L' := (AllGe1_cons.mp hL).2
+  have hR1 : AllGe1 ((r' + 3) :: e :: middle_init : List Nat) :=
+    AllGe1_of_append_left hR
+  have ⟨_, hR2⟩ := AllGe1_cons.mp hR1
+  have ⟨he, h_mi_All⟩ := AllGe1_cons.mp hR2
+  have h_mid : ∀ x ∈ ((e :: middle_init) ++ [1] : List Nat), x ≥ 1 := by
+    intro x hx
+    rcases List.mem_append.mp hx with hx | hx
+    · rcases List.mem_cons.mp hx with rfl | hx
+      · exact he
+      · exact AllGe1_mem h_mi_All hx
+    · rcases List.mem_singleton.mp hx with rfl
+      omega
+  -- Step 1: invoke macro_multi_bounce_general.
+  have h_in_eq : ((r' + 3) :: e :: middle_init ++ [1, 2] : List Nat) =
+      (r' + 3) :: ((e :: middle_init) ++ [1]) ++ [0 + 2] := by
+    simp [List.cons_append, List.append_assoc]
+  have h_mb_raw := macro_multi_bounce_general a r' 0 L' ((e :: middle_init) ++ [1]) h_mid
+  rw [← h_in_eq] at h_mb_raw
+  set L_after : List Nat :=
+    ((e :: middle_init) ++ [1]).reverse ++ (r' + 1) :: (a + 4) :: L' with hL_after_def
+  have h_L_after_ge1 : AllGe1 L_after := by
+    apply AllGe1_append
+    · apply AllGe1_reverse
+      apply AllGe1_append
+      · exact AllGe1_cons.mpr ⟨he, h_mi_All⟩
+      · exact AllGe1_singleton (by omega)
+    · exact AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL'⟩⟩
+  have h_L_after_nonone : ∃ x ∈ L_after, x ≥ 2 := by
+    refine ⟨a + 4, ?_, by omega⟩
+    apply List.mem_append.mpr; right
+    apply List.mem_cons.mpr; right
+    exact List.mem_cons_self
+  have h_L_after_has_5 : ∃ x ∈ L_after, x ≥ 5 := by
+    refine ⟨a + 4, ?_, by omega⟩
+    apply List.mem_append.mpr; right
+    apply List.mem_cons.mpr; right
+    exact List.mem_cons_self
+  -- Step 2: apply shift_to_macro_prog_excludes_R1.
+  obtain ⟨k_shift, cfg', hk_shift, hcfg'_shift, hinv'_shift, h_safe⟩ :=
+    shift_to_macro_prog_excludes_R1 L_after [1]
+      (List.cons_ne_nil _ _)
+      (AllGe1_singleton (by omega))
+      h_L_after_ge1 h_L_after_nonone h_L_after_has_5
+  -- Step 3: combine.
+  obtain ⟨k_mb, h_mb⟩ : ∃ k_mb, run sweeper
+      (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k_mb =
+        M_Config L_after (0 + 1) [1] :=
+    ⟨_, h_mb_raw⟩
+  refine ⟨k_mb + k_shift, cfg', by omega, ?_, hinv'_shift, h_safe⟩
+  rw [run_add, h_mb]; exact hcfg'_shift
+
 end Sweeper

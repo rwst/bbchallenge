@@ -447,24 +447,91 @@ theorem macroEra_sound (fuel : Nat) (cfg : MacroConfig) (hinv : MacroInvariant c
 -- replacing the remaining reachability axioms with structural derivations.
 -- ============================================================
 
-/-- Inductive predicate: macro configurations reachable from the orbit's initial
-    state `M([1], 4, [1])` by either a `macroStep` transition or any
-    macro-progress raw TM run. The two-constructor form makes this a
-    SUPERSET of the actual orbit-reachable set:
-    - `step_macro` covers `macroStep`-handled transitions (sweeps, era_complete,
-      single-element zero-bounce, etc.) — supports backward analysis.
-    - `step_run` covers any raw TM transition reaching a valid macro config —
-      captures multi-bounce paths that `macroStep` returns `none` for.
+/-- Inductive predicate: macro configurations reachable from the orbit's
+    initial state `M([1], 4, [1])`. Each constructor encodes one specific
+    macro rule's input/output relation:
+    - `init`: the orbit's start.
+    - `step_macro`: any `macroStep`-handled transition (single-step rules:
+      sweep variants, era_and_sweep, zero_*, etc.).
+    - `step_multi_bounce_*`: each multi-bounce theorem in `machine.lean` /
+      `forward_dynamics.lean` has its own constructor with the input shape
+      and output shape baked in.
+    - `step_R3`: the existential-output case of `thm_reach_multi_bounce_last_2_long`
+      (output via `shift_to_macro_prog`); takes the witness cfg' as a
+      parameter, plus the corresponding raw-TM run.
 
-    The first multi-bounce fires at macro step 23 (M0([2], [6, 6, 2])); without
-    `step_run`, OrbitReachable would miss configs reached via multi-bounce. -/
+    This explicit-constructor form replaces the older permissive `step_run`
+    catch-all and makes induction tractable: each constructor's case in a
+    proof reduces to checking the structural shape of that rule's output. -/
 inductive OrbitReachable : MacroConfig → Prop where
   | init : OrbitReachable (.M [1] 4 [1])
   | step_macro {cfg cfg' : MacroConfig} {k : Nat} :
       OrbitReachable cfg → macroStep cfg = some (k, cfg') → OrbitReachable cfg'
-  | step_run {cfg cfg' : MacroConfig} {k : Nat} :
-      OrbitReachable cfg →
-      run sweeper cfg.toConfig k = cfg'.toConfig →
+  -- Multi-bounce, last ≥ 3 case: produces M with R = [1].
+  | step_multi_bounce_general
+      {a r' last'' : Nat} {L' R_mid : List Nat} :
+      OrbitReachable (.M0 (a :: L') ((r' + 3) :: R_mid ++ [last'' + 3])) →
+      OrbitReachable
+        (.M (R_mid.reverse ++ (r' + 1) :: (a + 4) :: L') (last'' + 2) [1])
+  -- Multi-bounce, last = 1 case: produces M0 with R = [1].
+  | step_multi_bounce_general_to_zero
+      {a r' : Nat} {L' R_mid : List Nat} :
+      OrbitReachable (.M0 (a :: L') ((r' + 3) :: R_mid ++ [1])) →
+      OrbitReachable
+        (.M0 (R_mid.reverse ++ (r' + 1) :: (a + 4) :: L') [1])
+  -- Multi-bounce, last = 2, two-run case (R_mid = [], r ≥ 1).
+  | step_multi_bounce_2_and_shift
+      {a r : Nat} {L' : List Nat} :
+      OrbitReachable (.M0 (a :: L') [r + 4, 2]) →
+      OrbitReachable (.M ((a + 4) :: L') (r + 2) [1, 1])
+  -- Multi-bounce, last = 2, R = [3, 2] case.
+  | step_multi_bounce_2_double_shift
+      {a : Nat} {L' : List Nat} :
+      OrbitReachable (.M0 (a :: L') [3, 2]) →
+      OrbitReachable (.M L' (a + 4) [1, 1, 1])
+  -- Multi-bounce, last = 2, 3-run case with middle ≥ 2.
+  | step_multi_bounce_3run_last_2
+      {a r' e : Nat} {L' : List Nat} :
+      OrbitReachable (.M0 (a :: L') [r' + 3, e + 2, 2]) →
+      OrbitReachable (.M ((r' + 1) :: (a + 4) :: L') (e + 2) [1, 1])
+  -- Multi-bounce, last = 2, general middle case.
+  | step_multi_bounce_last_2_general
+      {a r' m_last : Nat} {L' middle_init : List Nat} :
+      OrbitReachable
+        (.M0 (a :: L') ((r' + 3) :: middle_init ++ [m_last + 2, 2])) →
+      OrbitReachable
+        (.M (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L')
+            (m_last + 2) [1, 1])
+  -- R2: thm_reach_multi_bounce_last_2_mid_1, r' = 0 case.
+  | step_R2_zero {a : Nat} {L' : List Nat} :
+      OrbitReachable (.M0 (a :: L') [3, 1, 2]) →
+      OrbitReachable (.M L' (a + 4) [1, 1, 1, 1])
+  -- R2: thm_reach_multi_bounce_last_2_mid_1, r' = r + 1 case.
+  | step_R2_succ {a r : Nat} {L' : List Nat} :
+      OrbitReachable (.M0 (a :: L') [r + 4, 1, 2]) →
+      OrbitReachable (.M ((a + 4) :: L') (r + 2) [1, 1, 1])
+  -- R3: thm_reach_multi_bounce_last_2_long. Output is via shift_to_macro_prog
+  -- and depends on L' / middle_init's structure; takes cfg' as parameter.
+  -- Includes a `safe` precondition: cfg' is never `M([], 3, R)`. This is
+  -- discharged in `orbit_progress` via `shift_to_macro_prog_excludes_R1`,
+  -- since `L_after` always contains `a + 4 ≥ 5`.
+  | step_R3 {a r' e : Nat} {L' middle_init : List Nat}
+      {cfg' : MacroConfig} {k : Nat} :
+      OrbitReachable (.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) →
+      run sweeper
+        (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k =
+        cfg'.toConfig →
+      MacroInvariant cfg' →
+      0 < k →
+      (∀ R, cfg' ≠ .M [] 3 R) →
+      OrbitReachable cfg'
+  -- R1: reach_M_nil_3 axiom output. The predecessor `M([], 3, d :: R')` is
+  -- itself the unreachable shape, so this constructor's case vacuously closes
+  -- in any OrbitReachable.not_M_empty_3 induction (the predecessor's IH gives
+  -- direct contradiction).
+  | step_R1 {d : Nat} {R' : List Nat} {cfg' : MacroConfig} {k : Nat} :
+      OrbitReachable (.M [] 3 (d :: R')) →
+      run sweeper (M_Config [] 3 (d :: R')) k = cfg'.toConfig →
       MacroInvariant cfg' →
       0 < k →
       OrbitReachable cfg'
@@ -475,7 +542,24 @@ theorem OrbitReachable.macroInvariant {cfg : MacroConfig} (h : OrbitReachable cf
   induction h with
   | init => exact invariant_initial
   | step_macro h_prev h_step ih => exact (macroStep_sound _ _ _ h_step ih).2.1
-  | step_run _ _ hinv' _ _ => exact hinv'
+  | step_multi_bounce_general _ ih =>
+      exact invariant_multi_bounce_general ih
+  | step_multi_bounce_general_to_zero _ ih =>
+      exact invariant_multi_bounce_general_to_zero ih
+  | step_multi_bounce_2_and_shift _ ih =>
+      exact invariant_multi_bounce_2_and_shift ih
+  | step_multi_bounce_2_double_shift _ ih =>
+      exact invariant_multi_bounce_2_double_shift ih
+  | step_multi_bounce_3run_last_2 _ ih =>
+      exact invariant_multi_bounce_3run_last_2 ih
+  | step_multi_bounce_last_2_general _ ih =>
+      exact invariant_multi_bounce_last_2_general ih
+  | step_R2_zero _ ih =>
+      exact invariant_R2_zero ih
+  | step_R2_succ _ ih =>
+      exact invariant_R2_pos ih
+  | step_R3 _ _ hinv' _ _ _ => exact hinv'
+  | step_R1 _ _ hinv' _ _ => exact hinv'
 
 /-- Progress predicate using OrbitReachable. Stronger than MacroProg —
     additionally tracks that the macro state is reachable from the orbit's
@@ -562,21 +646,294 @@ theorem OrbitReachable.M_cursor_ge_2 {L R : List Nat} {c : Nat} {cfg : MacroConf
 -- F1+F2 simulator confirmed (0 occurrences in 51B raw steps).
 -- ============================================================
 
+/-- Helper: `OrbitReachable cfg` with `macroStep cfg = some (k, cfg')` lifts
+    to `OrbitProg`. -/
+private lemma orbit_progress_macroStep
+    {cfg cfg' : MacroConfig} {k : Nat}
+    (hreach : OrbitReachable cfg) (hstep : macroStep cfg = some (k, cfg'))
+    (hinv : MacroInvariant cfg) :
+    ∃ k', 0 < k' ∧ OrbitProg (run sweeper cfg.toConfig k') ∧
+      (run sweeper cfg.toConfig k').state ≠ none := by
+  obtain ⟨hrun, _hinv', hk⟩ := macroStep_sound cfg cfg' k hstep hinv
+  refine ⟨k, hk, ⟨cfg', hrun, OrbitReachable.step_macro hreach hstep⟩, ?_⟩
+  rw [hrun, MacroConfig.toConfig_state]
+  exact Option.some_ne_none _
+
+set_option maxHeartbeats 1600000 in
 /-- Orbit progress: every OrbitProg state runs to another OrbitProg state.
-    Built on top of `macro_progress` — the `step_run` constructor lifts a
-    macro_progress transition into OrbitReachable, capturing all transitions
-    (sweeps, multi-bounce, era_complete, etc.). -/
+    Dispatches by `cfg`'s shape and applies the matching `OrbitReachable`
+    constructor (`step_macro` for single-step rules, `step_multi_bounce_*` /
+    `step_R2_*` / `step_R3` for multi-bounce). -/
 theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
     ∃ k, 0 < k ∧ OrbitProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none := by
   obtain ⟨cfg, hc, hreach⟩ := h
-  obtain ⟨k, hk, hprog, hne⟩ := macro_progress c (OrbitProg.toMacroProg ⟨cfg, hc, hreach⟩)
-  refine ⟨k, hk, ?_, hne⟩
-  obtain ⟨cfg', hcfg', hinv'⟩ := hprog
-  refine ⟨cfg', hcfg', ?_⟩
-  -- Apply step_run constructor: cfg → cfg' via run k
-  refine OrbitReachable.step_run hreach ?_ hinv' hk
-  rw [hc] at hcfg'
-  exact hcfg'
+  have hinv := hreach.macroInvariant
+  subst hc
+  cases cfg with
+  | M L cur R =>
+    -- M-shape: every transition (except M([], 3, _) which is R1 axiom)
+    -- is via macroStep (sweep variants).
+    have hcur := hinv.2.1; have hR_ne := hinv.2.2.2
+    obtain ⟨d, R', rfl⟩ := List.exists_cons_of_ne_nil hR_ne
+    cases L with
+    | nil =>
+      match cur, hcur with
+      | 2, _ =>
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | 3, _ =>
+        -- R1 axiom case: lift via step_R1
+        simp only [MacroConfig.toConfig_M]
+        obtain ⟨k, hk, hprog, hne⟩ := reach_M_nil_3 hinv
+        obtain ⟨cfg', hcfg', hinv'⟩ := hprog
+        refine ⟨k, hk, ⟨cfg', hcfg', ?_⟩, hne⟩
+        exact OrbitReachable.step_R1 hreach hcfg' hinv' hk
+      | c' + 4, _ =>
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+    | cons a L' =>
+      match cur, hcur with
+      | 2, _ =>
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | 3, _ =>
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | c' + 4, _ =>
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+  | M0 L R =>
+    have hL := hinv.1; have hR := hinv.2.1
+    have hL_ne := hinv.2.2.1; have hR_ne := hinv.2.2.2.1
+    have hNH := hinv.2.2.2.2
+    obtain ⟨a, L', rfl⟩ := List.exists_cons_of_ne_nil hL_ne
+    obtain ⟨r, R', rfl⟩ := List.exists_cons_of_ne_nil hR_ne
+    have ha := (AllGe1_cons.mp hL).1
+    have hr := (AllGe1_cons.mp hR).1
+    obtain ⟨a', rfl⟩ : ∃ a', a = a' + 1 := ⟨a - 1, by omega⟩
+    cases R' with
+    | nil =>
+      -- Single-element R: all macroStep cases
+      match r, hr with
+      | 1, _ =>
+        cases L' with
+        | nil => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+        | cons b L'' => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | 2, _ => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | 3, _ => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | 4, _ => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | r' + 5, _ => exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+    | cons d_inner R'' =>
+      have hr2 : r ≥ 2 := by
+        rcases Nat.lt_or_ge 2 (r + 1) with h | h
+        · omega
+        · have h1 : r = 1 := by omega
+          subst h1
+          have hd := (AllGe1_cons.mp (AllGe1_cons.mp hR).2).1
+          obtain ⟨d_inner', rfl⟩ : ∃ d', d_inner = d' + 1 := ⟨d_inner - 1, by omega⟩
+          exact absurd rfl (hNH d_inner' R'')
+      match r, hr2 with
+      | 2, _ =>
+        -- zero_two: macroStep handles this
+        exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
+      | r' + 3, _ =>
+        -- multi-bounce: dispatch by R structure
+        obtain ⟨R_mid, last, hdecomp⟩ := List.exists_append_singleton d_inner R''
+        rw [hdecomp] at hinv hR hreach ⊢
+        have hR_mid_ge : ∀ x ∈ R_mid, x ≥ 1 :=
+          fun x hx => AllGe1_mem (AllGe1_of_append_left (AllGe1_cons.mp hR).2) hx
+        have hlast_ge : last ≥ 1 :=
+          (AllGe1_cons.mp (AllGe1_of_append_right (AllGe1_cons.mp hR).2)).1
+        obtain ⟨last', rfl⟩ : ∃ l', last = l' + 1 := ⟨last - 1, by omega⟩
+        match last' with
+        | 0 =>
+          -- last = 1: multi_bounce_general_to_zero
+          have ht := macro_multi_bounce_general_to_zero (a' + 1) r' L' R_mid hR_mid_ge
+          have hreach' := OrbitReachable.step_multi_bounce_general_to_zero (a := a' + 1)
+            (r' := r') (L' := L') (R_mid := R_mid) hreach
+          have hk_pos : 0 < r' + 3 * R_mid.length + R_mid.sum + 16 := by omega
+          refine ⟨r' + 3 * R_mid.length + R_mid.sum + 16, hk_pos,
+                  ⟨.M0 (R_mid.reverse ++ (r' + 1) :: (a' + 1 + 4) :: L') [1], ?_, hreach'⟩, ?_⟩
+          · simp only [MacroConfig.toConfig_M0]; exact ht
+          · simp only [MacroConfig.toConfig_M0]
+            exact ht ▸ M0_Config_state_ne_none _ _
+        | 1 =>
+          -- last = 2: case-split on R_mid
+          cases R_mid with
+          | nil =>
+            -- R = [r'+3, 2]
+            match r' with
+            | 0 =>
+              -- R = [3, 2]: multi_bounce_2_double_shift
+              have ht := macro_multi_bounce_2_double_shift (a' + 1) L'
+              have hreach' : OrbitReachable (.M L' (a' + 1 + 4) [1, 1, 1]) :=
+                OrbitReachable.step_multi_bounce_2_double_shift
+                  (a := a' + 1) (L' := L') hreach
+              refine ⟨29, by omega,
+                      ⟨.M L' (a' + 1 + 4) [1, 1, 1], ?_, hreach'⟩, ?_⟩
+              · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                exact ht
+              · simp only [MacroConfig.toConfig_M0]
+                exact ht ▸ M_Config_state_ne_none _ _ _
+            | r'' + 1 =>
+              -- R = [r''+4, 2]: multi_bounce_2_and_shift
+              -- Normalize the input shape `(r''+1+3) :: ([] ++ [0+1+1])` to `[r''+4, 2]`.
+              have heq1 : r'' + 1 + 3 = r'' + 4 := by omega
+              rw [heq1] at hinv hreach
+              have ht := macro_multi_bounce_2_and_shift (a' + 1) r'' L'
+              have hreach' : OrbitReachable (.M ((a' + 1 + 4) :: L') (r'' + 2) [1, 1]) :=
+                OrbitReachable.step_multi_bounce_2_and_shift
+                  (a := a' + 1) (r := r'') (L' := L') hreach
+              refine ⟨r'' + 24, by omega,
+                      ⟨.M ((a' + 1 + 4) :: L') (r'' + 2) [1, 1], ?_, hreach'⟩, ?_⟩
+              · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                exact ht
+              · simp only [MacroConfig.toConfig_M0]
+                exact ht ▸ M_Config_state_ne_none _ _ _
+          | cons e R_mid' =>
+            cases R_mid' with
+            | nil =>
+              -- R = [r'+3, e, 2]: 3-run case
+              have he : e ≥ 1 := hR_mid_ge e (List.mem_cons_self)
+              obtain ⟨e', rfl⟩ : ∃ e', e = e' + 1 := ⟨e - 1, by omega⟩
+              cases e' with
+              | zero =>
+                -- e = 1: R2 closure. Dispatch on r' for the two cfg' shapes.
+                match r' with
+                | 0 =>
+                  -- R = [3, 1, 2]: bridge_R2_zero
+                  have ht := bridge_R2_zero (a' + 1) L'
+                  have hreach' : OrbitReachable (.M L' (a' + 1 + 4) [1, 1, 1, 1]) :=
+                    OrbitReachable.step_R2_zero (a := a' + 1) (L' := L') hreach
+                  refine ⟨39, by omega,
+                          ⟨.M L' (a' + 1 + 4) [1, 1, 1, 1], ?_, hreach'⟩, ?_⟩
+                  · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                    exact ht
+                  · simp only [MacroConfig.toConfig_M0]
+                    exact ht ▸ M_Config_state_ne_none _ _ _
+                | r'' + 1 =>
+                  -- R = [r''+4, 1, 2]: bridge_R2_pos
+                  have heq1 : r'' + 1 + 3 = r'' + 4 := by omega
+                  rw [heq1] at hinv hreach
+                  have ht := bridge_R2_pos (a' + 1) r'' L'
+                  have hreach' : OrbitReachable (.M ((a' + 1 + 4) :: L') (r'' + 2) [1, 1, 1]) :=
+                    OrbitReachable.step_R2_succ (a := a' + 1) (r := r'') (L' := L') hreach
+                  refine ⟨r'' + 34, by omega,
+                          ⟨.M ((a' + 1 + 4) :: L') (r'' + 2) [1, 1, 1], ?_, hreach'⟩, ?_⟩
+                  · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                    exact ht
+                  · simp only [MacroConfig.toConfig_M0]
+                    exact ht ▸ M_Config_state_ne_none _ _ _
+              | succ e'' =>
+                -- e ≥ 2: multi_bounce_3run_last_2
+                have ht := macro_multi_bounce_3run_last_2 (a' + 1) r' e'' L'
+                have hreach' : OrbitReachable
+                    (.M ((r' + 1) :: (a' + 1 + 4) :: L') (e'' + 2) [1, 1]) :=
+                  OrbitReachable.step_multi_bounce_3run_last_2
+                    (a := a' + 1) (r' := r') (e := e'') (L' := L') hreach
+                refine ⟨r' + 3 * 1 + (e'' + 2) + 17 + 6, by omega,
+                        ⟨.M ((r' + 1) :: (a' + 1 + 4) :: L') (e'' + 2) [1, 1], ?_, hreach'⟩, ?_⟩
+                · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                  exact ht
+                · simp only [MacroConfig.toConfig_M0]
+                  exact ht ▸ M_Config_state_ne_none _ _ _
+            | cons f rest =>
+              -- R has middle ≥ 2 elements
+              obtain ⟨middle_init', last_inner, hdecomp_inner⟩ :=
+                List.exists_append_singleton f rest
+              have h_last_inner_ge : last_inner ≥ 1 := by
+                have h_in : last_inner ∈ (f :: rest) := by
+                  rw [hdecomp_inner]; exact List.mem_append.mpr (Or.inr List.mem_cons_self)
+                exact hR_mid_ge last_inner (List.mem_cons_of_mem e h_in)
+              match last_inner, h_last_inner_ge with
+              | 1, _ =>
+                -- Last middle = 1: R3 closure with safety via
+                -- thm_reach_multi_bounce_last_2_long_safe.
+                have h_input_eq :
+                    ((r' + 3) :: (e :: f :: rest ++ [0 + 1 + 1]) : List Nat) =
+                    (r' + 3) :: e :: middle_init' ++ [1, 2] := by
+                  rw [hdecomp_inner]; simp [List.cons_append, List.append_assoc]
+                have hinv_new : MacroInvariant
+                    (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
+                      ((r' + 3) :: e :: middle_init' ++ [1, 2] : List Nat)) := by
+                  rw [← h_input_eq]; exact hinv
+                have hreach_new : OrbitReachable
+                    (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
+                      ((r' + 3) :: e :: middle_init' ++ [1, 2] : List Nat)) := by
+                  rw [← h_input_eq]; exact hreach
+                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe⟩ :=
+                  thm_reach_multi_bounce_last_2_long_safe hinv_new
+                have hreach' : OrbitReachable cfg' :=
+                  OrbitReachable.step_R3 (a := a' + 1) (r' := r') (e := e)
+                    (L' := L') (middle_init := middle_init') (cfg' := cfg') (k := k)
+                    hreach_new hcfg' hinv' hk h_safe
+                refine ⟨k, hk, ⟨cfg', ?_, hreach'⟩, ?_⟩
+                · simp only [MacroConfig.toConfig_M0]
+                  rw [h_input_eq]
+                  exact hcfg'
+                · simp only [MacroConfig.toConfig_M0]
+                  rw [h_input_eq, hcfg']
+                  exact MacroConfig.toConfig_state cfg' ▸ Option.some_ne_none _
+              | l + 2, _ =>
+                -- Last middle ≥ 2: multi_bounce_last_2_general
+                have h_input_eq :
+                    ((r' + 3) :: (e :: f :: rest ++ [0 + 1 + 1]) : List Nat) =
+                    (r' + 3) :: (e :: middle_init') ++ [l + 2, 2] := by
+                  rw [hdecomp_inner]; simp [List.cons_append, List.append_assoc]
+                have hinv_new : MacroInvariant
+                    (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
+                      ((r' + 3) :: (e :: middle_init') ++ [l + 2, 2] : List Nat)) := by
+                  rw [← h_input_eq]; exact hinv
+                have hreach_new : OrbitReachable
+                    (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
+                      ((r' + 3) :: (e :: middle_init') ++ [l + 2, 2] : List Nat)) := by
+                  rw [← h_input_eq]; exact hreach
+                have ht := macro_multi_bounce_last_2_general (a' + 1) r' l L'
+                  (e :: middle_init')
+                  (by
+                    intro x hx
+                    rcases List.mem_cons.mp hx with hx_e | hx_mid
+                    · subst hx_e
+                      exact hR_mid_ge x List.mem_cons_self
+                    · have hx_in : x ∈ (f :: rest) := by
+                        rw [hdecomp_inner]
+                        exact List.mem_append.mpr (Or.inl hx_mid)
+                      exact hR_mid_ge x (List.mem_cons_of_mem _ hx_in))
+                have hreach' : OrbitReachable
+                    (.M ((e :: middle_init').reverse ++ (r' + 1) :: (a' + 1 + 4) :: L')
+                      (l + 2) [1, 1]) :=
+                  OrbitReachable.step_multi_bounce_last_2_general
+                    (a := a' + 1) (r' := r') (m_last := l) (L' := L')
+                    (middle_init := e :: middle_init') hreach_new
+                refine ⟨r' + 3 * ((e :: middle_init').length + 1)
+                          + ((e :: middle_init').sum + (l + 2)) + 17 + 6, by omega,
+                        ⟨.M ((e :: middle_init').reverse ++
+                            (r' + 1) :: (a' + 1 + 4) :: L') (l + 2) [1, 1], ?_, hreach'⟩, ?_⟩
+                · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+                  rw [h_input_eq]
+                  exact ht
+                · simp only [MacroConfig.toConfig_M0]
+                  rw [h_input_eq]
+                  exact ht ▸ M_Config_state_ne_none _ _ _
+        | last'' + 2 =>
+          -- last ≥ 3: multi_bounce_general
+          have heq1 : last'' + 2 + 1 = last'' + 3 := by omega
+          rw [heq1] at hinv hreach
+          have ht := macro_multi_bounce_general (a' + 1) r' (last'' + 1) L' R_mid hR_mid_ge
+          have hreach' : OrbitReachable
+              (.M (R_mid.reverse ++ (r' + 1) :: (a' + 1 + 4) :: L') (last'' + 2) [1]) :=
+            OrbitReachable.step_multi_bounce_general
+              (a := a' + 1) (r' := r') (last'' := last'')
+              (L' := L') (R_mid := R_mid) hreach
+          have hk_pos : 0 < r' + (last'' + 1) + 3 * R_mid.length + R_mid.sum + 17 := by omega
+          refine ⟨r' + (last'' + 1) + 3 * R_mid.length + R_mid.sum + 17, hk_pos,
+                  ⟨.M (R_mid.reverse ++ (r' + 1) :: (a' + 1 + 4) :: L')
+                      (last'' + 2) [1], ?_, hreach'⟩, ?_⟩
+          · simp only [MacroConfig.toConfig_M0, MacroConfig.toConfig_M]
+            have heq2 : (last'' + 1) + 1 = last'' + 2 := by omega
+            have heq3 : (last'' + 1) + 2 = last'' + 3 := by omega
+            rw [heq3] at ht
+            rw [← heq2]; exact ht
+          · simp only [MacroConfig.toConfig_M0]
+            have heq2 : (last'' + 1) + 1 = last'' + 2 := by omega
+            have heq3 : (last'' + 1) + 2 = last'' + 3 := by omega
+            rw [heq3] at ht
+            exact ht ▸ M_Config_state_ne_none _ _ _
 
 /-- Progress predicate for the era-based approach. Currently defined as `MacroProg`
     but structured to allow future refinement. -/

@@ -372,3 +372,274 @@ endpoint. Strategy B is the recommended path.
 
 Closing R1 is open work; today's contribution was scope clarification
 and empirical evidence for the structural claim.
+
+## 2026-04-30: Strategy B foundations — `era.lean`
+
+A new `era.lean` file has been added under the `Sweeper` library in
+`lakefile.toml`. It builds clean and axiom-hygienic
+(`#print axioms` returns only `[propext]` or `[propext, Quot.sound]`).
+
+Contents:
+
+- **`EraStartConfig`** structure: `L : List Nat`, `c : Nat`, with
+  proofs `L ≠ []`, `AllGe1 L`, `c ≥ 4`. Plus `toMacro`,
+  `macroInvariant`, `init` (the initial state `M([1], 4, [1])`).
+- **Intra-era sweep preservation** (c ≥ 4 case):
+  - `macroStep_M_sweep_cons_preserves_L_ne_nil`
+  - `macroStep_M_sweep_left_empty_produces_one`
+  - `macroStep_M_intra_era_preserves_L_ne_nil` (combined: any `c ≥ 4`
+    transition from `M(L, c, R)` produces M with non-empty L).
+- **Era-exit transitions** (c ∈ {2, 3}):
+  - `macroStep_M_c2_output`: `M(a::L', 2, d::R')` → `M0((a+1)::L', (d+1)::R')`.
+  - `macroStep_M_c3_output`: `M(a::L', 3, d::R')` → `M(L', a+1, 1::(d+1)::R')`.
+  - `macroStep_M_c3_L_ge2_preserves_L_ne_nil`: at `c = 3` with `|L| ≥ 2`,
+    output L still non-empty.
+  - `macroStep_M_c3_L_singleton_drains`: at `c = 3` with `|L| = 1`, output
+    has L = [] — this is the unique L-shrinking step in the orbit.
+- **Iterated sweep**: `sweep_iter_M_cons_output` —
+  `n+1` consecutive sweeps from `M(a::L', c+4+2n, d::R')` reach
+  `M((a+n+1)::L', c+2, (d+n+1)::R')` (proved by induction on n).
+- **Era boundary M0 → era-start**:
+  - `macroStep_M0_era_and_sweep_output`,
+    `macroStep_M0_era_and_sweep_solo_output`.
+  - `macroStep_M0_R1_produces_era_start`: any `M0(L, [1])` step (under
+    AllGe1 + non-empty preconditions) produces an `EraStartConfig`.
+
+### IntraEra defined and partial structural exclusion proved (2026-04-30)
+
+`era.lean` now contains:
+
+- **`IntraEra : MacroConfig → Prop`** — inductive predicate, two
+  constructors:
+  - `era_start (e : EraStartConfig) : IntraEra e.toMacro`
+  - `step_within` — closure under `macroStep` excluding outputs of
+    shape `M(_, _, [1])` (next era-start).
+- **Basic facts**:
+  - `IntraEra.macroInvariant`, `IntraEra.M_R_one_is_era_start`,
+    `IntraEra.M_R_one_constraints`, `IntraEra.init`.
+- **Single-element-R structural exclusion**:
+  - `macroStep_no_M_empty_3_single`: no `macroStep` from any
+    `MacroInvariant`-respecting input produces output `M([], 3, [d])`.
+    Exhaustive case analysis on M and M0 dispatch trees.
+  - `IntraEra.not_M_empty_3_single`: no `IntraEra` config has shape
+    `M([], 3, [d])` for any d.
+
+### Why the full exclusion is not provable from `IntraEra` alone
+
+The full goal `IntraEra cfg → cfg ≠ M([], 3, R)` for arbitrary R is
+**false**. Counterexample: from era-start `M([1], 5, [1])` (a valid
+`EraStartConfig`):
+```
+M([1], 5, [1]) →[sweep]   M([2], 3, [2])
+              →[sweep_and_shift]   M([], 3, [1, 3])   ← R1 shape
+```
+So R1 with `R = [1, 3]` (length ≥ 2) IS reachable from a structurally
+valid era-start. Excluding this requires proving `M([1], 5, [1])` is
+not orbit-reachable — which is exactly the cascade-style analysis
+that Strategy A attempted.
+
+### 2026-04-30 (cont.): Approach 2 partial lift — `OrbitReachable.not_M_empty_3_single`
+
+`era.lean` now also contains a partial lifting toward
+`OrbitReachable.not_R1`:
+
+- `init_ne_M_empty_3_single`: `M([1], 4, [1]) ≠ M([], 3, [d])`
+  (trivial).
+- `OrbitReachable.not_M_empty_3_single`: induction on `OrbitReachable`:
+  - `init` case ✓ (via `init_ne_M_empty_3_single`).
+  - `step_macro` case ✓ (via `macroStep_no_M_empty_3_single`).
+  - `step_run` case ⚠️ **`sorry`** — see analysis below.
+
+### The step_run obstacle (the heart of Strategy B's wall)
+
+The induction case for `OrbitReachable.step_run` requires showing that
+no raw-TM run from any orbit-reachable predecessor reaches
+`M([], 3, [d])`. The inductive predicate's `step_run` constructor is
+permissive:
+
+```lean
+| step_run {cfg cfg' : MacroConfig} {k : Nat} :
+    OrbitReachable cfg →
+    run sweeper cfg.toConfig k = cfg'.toConfig →
+    MacroInvariant cfg' →
+    0 < k →
+    OrbitReachable cfg'
+```
+
+It allows arbitrary raw TM runs subject only to `MacroInvariant` on the
+output — which `M([], 3, [d])` trivially satisfies. So the inductive
+predicate **does not rule out** R1 shapes via its constructor logic
+alone. Closing this case requires equivalent of the original R1
+unreachability claim — no shortcut.
+
+### Two paths forward (both nontrivial)
+
+**Path α (refactor `OrbitReachable`)**. Replace `step_run` with explicit
+constructors for each multi-bounce theorem (`macro_multi_bounce_2`,
+`macro_multi_bounce_general`, etc.). Each produces specific output
+shapes that can be enumerated and checked. Approximately 8 new
+constructors; downstream proof obligations (`orbit_progress`,
+`sweeper_never_halts`) need re-wiring.
+
+**Path β (cascade through `phase2.lean`)**. Continue extending the
+backward cascade in `phase2.lean` (Layers 5+) until it converges. Per
+the empirical Layer 5–6 audit, the cascade tracks the Mersenne-style
+predecessor sequence and is open-ended. May require ad-hoc structural
+invariants per layer.
+
+Both paths are multi-week. The empirical 0-firing data over
+6.2 × 10¹⁶ raw steps is overwhelming evidence the structural claim
+holds; the formal proof is the bottleneck.
+
+#### Path α scoping discoveries (2026-04-30 prototype)
+
+A prototype attempt revealed the scope is heavier than initially
+estimated:
+
+1. **`orbit_progress` rewrite**: `macro_progress`'s case dispatch (~150
+   lines) must be duplicated to apply the new constructors. This is
+   because `macro_progress` returns existentials over `(k, cfg', inv)`
+   without exposing which case fired.
+2. **Multi-bounce wrapper existentials**: lemmas like
+   `multi_bounce_progress` return `∃ k, … MacroProg …` rather than
+   specific `(k, cfg')` pairs. Using them with new constructors
+   requires unwrapping the existentials and matching against the
+   constructor's output shape — a non-trivial `MacroConfig.toConfig`
+   injectivity argument.
+3. **The R3 obstacle remains**:
+   `thm_reach_multi_bounce_last_2_long`'s output is computed via
+   `shift_to_macro_prog`'s recursion (cursor + L depend on L_after's
+   structure). Even with an `step_R3` constructor parameterized by
+   `cfg'`, the lifting case for it retains the same fundamental issue
+   step_run had — the constructor accepts arbitrary cfg' subject to
+   the run equation, so the "no R1 in cfg'" claim still requires raw
+   TM analysis.
+
+   *Mitigation*: by my structural analysis, `L_after` always contains
+   `(a+4) ≥ 5` somewhere, and `shift_to_macro_prog` stops at that
+   element, leaving cfg'.L non-empty. So even step_R3's output is
+   provably ≠ M([], 3, _) — but this requires a separate
+   `shift_to_macro_prog` analysis lemma (not the constructor).
+
+**Estimated effort**: full refactor + induction-update is 1–2 days of
+focused work, not the few hours initially budgeted. Tracked as future
+work; the prototype was reverted to keep `progress.lean` stable.
+
+### 2026-04-30 (cont.): Shift-output structural lemma — preparatory work
+
+`era.lean` now contains two new theorems that resolve the structural
+analysis blocker for the R3 case noted above:
+
+- **`shift_to_macro_prog_strong`** — strengthened version of
+  `shift_to_macro_prog`. Exposes the output's explicit structure:
+  splits `L = L_pre ++ v :: L_suf` where `L_pre` is all 1s, `v ≥ 2`,
+  and proves the raw-TM run reaches exactly `M_Config L_suf v R_out`
+  for some `R_out`. Proof by induction on `L`, mirroring the original.
+- **`shift_to_macro_prog_excludes_R1`** — corollary: if additionally
+  `L` contains an element `x ≥ 5`, then the output cfg' is never
+  `M([], 3, R)` for any `R`. This is exactly the precondition that
+  holds for `thm_reach_multi_bounce_last_2_long`'s `L_after`
+  (`= ((e :: middle_init) ++ [1]).reverse ++ (r' + 1) :: (a + 4) :: L'`,
+  which contains `a + 4 ≥ 5`).
+
+Axiom-clean (only `propext`, `Classical.choice`, `Quot.sound`).
+
+**Why this is preparatory rather than terminal**: the lemma resolves
+the structural side of the R3 obstacle, but applying it requires the
+Path α refactor (replacing `step_run` with explicit constructors).
+With those constructors in place, the step_R3 case in
+`OrbitReachable.not_R1` becomes a direct application of
+`shift_to_macro_prog_excludes_R1`. Without the refactor, the lemma is
+a clean tool waiting for its consumer.
+
+### 2026-04-30 (cont.): Path α refactor completed
+
+`OrbitReachable` has been refactored. `step_run` is gone, replaced by
+9 explicit constructors:
+
+- `init`, `step_macro` (single-step rules via `macroStep`).
+- `step_multi_bounce_general`, `step_multi_bounce_general_to_zero`,
+  `step_multi_bounce_2_and_shift`, `step_multi_bounce_2_double_shift`,
+  `step_multi_bounce_3run_last_2`,
+  `step_multi_bounce_last_2_general`,
+  `step_R2_zero`, `step_R2_succ` (specific outputs from each
+  multi-bounce theorem in `machine.lean` / `forward_dynamics.lean`).
+- `step_R3` (parameterized cfg' for the existential output of
+  `thm_reach_multi_bounce_last_2_long`).
+- `step_R1` (parameterized cfg' wrapping `reach_M_nil_3` axiom; will
+  be eliminated when the axiom is closed).
+
+`OrbitReachable.macroInvariant` updated (each new constructor's case
+uses the corresponding `invariant_*` theorem). `orbit_progress`
+rewritten to dispatch by config shape and apply specific constructors
+(~280 lines, replaces the previous 12-line wrapper around
+`macro_progress`).
+
+### Lift theorem `OrbitReachable.not_M_empty_3`
+
+`era.lean` now has a much stronger lift: `∀ R, cfg ≠ M([], 3, R)`.
+With explicit constructors, the induction has 11 cases. Closed cases
+(8 of 11):
+
+- `init` — trivial.
+- `step_multi_bounce_general` — output L has cons-form, never `[]`.
+- `step_multi_bounce_general_to_zero` — output kind is M0, not M.
+- `step_multi_bounce_2_and_shift`, `step_multi_bounce_3run_last_2`,
+  `step_R2_succ` — output L = `(... + 4) :: ...`, non-empty.
+- `step_multi_bounce_last_2_general` — output L is append with
+  non-empty right.
+- `step_multi_bounce_2_double_shift`, `step_R2_zero` — output cursor
+  is `a + 4 ≥ 5 ≠ 3` (uses predecessor's `MacroInvariant.AllGe1`).
+- `step_R1` — predecessor IS `M([], 3, d :: R')`; IH on the broader
+  predicate gives direct contradiction.
+
+Remaining sorry (1 of 11):
+
+- `step_macro` for `R` of length ≥ 2: cascade analysis — sweep_and_shift
+  on `M([2], 3, _)` produces `M([], 3, [1, ...])`. Needs phase2.lean's
+  Layer 0+ predecessor enumeration to prove `OrbitReachable.not_M_2_3`.
+
+**`step_R3` closed (2026-04-30)**: the `step_R3` constructor was
+augmented with a baked-in safety precondition `∀ R, cfg' ≠ M([], 3, R)`.
+`orbit_progress` discharges this via the new
+`thm_reach_multi_bounce_last_2_long_safe` (in `forward_dynamics.lean`),
+which uses `shift_to_macro_prog_excludes_R1` to certify the safety from
+`L_after`'s structural `a + 4 ≥ 5` element. The lift's `step_R3` case
+now reduces to one line: `exact h_safe`.
+
+`#print axioms OrbitReachable.not_M_empty_3` shows
+`[propext, sorryAx, Classical.choice, Quot.sound]` — only the two
+documented sorries remain. `orbit_progress` itself uses `reach_M_nil_3`
+(unchanged; this axiom is the very thing we're trying to close).
+
+### Next steps to close R1
+
+1. Resolve the `step_R3` sorry: prove via determinism that the
+   parameterized witness in `step_R3` matches `shift_to_macro_prog`'s
+   witness, then apply `shift_to_macro_prog_excludes_R1`.
+2. Resolve the `step_macro` multi-R sorry: extend phase2.lean's cascade
+   enough to prove `OrbitReachable cfg → cfg ≠ M([2], 3, _)`. Then
+   sweep_and_shift on M([2], 3, _) is the unique macroStep producer of
+   M([], 3, R) (multi-R), and the cascade hits the same issue at
+   M([2], 3, _) ← M([1], 5, _) ← M0([2], [1]) — bounded by phase2's
+   existing Layer 4–5 work.
+3. Once both close, the lift gives `OrbitReachable.not_M_empty_3` with
+   no sorries. Then `step_R1` is provably never instantiated, so its
+   constructor is "live but unreachable." Replace `reach_M_nil_3` axiom
+   with `absurd hreach OrbitReachable.not_M_empty_3` in
+   `orbit_progress`'s M([], 3, _) case, removing the axiom entirely.
+4. `#print axioms sweeper_never_halts` then yields only standard
+   `propext, Classical.choice, Quot.sound`.
+
+### Multi-element-R case (the remaining bulk of R1)
+
+`IntraEra cfg → cfg ≠ M([], 3, [d, e, ...])` (R length ≥ 2) is **false**
+in general (counterexample `M([1], 5, [1]) → M([], 3, [1, 3])` per the
+audit above). It only becomes provable on the orbit-reachable subset.
+This is the same structural obstacle as the step_run case: it requires
+characterizing which era-start configs are actually orbit-reachable.
+
+### Wire-up (after both above are closed)
+
+Replace `reach_M_nil_3` axiom invocation in `progress.lean` line 58
+with `absurd hreach OrbitReachable.not_R1`.
