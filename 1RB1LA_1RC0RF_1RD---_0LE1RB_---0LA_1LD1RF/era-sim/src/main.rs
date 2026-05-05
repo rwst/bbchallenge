@@ -409,12 +409,168 @@ fn detect_macro(tape: &HashMap<i64, u8>, head: i64, state: u8, leftmost: i64, ri
     }
 }
 
+// === Family-scan mode ===
+//
+// For each n in [from, to], builds a synthetic era-start state S(n), runs
+// exactly one era from S(n), and emits a TSV pair `n a(n)` where a(n) is
+// `feature(end-state-of-the-era)`.  Intended as input for an external
+// recurrence-finder.  `--full-out` optionally dumps every feature column.
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Family { L, CEven, L1 }
+
+impl Family {
+    fn parse(s: &str) -> Self {
+        match s {
+            "L"  | "F1" => Family::L,
+            "C"  | "CEVEN" | "F2" => Family::CEven,
+            "L1" | "F3" => Family::L1,
+            other => panic!("unknown family `{}` (expected L|C|L1)", other),
+        }
+    }
+    // n >= 1 in every family; n=1 is the actual TM initial state for L and CEven.
+    fn build(self, n: u64) -> Macro {
+        match self {
+            Family::L     => Macro { kind: Kind::M, l: vec![n], c: 4,         r: vec![1] },
+            Family::CEven => Macro { kind: Kind::M, l: vec![1], c: 2 * n + 2, r: vec![1] },
+            Family::L1    => Macro { kind: Kind::M, l: vec![1, n], c: 4,      r: vec![1] },
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Feature { LHead, C, LSum, LLen, RHead, RLen }
+
+impl Feature {
+    fn parse(s: &str) -> Self {
+        match s {
+            "l_head" | "lhead" => Feature::LHead,
+            "c"                => Feature::C,
+            "l_sum"  | "lsum"  => Feature::LSum,
+            "l_len"  | "llen"  => Feature::LLen,
+            "r_head" | "rhead" => Feature::RHead,
+            "r_len"  | "rlen"  => Feature::RLen,
+            other => panic!("unknown feature `{}`", other),
+        }
+    }
+    fn extract(self, m: &Macro) -> u64 {
+        match self {
+            Feature::LHead => m.l.first().copied().unwrap_or(0),
+            Feature::C     => m.c,
+            Feature::LSum  => m.l.iter().sum(),
+            Feature::LLen  => m.l.len() as u64,
+            Feature::RHead => m.r.first().copied().unwrap_or(0),
+            Feature::RLen  => m.r.len() as u64,
+        }
+    }
+}
+
+// Outcome flag for the full-out log.
+enum EraOutcome { Ok, Halt, Stuck, Budget, BridgeFail }
+
+impl EraOutcome {
+    fn tag(&self) -> &'static str {
+        match self {
+            EraOutcome::Ok         => "ok",
+            EraOutcome::Halt       => "halt",
+            EraOutcome::Stuck      => "stuck",
+            EraOutcome::Budget     => "budget",
+            EraOutcome::BridgeFail => "bridge_fail",
+        }
+    }
+}
+
+fn run_one_era(mut m: Macro, max_macro: u64, bridge_budget: u64)
+    -> (EraOutcome, Macro, u64, u128)
+{
+    let mut macro_count: u64 = 0;
+    let mut raw_steps:  u128 = 0;
+    while macro_count < max_macro {
+        macro_count += 1;
+        match macro_step(&mut m) {
+            StepResult::Step(s, rule) => {
+                raw_steps += s as u128;
+                if rule == "era_and_sweep" || rule == "era_and_sweep_solo" {
+                    return (EraOutcome::Ok, m, macro_count, raw_steps);
+                }
+            }
+            StepResult::Axiom(_) => {
+                let (m_new, k, halted) = bridge_axiom(&m, bridge_budget);
+                raw_steps += k as u128;
+                if halted { return (EraOutcome::Halt, m, macro_count, raw_steps); }
+                match m_new {
+                    Some(mn) => m = mn,
+                    None     => return (EraOutcome::BridgeFail, m, macro_count, raw_steps),
+                }
+            }
+            StepResult::Halt     => return (EraOutcome::Halt,  m, macro_count, raw_steps),
+            StepResult::Stuck(_) => return (EraOutcome::Stuck, m, macro_count, raw_steps),
+        }
+    }
+    (EraOutcome::Budget, m, macro_count, raw_steps)
+}
+
+fn run_family(family: Family, feature: Feature, from: u64, to: u64,
+              out_path: Option<&str>, full_out_path: Option<&str>,
+              max_macro_per_era: u64, bridge_budget: u64)
+{
+    let stdout = std::io::stdout();
+    let mut out_fp: Box<dyn Write> = match out_path {
+        Some(p) => Box::new(BufWriter::new(File::create(p).expect("out"))),
+        None    => Box::new(BufWriter::new(stdout.lock())),
+    };
+    let mut full_fp = full_out_path.map(|p| BufWriter::new(File::create(p).expect("full-out")));
+    if let Some(fp) = full_fp.as_mut() {
+        writeln!(fp, "# n\toutcome\tkind\tl_head\tc\tl_sum\tl_len\tr_head\tr_len\tmacro_steps\traw_steps").unwrap();
+    }
+    let mut ok = 0u64;
+    let mut bad = 0u64;
+    for n in from..=to {
+        let start = family.build(n);
+        let (outcome, end, macro_steps, raw_steps) =
+            run_one_era(start, max_macro_per_era, bridge_budget);
+        let a_val = feature.extract(&end);
+        match outcome {
+            EraOutcome::Ok => {
+                writeln!(out_fp, "{} {}", n, a_val).unwrap();
+                ok += 1;
+            }
+            _ => {
+                eprintln!("# n={} outcome={} (skipped pair)", n, outcome.tag());
+                bad += 1;
+            }
+        }
+        if let Some(fp) = full_fp.as_mut() {
+            let kind_s = if end.kind == Kind::M { "M" } else { "M0" };
+            writeln!(fp, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                n, outcome.tag(), kind_s,
+                end.l.first().copied().unwrap_or(0), end.c,
+                end.l.iter().sum::<u64>(), end.l.len(),
+                end.r.first().copied().unwrap_or(0), end.r.len(),
+                macro_steps, raw_steps).unwrap();
+        }
+    }
+    out_fp.flush().unwrap();
+    if let Some(mut fp) = full_fp { fp.flush().unwrap(); }
+    eprintln!("=== family scan summary ===");
+    eprintln!("ok pairs: {}, skipped: {}", ok, bad);
+}
+
 struct Args {
     max_macro: u64,
     max_eras: Option<u64>,
     era_log: Option<String>,
     axiom_log: Option<String>,
     verbose: Option<u64>,
+    // family-scan mode
+    family: Option<Family>,
+    feature: Feature,
+    from: u64,
+    to: u64,
+    out: Option<String>,
+    full_out: Option<String>,
+    max_macro_per_era: u64,
+    bridge_budget: u64,
 }
 
 fn parse_args() -> Args {
@@ -423,6 +579,14 @@ fn parse_args() -> Args {
     let mut era_log: Option<String> = None;
     let mut axiom_log: Option<String> = None;
     let mut verbose: Option<u64> = None;
+    let mut family: Option<Family> = None;
+    let mut feature: Feature = Feature::LHead;
+    let mut from: u64 = 1;
+    let mut to:   u64 = 100;
+    let mut out: Option<String> = None;
+    let mut full_out: Option<String> = None;
+    let mut max_macro_per_era: u64 = 1_000_000;
+    let mut bridge_budget: u64 = 100_000_000;
 
     let argv: Vec<String> = std::env::args().collect();
     let mut i = 1;
@@ -433,11 +597,21 @@ fn parse_args() -> Args {
             "-e" | "--era-log" => { i += 1; era_log = Some(argv[i].clone()); }
             "-l" | "--log" => { i += 1; axiom_log = Some(argv[i].clone()); }
             "-v" | "--verbose" => { i += 1; verbose = Some(argv[i].parse().expect("-v")); }
+            "--scan" => { i += 1; family = Some(Family::parse(&argv[i])); }
+            "--feature" => { i += 1; feature = Feature::parse(&argv[i]); }
+            "--from" => { i += 1; from = argv[i].parse().expect("--from"); }
+            "--to" => { i += 1; to = argv[i].parse().expect("--to"); }
+            "--out" => { i += 1; out = Some(argv[i].clone()); }
+            "--full-out" => { i += 1; full_out = Some(argv[i].clone()); }
+            "--max-macro-per-era" => { i += 1; max_macro_per_era = argv[i].parse().expect("--max-macro-per-era"); }
+            "--bridge-budget" => { i += 1; bridge_budget = argv[i].parse().expect("--bridge-budget"); }
             other => panic!("unknown arg: {}", other),
         }
         i += 1;
     }
-    Args { max_macro, max_eras, era_log, axiom_log, verbose }
+    Args { max_macro, max_eras, era_log, axiom_log, verbose,
+           family, feature, from, to, out, full_out,
+           max_macro_per_era, bridge_budget }
 }
 
 fn write_era_record(fp: &mut BufWriter<File>, era: u64, macro_count: u64, raw_steps: u128, m: &Macro) {
@@ -490,6 +664,13 @@ fn classify_axiom(m: &Macro) -> (&'static str, String) {
 
 fn main() {
     let args = parse_args();
+
+    if let Some(family) = args.family {
+        run_family(family, args.feature, args.from, args.to,
+                   args.out.as_deref(), args.full_out.as_deref(),
+                   args.max_macro_per_era, args.bridge_budget);
+        return;
+    }
 
     let mut m = Macro { kind: Kind::M, l: vec![1], c: 4, r: vec![1] };
     let mut raw_steps: u128 = 43;

@@ -29,7 +29,7 @@ roots = ["Basics", "machine", "BackwardTrace", "Dio", "Probabilistic"]
 [[lean_lib]]
 name = "Sweeper"
 srcDir = "1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF"
-roots = ["machine", "forward_dynamics", "progress", "phase2", "era"]
+roots = ["machine", "phi", "forward_dynamics", "progress", "phi_progress", "phase2", "era", "phi_era", "conjectures"]
 
 [[lean_lib]]
 name = "Pillai"

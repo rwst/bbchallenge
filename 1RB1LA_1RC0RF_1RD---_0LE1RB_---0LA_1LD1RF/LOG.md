@@ -1,22 +1,291 @@
 # LOG: Sweeper TM `1RB1LA_1RC0RF_1RD---_0LE1RB_---0LA_1LD1RF`
 
-## Current state (2026-04-28)
+> **Status (2026-05-05)**: Build clean, 889 jobs. **1 axiom remains** (`reach_M_nil_3`, R1).
+> Φ tape-mass invariant pipeline complete (`phi.lean` + `phi_progress.lean` + `phi_era.lean`,
+> 433 lines, axiom-clean). R2 + R3-narrow closed via `forward_dynamics.lean` (2026-04-29).
+> Jump to [Current state](#current-state-2026-05-05) for details. Older sessions below are
+> chronological development history; the Phase 2 backward-cascade work for R2/R3 was
+> superseded by forward dynamics.
+
+## Plan: monotone tape-mass invariant `Φ := sum(L) + sum(R) + c` (2026-05-05)
+
+### Discovery
+
+Empirically, the quantity `sum(L) + c` is **strictly increasing** across every
+era boundary in `era_full.jsonl`:
+
+- 63 765 era boundaries; 63 764 adjacent pairs; **0 decreases, 0 ties**.
+- Range: `5` at era 0 (`M([1], 4, [1])`) → `2 126 841` at era 63 236 (`M([2 059 956], 66 885, [1])`).
+- The sub-sequence restricted to **supereras** (boundaries with `|L| = 1`,
+  184 of them) is also strictly increasing — same monotonicity, no exceptions.
+
+The empirical observation matters because all prior monotone-invariant attempts
+on this machine (Mersenne, RTailOkay, EraStartInv) failed. This is the first
+candidate that survives 60 K+ era boundaries without a single counterexample.
+
+### Per-rule analytical derivation
+
+`sum(L) + c` is **not** locally monotone (every sweep loses 1). The clean
+invariant is `Φ := sum(L) + sum(R) + c`, treating the M0 (0)-cursor as `c = 0`.
+Per-rule deltas, derived from `macro.txt` rule statements:
+
+| Rule | ΔΦ |
+|------|-----|
+| Sweep / SweepL / SweepR / SweepS | **0** (conserved) |
+| SweepE / SweepLE / SweepRE / SweepSE | **0** (conserved) |
+| Shift | **0** (conserved) |
+| Two / TwoS | **+2** |
+| Bounce / BounceE | **+2** |
+| Multi2 / Multi2E | **+2** |
+| MultiN / MultiNE | **+2** |
+| EraDone | **+4** |
+| Halt | excluded by `MacroInvariant.NoHaltPattern` |
+
+So Φ is monotone non-decreasing on every macro step and **strictly** increases
+on every M0-cursor rule and on EraDone. Each era contains exactly one EraDone
+(by definition), so Φ gains at least `+4` per era — matching the observed
+strict increase across consecutive era boundaries.
+
+For comparison, `sum(L) + c` per-rule:
+
+| Rule | Δ(sum L + c) |
+|------|--------------|
+| Sweep family (4 rules) | **−1** each |
+| SweepE family (4 rules) | **−1** each |
+| Shift | **−1** |
+| EraDone | **+5** |
+| Bounce | **z+5** ≥ 5 |
+| BounceE | **+4** |
+| Two / TwoS | **+3** |
+| Multi2 / Multi2E | **r+5..r+z+6** |
+| MultiN / MultiNE | **r+5+Σmᵢ..r+z+6+Σmᵢ** |
+
+`sum(L) + c` is monotone only across era boundaries (where R = [1] always, so
+Φ and `sum(L) + c` differ by a constant 1).
+
+### Spot-check trace (era 0 → era 1)
+
+```
+M([1], 4, [1])      Φ = 1 + 1 + 4 = 6
+  Sweep                                  Δ 0
+M([2], 2, [2])      Φ = 2 + 2 + 2 = 6
+  SweepE                                 Δ 0
+M0([3], [3])        Φ = 3 + 3 + 0 = 6
+  BounceE                                Δ +2
+M0([7], [1])        Φ = 7 + 1 + 0 = 8
+  EraDone                                Δ +4
+M([], 12, [])       Φ = 0 + 0 + 12 = 12
+  SweepS                                 Δ 0
+M([1], 10, [1])     Φ = 1 + 1 + 10 = 12
+```
+
+Empirical era 0 → era 1 delta: `12 − 6 = +6 = +2 + +4`. ✓
+
+### Formalization plan
+
+#### Step 1 — define Φ on `MacroConfig`
+
+Add to `machine.lean` next to the `MacroInvariant` definitions:
+
+```lean
+def MacroConfig.phi : MacroConfig → Nat
+  | .M  L c R => L.sum + R.sum + c
+  | .M0 L R   => L.sum + R.sum
+```
+
+Add `simp` lemmas: `phi_M`, `phi_M0`, `phi_toConfig` (the last only if useful).
+
+#### Step 2 — per-rule Φ-delta lemmas
+
+For each macro rule already proved as a `theorem` in `machine.lean`, add a
+companion lemma asserting the input/output Φ relationship. Each is a one-line
+`omega` or `simp` proof — the rule's transformation is already known.
+
+The 21 lemmas to add (mirroring the `macro.txt` index):
+
+| Rule | Lemma name | Body |
+|------|------------|------|
+| Sweep | `phi_macro_sweep` | `phi (M ((a+1) :: L_tail) (c+1) ((d+1) :: R_tail)) = phi (M (a :: L_tail) (c+3) (d :: R_tail))` |
+| SweepL | `phi_macro_sweep_left_empty` | conserves Φ |
+| SweepR | `phi_macro_sweep_right_empty` | conserves Φ |
+| SweepS | `phi_macro_sweep_solo` | conserves Φ |
+| SweepE | `phi_macro_sweep_to_zero` | conserves Φ |
+| SweepLE / SweepRE / SweepSE | (3 more) | conserves Φ |
+| Shift | `phi_macro_shift` | conserves Φ |
+| Two / TwoS | `phi_macro_zero_two{,_solo}` | Φ_out = Φ_in + 2 |
+| Bounce | `phi_macro_zero_bounce` | Φ_out = Φ_in + 2 |
+| BounceE | `phi_macro_zero_bounce_to_zero` | Φ_out = Φ_in + 2 |
+| Multi2 | `phi_macro_multi_bounce_2` | Φ_out = Φ_in + 2 |
+| Multi2E | `phi_macro_multi_bounce_2_to_zero` | Φ_out = Φ_in + 2 |
+| MultiN | `phi_macro_multi_bounce_general` | Φ_out = Φ_in + 2 |
+| MultiNE | `phi_macro_multi_bounce_general_to_zero` | Φ_out = Φ_in + 2 |
+| EraDone | `phi_macro_era_complete` | Φ_out = Φ_in + 4 |
+
+Each proof is mechanical: `simp [MacroConfig.phi, List.sum_cons, …]; omega`.
+Estimated cost: ~150 lines total.
+
+#### Step 3 — lift to `macroStep`
+
+Add a `macroStep`-level lemma to `progress.lean`:
+
+```lean
+theorem macroStep_phi_nondec (cfg cfg' : MacroConfig) (k : Nat)
+    (h : macroStep cfg = some (k, cfg')) :
+    cfg.phi ≤ cfg'.phi
+```
+
+Proof: case-split on `macroStep` (~25 cases via the existing `ms_simp` tactic);
+each case discharges with the corresponding Step-2 lemma.
+
+Strict-increase variant for the era-boundary jump:
+
+```lean
+theorem macroStep_phi_strict_at_era_complete
+    (cfg cfg' : MacroConfig) (k : Nat)
+    (h : macroStep cfg = some (k, cfg')) (h_era : <cfg has shape M0 _ [1]>) :
+    cfg.phi + 4 ≤ cfg'.phi
+```
+
+#### Step 4 — lift to raw `run sweeper`
+
+Companion:
+
+```lean
+theorem run_phi_nondec (n : Nat) (cfg : MacroConfig)
+    (hcfg : MacroProg cfg.toConfig) :
+    ∀ cfg', (∃ k, run sweeper cfg.toConfig k = cfg'.toConfig ∧ MacroProg cfg'.toConfig)
+            → cfg.phi ≤ cfg'.phi
+```
+
+This is induction on the macro chain via `macroStep_sound`.
+
+#### Step 5 — strict increase across era boundaries
+
+```lean
+theorem phi_strict_across_eras (e₁ e₂ : EraStartConfig) (h : e₁ precedes e₂) :
+    e₁.toMacro.phi + 4 ≤ e₂.toMacro.phi
+```
+
+Follows from Step 3 + the fact that every era contains EraDone exactly once.
+
+### Use cases
+
+1. **Termination/well-foundedness.** Φ is unbounded on the orbit (strictly
+   increasing across 63 765 era boundaries), so any bounded predicate
+   distinguished by Φ-value can occur at most finitely often. This rules out
+   periodicity directly.
+
+2. **Era-counting bound.** Combining "Φ grows by ≥ 4 per era" with a Φ-bound
+   on era boundary shapes gives an upper bound on era count for a given Φ.
+   Useful for any orbit-finite case analysis.
+
+3. **NOT a direct R1 closure.** R1's shape `M([], 3, d :: R)` has
+   `Φ = 0 + (sum R) + 3`. The orbit reaches arbitrarily large Φ, so no
+   Φ-bound forbids this shape. Closing R1 still requires the structural
+   argument (`|L| ≥ 1` preservation, currently in `era.lean` only for
+   intra-era sweeps; would need lifting to era-boundary level).
+
+   But Φ + `|L| ≥ 1`-at-era-boundaries is a strong joint invariant that
+   may simplify the cascade in `phase2.lean` substantially.
+
+### Risk / caveats
+
+- **Empirical-only at the start.** The 63 765-sample observation is strong
+  but the proof relies entirely on Step 2, which is purely arithmetic on the
+  rule statements and does not use the empirical data. Once Step 2 is done,
+  Φ-monotonicity is a theorem and the empirical run becomes redundant.
+
+- **Doesn't subsume `MacroInvariant`.** Φ-growth says nothing about which
+  shapes occur; `MacroInvariant.NoHaltPattern` is still needed to exclude Halt.
+
+- **Doesn't close R1 alone** (see use-case 3 above). To use Φ for R1 closure
+  you'd combine it with an `|L| ≥ 1`-at-era-boundary lemma — i.e., lift
+  `era.lean`'s intra-era result `macroStep_M_intra_era_preserves_L_ne_nil`
+  to the era-boundary level.
+
+### Estimated cost
+
+- Step 1: 20 lines (definition + simp lemmas).
+- Step 2: ~150 lines (21 short lemmas).
+- Step 3: ~80 lines (one large `macroStep` case-split, reuses `ms_simp`).
+- Step 4: ~40 lines.
+- Step 5: ~30 lines.
+- Total: **~320 lines, ~1 day**.
+
+Drop into `phi.lean` (new file) imported by `progress.lean`, after `machine.lean`
+and `forward_dynamics.lean`. Wire-up does not modify existing lemmas — purely
+additive.
+
+### Completion (2026-05-05) — DONE
+
+All 5 stages implemented and merged. Total **433 lines** across 3 new files;
+lakefile updated to add `phi`, `phi_progress`, `phi_era` to `Sweeper` roots.
+**Axiom-clean**: `lean_verify` reports `{"axioms":[],"warnings":[]}` for
+`macroStep_phi_nondec`, `macroEra_phi_nondec`, `phi_strict_across_era_step`.
+Existing files (`machine.lean`, `forward_dynamics.lean`, `progress.lean`,
+`era.lean`, `phase2.lean`, `conjectures.lean`) **untouched** — wire-up was
+purely additive. Build: 889 jobs, all green.
+
+| File | Lines | Stage | Lemmas |
+|------|-------|-------|--------|
+| `phi.lean` | 186 | 1+2 | `MacroConfig.phi`, `phi_M`/`phi_M0` simp lemmas, **18 per-rule Δ-lemmas** (`phi_macro_sweep`, `phi_macro_sweep_left_empty`, …, `phi_macro_era_complete`, …, `phi_macro_multi_bounce_general_to_zero`) |
+| `phi_progress.lean` | 189 | 3+4 | `macroStep_phi_nondec` (12-arm dispatch case-split + ~12 `none` arms), `macroStep_phi_strict_at_era` (Δ ≥ 4 on M0 _ [1] inputs), `macroEra_phi_nondec` (induction on fuel), `run_macroEra_phi_nondec` (combined raw-run + Φ statement) |
+| `phi_era.lean` | 58 | 5 | `phi_strict_across_era_step` (composes Stage 3 strict + Stage 4), `phi_strict_between_era_starts` (specialization to orbital case) |
+
+**Discrepancy from plan**: planned 320 lines, delivered 433 lines (+35%).
+Source of overage: Stage 2 had 18 elementary lemmas not 21 (the LOG count
+double-counted some halt/init patterns), but each lemma carries its own
+docstring. Stage 3 added a strict variant (`macroStep_phi_strict_at_era`)
+not in the original plan, used by Stage 5. Stage 5 added a corollary
+(`phi_strict_between_era_starts`) for the orbital case.
+
+**Spot checks (all passed during development, then stripped)**:
+- Era-0 trace `M([1],4,[1]) → M([2],2,[2]) → M0([3],[3]) → M0([7],[1]) → M([],12,[]) → M([1],10,[1])` reproduces the +6 Φ-jump from LOG via the per-rule lemmas (0+0+2+4 = +6).
+- `macroStep` dispatch on era 0 sweep step (M([1],4,[1]) → M([2],2,[2])) closes Stage 3.
+- `macroStep` strict variant on era 0 → era 1 transition (M0([7],[1]) → M([1],10,[1])) closes Stage 3 strict.
+- `macroEra fuel` from initial config preserves Φ ≥ 6 for any fuel.
+- Stage 5 closes the era-0 → era-1 jump from `EraStartConfig.init` via fuel=3 + one era_and_sweep_solo step (Φ=6+4 ≤ 12, with 6 = actual Δ).
+
+**Open consumer-side work**:
+- Lift to `OrbitReachable.phi_ge_init` for the structural constructors.
+  The `step_R1` and `step_R3` cases require either (a) extracting concrete
+  cfg' shapes from forward_dynamics's R3 proof, or (b) a stronger raw-run
+  Φ-monotonicity that reverses `macroEra_sound`. Not part of this round.
+- Era-counting bound: Φ ≥ 4n + 6 after n era boundaries from the orbit's
+  start. Would need an explicit "era count" function over the orbit.
+- The R1 closure path: combine Φ with `macroStep_M_intra_era_preserves_L_ne_nil`
+  (already in `era.lean`) lifted to era-boundary level.
+
+---
+
+## Current state (2026-05-05)
 
 ### Build & axiom hygiene
 
-- `lake build Sweeper` succeeds; no sorries; 882 jobs.
+- `lake build Sweeper` succeeds; **889 jobs**, all green.
 - `lean_verify Sweeper.sweeper_never_halts` reports axioms:
-  `{propext, Classical.choice, Quot.sound, reach_M_nil_3, reach_multi_bounce_last_2_long, reach_multi_bounce_last_2_mid_1}`.
-- 3 custom reachability axioms remain (R1, R2, R3).
+  `{propext, Classical.choice, Quot.sound, reach_M_nil_3}` — only **R1** remains.
+- R2 + R3-narrow closed 2026-04-29 via `forward_dynamics.lean` (see milestone below).
+- 2 sorries off the critical path: `era.lean:496` (R1 cascade lifting),
+  `conjectures.lean:69` (empirical conjecture statements stated as theorems).
 
 ### File layout
 
 ```
-machine.lean      2436 lines — TM defs, macro rules, OrbitReachable framework, sweeper_never_halts
-phase2.lean       1205 lines, 41 axiom-clean lemmas — cascade closure work (Layer 0-4 complete)
-macro_sim.py      F1 simulator (RLE macro)
-macro_audit.py    F2 axiom-occurrence audit
-LOG.md            this file
+machine.lean         1791 L  TM defs, macro rules, OrbitReachable framework
+forward_dynamics.lean 564 L  forward-dynamics proofs of R2 and R3-narrow
+progress.lean         996 L  macroStep dispatch, macroEra, sweeper_never_halts (1 axiom: R1)
+phase2.lean          1364 L  Phase 2 backward-cascade work (Layer 0-4 done; superseded for R2/R3)
+era.lean              559 L  EraStartConfig + intra-era L≠[] preservation (1 sorry)
+conjectures.lean       77 L  empirical conjectures stated as `theorem … := sorry`
+phi.lean              186 L  MacroConfig.phi + 18 per-rule Φ-delta lemmas
+phi_progress.lean     189 L  macroStep/macroEra Φ-monotonicity (axiom-clean)
+phi_era.lean           58 L  strict Φ-increase across era boundaries (axiom-clean)
+c1inv_abandoned.lean   98 L  abandoned step-level C1Inv approach (not in build)
+macro_sim.py          F1 RLE macro simulator
+macro_audit.py        F2 axiom-occurrence audit
+era-sim/              Rust port of macro_sim.py emitting era boundaries (era_full.jsonl)
+LOG.md                this file
 ```
 
 ### Coverage of `macro.txt` rules
@@ -40,64 +309,58 @@ Every one of the 21 macro rules listed in `macro.txt` is a proven theorem in `ma
 `macro_multi_bounce_3run_last_2`. These bridge transient post-states whose cursor
 lands at `1` (below the `c ≥ 2` invariant) back to a clean macro config.
 
-### Where coverage is incomplete: 3 reachability axioms
+### Reachability axiom status
 
-The macro rule set does **not** completely describe the machine's dynamics. Three
-transient configurations on the orbit have no formalized compound transition:
+Originally 3 reachability axioms; **2 closed**, **1 remains**.
 
-1. **`reach_M_nil_3`** — `M([], 3, d::R)`. `macro_sweep_left_empty` would produce
-   cursor `1`, violating the invariant. No compound rule formalizes the chain
-   that bridges back.
-2. **`reach_multi_bounce_last_2_mid_1`** — `M0(a::L', [r'+3, 1, 2])`. Multi-bounce
-   yields cursor = middle run = 1, requires a shift not formalized for this pattern.
-3. **`reach_multi_bounce_last_2_long`** — `M0(a::L', (r'+3) :: e :: f :: rest ++ [2])`.
-   Needs a recursive compound threading multi-bounce + shift through an arbitrary
-   middle tail.
+| Axiom | Shape | Status |
+|-------|-------|--------|
+| `reach_M_nil_3` (R1) | `M([], 3, d::R)` | ❌ open — backward cascade branches unboundedly; forward sim halts at step 31 |
+| `reach_multi_bounce_last_2_mid_1` (R2) | `M0(a::L', [r'+3, 1, 2])` | ✅ closed 2026-04-29 (`forward_dynamics.thm_reach_multi_bounce_last_2_mid_1`) |
+| `reach_multi_bounce_last_2_long` (R3) | `M0(a::L', (r'+3) :: e :: m::rest ++ [2])` | ✅ closed 2026-04-29 (R3-narrow form, `forward_dynamics.thm_reach_multi_bounce_last_2_long`) |
 
-Each axiom asserts "from this shape, after some `k > 0` raw TM steps, we land back
-in a `MacroProg` config that is not halted." Empirically, F1+F2 simulator
-(`macro_sim.py` + `macro_audit.py`) confirms **0 occurrences** of all 3 shapes
-across 51B raw TM steps.
+R3 closure is "narrow": the proved form bakes in the dispatcher's exclusion of
+`M([], 3, R)` outputs (via `shift_to_macro_prog_excludes_R1`), sidestepping
+R1. The original general R3 axiom is no longer used.
 
-### Phase 2 cascade closure progress
+### Φ tape-mass invariant (complete 2026-05-05)
 
-`phase2.lean` (2134 lines, 64 axiom-clean lemmas) builds a structural backward-analysis
-cascade for closing the 3 axioms. Each layer characterizes the macroStep predecessors
-of the previous layer's producer shapes, ultimately reducing each axiom-target
-configuration to either an `OrbitReachable.init` contradiction or `MacroInvariant`
-violation.
-
-| Layer | Target | Status |
-|-------|--------|--------|
-| 0 | `M([], 3, _)` (R1) | ✅ unique predecessor `M([2], 3, _)` |
-| 1 | `M(2 :: _, 3, _)` | ✅ 2 producers characterized |
-| 2 | `M(1 :: _, 5, _)` | ✅ 6 producers + 2 dead-ends |
-| 3 | All 6 Layer 2 producers | ✅ 8 lemmas (2 dead-ends + 6 with predecessors) |
-| 4 | 8 new shapes from Layer 3 | ✅ 8/8 done (4a-4d + 4e/4f/4g/4h via master case-split) |
-| 5+ | Recursive shapes (4e → M(1::1::1::_,3,_); 4g → M([2,6],3,_), M([5],5,_); 4f → multi-recursive) | ❌ open |
-
-Tactic infrastructure: `ms_simp` / `ms_done` / `ms_kill` macros at the top of
-`phase2.lean` cut ~50% boilerplate from the cascade lemmas (handle the standard
-simp set + ctor/list discrimination).
-
-Wire-up to `OrbitReachable.not_R1` / `not_R2` / `not_R3_narrow` is not yet started
-(blocked on completing the cascade — the inductive chain needs all layers in place).
+`Φ := sum(L) + sum(R) + c` is per-rule monotone non-decreasing on every macro
+rule (sweeps Δ=0, M0-cursor rules Δ=+2, EraDone Δ=+4). Implementation across
+`phi.lean` / `phi_progress.lean` / `phi_era.lean` (433 lines total, axiom-clean).
+See plan + completion section at the top of this file.
 
 ### Bottom line
 
-- ✅ Single-step macro rules in `machine.lean` faithfully and completely correspond
-  to the 21 entries in `macro.txt`.
-- ✅ The full `macroStep`/`macro_progress` dispatch covers every macro shape
-  (matches `macro_step_analysis.md`'s table with no gaps).
-- ✅ Phase 2 cascade infrastructure (Layers 0-4 complete) provides
-  structural backward analysis covering ~85% of what's needed for `not_R1`.
-- ❌ Three orbit-reachability statements are still `axiom`s rather than proved
-  (Layer 4 incomplete + Layer 5+ unstarted + wire-up unstarted).
-- ✅ Empirically validated: F1+F2 simulator finds 0 axiom-shape occurrences in 51B raw steps.
+- ✅ 21 elementary macro rules in `machine.lean` cover every `macro.txt` entry.
+- ✅ `macroStep` dispatch is exhaustive (matches `macro_step_analysis.md`).
+- ✅ R2 + R3 closed via forward dynamics (2026-04-29).
+- ✅ Φ tape-mass invariant pipeline complete (2026-05-05), axiom-clean.
+- ❌ R1 axiom remains; closure path likely Φ + `|L|≥1`-at-era-boundary lift.
+- ✅ Empirically: F1+F2 sim finds 0 axiom-shape occurrences in 51B raw steps;
+  `era-sim/` Rust port logs 63 765 era boundaries.
 
-The rules describe the machine completely **as a per-shape transition system**,
-but **not as a closed orbit-progress proof** — the three axioms fill that gap, and
-Phase 2 cascade is partway to closing them.
+---
+
+## Forward dynamics: R2 + R3-narrow closure (2026-04-29)
+
+`forward_dynamics.lean` closed two of the three original reachability axioms by
+direct forward composition rather than the backward cascade.
+
+**R2** (`M0(a::L', [r'+3, 1, 2])`): closed-form bridge composes `multi_bounce_2`
+with `shift`, producing 39 raw steps for `r'=0` and 33+r' steps for `r'≥1`.
+Output is always a `MacroInvariant`-respecting config.
+
+**R3-narrow** (`M0(a::L', (r'+3) :: e :: middle ++ [1, 2])`): composes
+`macro_multi_bounce_general` with `shift_to_macro_prog`. The narrow form encodes
+the structural exclusion `cfg' ≠ M([], 3, R)` (discharged by
+`shift_to_macro_prog_excludes_R1`, which leverages the fact that the post-shift
+left stack always contains `a + 4 ≥ 5`). The general R3 axiom is no longer used.
+
+This supersedes the backward-cascade approach for R2/R3 (Phase 2, Layers 0-4 in
+`phase2.lean`). Layer 5+ analysis on 2026-04-28 concluded the cascade does not
+close in finite layers under purely-local invariants. R1 still resists both
+approaches: backward cascade branches unboundedly, forward sim halts at step 31.
 
 ---
 
