@@ -515,6 +515,10 @@ inductive OrbitReachable : MacroConfig → Prop where
   -- Includes a `safe` precondition: cfg' is never `M([], 3, R)`. This is
   -- discharged in `orbit_progress` via `shift_to_macro_prog_excludes_R1`,
   -- since `L_after` always contains `a + 4 ≥ 5`.
+  -- The Φ side condition `cfg'.phi = predecessor.phi + 2` is provided by
+  -- `thm_reach_multi_bounce_last_2_long_safe` (composes
+  -- `phi_macro_multi_bounce_general` Δ=+2 with shift Δ=0). Lets downstream
+  -- proofs (e.g. `OrbitReachable.phi_ge_init`) close the step_R3 case.
   | step_R3 {a r' e : Nat} {L' middle_init : List Nat}
       {cfg' : MacroConfig} {k : Nat} :
       OrbitReachable (.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) →
@@ -524,6 +528,8 @@ inductive OrbitReachable : MacroConfig → Prop where
       MacroInvariant cfg' →
       0 < k →
       (∀ R, cfg' ≠ .M [] 3 R) →
+      cfg'.phi =
+        (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 →
       OrbitReachable cfg'
   -- R1: reach_M_nil_3 axiom output. The predecessor `M([], 3, d :: R')` is
   -- itself the unreachable shape, so this constructor's case vacuously closes
@@ -558,7 +564,7 @@ theorem OrbitReachable.macroInvariant {cfg : MacroConfig} (h : OrbitReachable cf
       exact invariant_R2_zero ih
   | step_R2_succ _ ih =>
       exact invariant_R2_pos ih
-  | step_R3 _ _ hinv' _ _ _ => exact hinv'
+  | step_R3 _ _ hinv' _ _ _ _ => exact hinv'
   | step_R1 _ _ hinv' _ _ => exact hinv'
 
 /-- Progress predicate using OrbitReachable. Stronger than MacroProg —
@@ -856,12 +862,12 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
                     (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
                       ((r' + 3) :: e :: middle_init' ++ [1, 2] : List Nat)) := by
                   rw [← h_input_eq]; exact hreach
-                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe⟩ :=
+                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe, h_phi⟩ :=
                   thm_reach_multi_bounce_last_2_long_safe hinv_new
                 have hreach' : OrbitReachable cfg' :=
                   OrbitReachable.step_R3 (a := a' + 1) (r' := r') (e := e)
                     (L' := L') (middle_init := middle_init') (cfg' := cfg') (k := k)
-                    hreach_new hcfg' hinv' hk h_safe
+                    hreach_new hcfg' hinv' hk h_safe h_phi
                 refine ⟨k, hk, ⟨cfg', ?_, hreach'⟩, ?_⟩
                 · simp only [MacroConfig.toConfig_M0]
                   rw [h_input_eq]

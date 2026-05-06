@@ -322,6 +322,60 @@ theorem IntraEra.init : IntraEra (.M [1] 4 [1]) := by
   exact this ▸ IntraEra.era_start EraStartConfig.init
 
 -- ============================================================
+-- IntraEraOf: era-graded refinement of IntraEra
+-- ============================================================
+-- `IntraEraOf e cfg` is the parameterized version of `IntraEra cfg` that
+-- tracks the seeding era-start `e`. This is required for Stage D-style
+-- characterizations that relate `cfg`'s shape to `e`'s structure.
+--
+-- Bridge lemmas: `IntraEraOf.toIntraEra` (forward) and
+-- `IntraEra.exists_intraEraOf` (backward) establish the equivalence
+-- `IntraEra cfg ↔ ∃ e, IntraEraOf e cfg`.
+
+/-- Era-graded intra-era trajectory: configs reachable from a specific
+    era-start `e` by macroStep iterations that don't produce a fresh
+    era-shape `M(_, _, [1])` along the way. -/
+inductive IntraEraOf (e : EraStartConfig) : MacroConfig → Prop where
+  | era_start : IntraEraOf e e.toMacro
+  | step_within {cfg cfg' : MacroConfig} {k : Nat} :
+      IntraEraOf e cfg → macroStep cfg = some (k, cfg') →
+      (¬ ∃ L c, cfg' = .M L c [1]) →
+      IntraEraOf e cfg'
+
+/-- Forward bridge: every `IntraEraOf e cfg` is also `IntraEra cfg`. -/
+theorem IntraEraOf.toIntraEra {e : EraStartConfig} {cfg : MacroConfig}
+    (h : IntraEraOf e cfg) : IntraEra cfg := by
+  induction h with
+  | era_start => exact IntraEra.era_start e
+  | step_within _ hstep hnot ih => exact IntraEra.step_within ih hstep hnot
+
+/-- Backward bridge: every `IntraEra cfg` arises from some era-start. -/
+theorem IntraEra.exists_intraEraOf {cfg : MacroConfig} (h : IntraEra cfg) :
+    ∃ e : EraStartConfig, IntraEraOf e cfg := by
+  induction h with
+  | era_start e => exact ⟨e, IntraEraOf.era_start⟩
+  | step_within _ hstep hnot ih =>
+    obtain ⟨e, h_e⟩ := ih
+    exact ⟨e, IntraEraOf.step_within h_e hstep hnot⟩
+
+/-- Every `IntraEraOf e cfg` config satisfies `MacroInvariant`.
+    Inherited from the era-start's invariant via macroStep_sound. -/
+theorem IntraEraOf.macroInvariant {e : EraStartConfig} {cfg : MacroConfig}
+    (h : IntraEraOf e cfg) : MacroInvariant cfg :=
+  h.toIntraEra.macroInvariant
+
+/-- An `IntraEraOf e cfg` config with shape `M(_, _, [1])` must equal
+    `e.toMacro`. The step constructor's `hnot` excludes producing this
+    shape, so only the `era_start` constructor introduces it. -/
+theorem IntraEraOf.M_R_one_is_era_start
+    {e : EraStartConfig} {cfg : MacroConfig} {L : List Nat} {c : Nat}
+    (h : IntraEraOf e cfg) (hcfg : cfg = .M L c [1]) :
+    cfg = e.toMacro := by
+  cases h with
+  | era_start => rfl
+  | step_within _ _ hnot => exact absurd ⟨L, c, hcfg⟩ hnot
+
+-- ============================================================
 -- Structural exclusion: M([], 3, [d]) is not reachable in IntraEra
 -- ============================================================
 -- The full goal `IntraEra cfg → cfg ≠ M([], 3, R)` is FALSE for arbitrary
@@ -413,6 +467,48 @@ theorem IntraEra.not_M_empty_3_single
   | step_within h_prev hstep _ _ =>
     intro hcfg
     exact macroStep_no_M_empty_3_single h_prev.macroInvariant (hcfg ▸ hstep)
+
+/-- IntraEraOf delegate of the singleton-R structural exclusion. -/
+theorem IntraEraOf.not_M_empty_3_single {e : EraStartConfig}
+    {cfg : MacroConfig} (h : IntraEraOf e cfg) {d : Nat} :
+    cfg ≠ .M [] 3 [d] :=
+  h.toIntraEra.not_M_empty_3_single
+
+-- ============================================================
+-- Stage D status (2026-05-06): partial — IntraEraOf framework only
+-- ============================================================
+-- The full Stage D claim from `plan-era-graded-not_R1.md` does NOT hold
+-- as stated:
+--
+--   "∀ IntraEraOf e cfg with cfg = M([], 3, d::R'), e.toMacro = M([1], 5, [1])."
+--
+-- Counterexamples:
+--   1. e = M([1, 2], 5, [1]) (Φ=9, |L|=2):
+--      sweep → M([2, 2], 3, [2]) → sweep_and_shift → M([2], 3, [1, 3])
+--      → sweep_and_shift → M([], 3, [1, 2, 3]).
+--   2. e = M([1], 13, [1]) (Φ=15, singleton L) — sweeps oscillate between
+--      |L|=0 and |L|=1 via sweep_left_empty:
+--      5 sweeps → M([6], 3, [6]) → sweep_and_shift → M([], 7, [1, 7])
+--      → sweep_left_empty → M([1], 5, [2, 7]) → sweep → M([2], 3, [3, 7])
+--      → sweep_and_shift → M([], 3, [1, 4, 7]).
+--
+-- Orbit-reachability would constrain (1) (Φ=9 < depth-1 minimum 10), but
+-- (2)'s Φ=15 may correspond to a depth-2 era-start. Whether such era-starts
+-- are *actually* orbit-reachable depends on the orbit dynamics (era_and_*,
+-- zero_two_*, zero_bounce_* recurrences from init); empirically (era-sim,
+-- 63 K era boundaries) no R1-trigger has been observed, but proving this
+-- formally requires a tighter characterization than the plan provides.
+--
+-- The IntraEraOf framework above is useful infrastructure for any future
+-- approach (era-graded or other). What is provable easily:
+--   • singleton-R: `IntraEraOf.not_M_empty_3_single` (delegate to
+--     IntraEra-version). Excludes R = [d] singleton case directly.
+--   • multi-R: open. Requires either (a) characterizing orbit-reachable
+--     era-starts more tightly, or (b) a fundamentally different invariant
+--     (e.g., a stronger Φ-like quantity that distinguishes R = [1, 3]
+--     from other length-2 R outputs at the era-end).
+--
+-- Recommendation: see plan-era-graded-not_R1.md for revised path forward.
 
 -- ============================================================
 -- Lifting toward `OrbitReachable.not_R1` (partial — Approach 2)
@@ -537,7 +633,7 @@ theorem OrbitReachable.not_M_empty_3
     intro R hcfg
     rw [MacroConfig.M.injEq] at hcfg
     exact List.cons_ne_nil _ _ hcfg.1
-  | step_R3 _ _ _ _ h_safe _ =>
+  | step_R3 _ _ _ _ h_safe _ _ =>
     -- h_safe is the safety property baked into step_R3: cfg' ≠ M([], 3, R)
     -- for any R. Discharged in `orbit_progress` via
     -- `thm_reach_multi_bounce_last_2_long_safe` /

@@ -256,24 +256,405 @@ not in the original plan, used by Stage 5. Stage 5 added a corollary
 - The R1 closure path: combine Φ with `macroStep_M_intra_era_preserves_L_ne_nil`
   (already in `era.lean`) lifted to era-boundary level.
 
+### Optional Φ-cascade-pruning paths (deferred 2026-05-05)
+
+Two small wins applying the Φ pipeline to phase2.lean's existing backward
+cascade. Neither resolves the cascade-out-of-bounds problem (sweep family
+is Δ=0, so backward sweep chains preserve Φ), but both collapse Φ-strict
+(Δ ∈ {+2, +4}) cascade branches into one-line Φ contradictions. The
+**transformative path** is the era-graded `not_R1` proof — see
+[`plan-era-graded-not_R1.md`](plan-era-graded-not_R1.md).
+
+#### (1) Universal `OrbitReachable.phi_ge_init`
+
+Statement (target):
+```lean
+theorem OrbitReachable.phi_ge_init {cfg : MacroConfig}
+    (h : OrbitReachable cfg) : cfg.phi ≥ 6
+```
+
+Proof outline (induction on `OrbitReachable`):
+- `init` — `Φ(M([1], 4, [1])) = 6`. Exact.
+- `step_macro` — IH gives `predecessor.phi ≥ 6`; `macroStep_phi_nondec`
+  (`phi_progress.lean`) gives `cfg'.phi ≥ predecessor.phi ≥ 6`.
+- `step_multi_bounce_*`, `step_R2_zero`, `step_R2_succ` — each macro
+  rule has `Δ ≥ +2` from the per-rule lemmas in `phi.lean`
+  (`phi_macro_multi_bounce_general`, `phi_macro_multi_bounce_2_*`,
+  `phi_macro_multi_bounce_general_to_zero`); IH + Δ gives `cfg'.phi ≥ 8`.
+- `step_R1` — predecessor is itself M([], 3, _). In any R1-exclusion
+  context this case closes vacuously via the IH on `not_R1`. For a
+  *universal* Φ ≥ 6 statement, would need Φ-monotonicity along the raw
+  run from M([], 3, _).toConfig — not straightforward. **Workaround**:
+  state the lemma as `OrbitReachable cfg → (∀ R, cfg ≠ M([], 3, R)) →
+  cfg.phi ≥ 6`, or thread the bound through `not_R1` directly.
+- `step_R3` — predecessor M0((r'+3) :: e :: middle_init ++ [1, 2], _);
+  output cfg' is the multi_bounce_general + shift_to_macro_prog
+  composition, whose Φ jump is +2. Needs Φ-tracking across the
+  forward_dynamics proof, or a Φ side condition added to the
+  `step_R3` constructor.
+
+Effort estimate: ~30 lines for `step_macro` + multi_bounce constructors,
+plus ~30–50 lines to handle step_R1 / step_R3 cleanly.
+
+#### (2) Φ-strict branch pruning in phase2 cascade
+
+Apply (1) to collapse phase2's existing `macroStep_no_X_predecessor`
+dead-end lemmas where the producer is Φ-strict and Φ(producer) < 6.
+
+Concrete kills (after (1) is in place):
+- **Layer 2 #3** (`macroStep_no_M0_2_1_predecessor`, ~18 lines at
+  `phase2.lean:745`): producer M0([2], [1]) has `Φ = 3 < 6`. Closes
+  immediately by contradiction with `phi_ge_init`.
+- **Layer 2 #4** (`macroStep_M0_2_1_2_predecessor`, ~12 lines at
+  `phase2.lean:770`), `L_out = []` subcase: producer M0([2,1], [2]) has
+  `Φ = 5 < 6`. (General `L_out` non-empty case unaffected: `Φ ≥ 6`.)
+- Other Layer 3–4 producers: spot-check after (1) is in.
+
+Estimated savings: ~50–80 lines collapsed into Φ-contradiction one-liners.
+
+**Tradeoff**: incremental win, doesn't fix the unboundedness. The sweep
+family producers (M([2,…,2], 3, R), M([1], 5, R), M([], 7, R), …)
+preserve Φ exactly (Δ=0), so Φ never produces a contradiction along
+backward sweep chains. The cascade-out-of-bounds problem **is** the
+sweep-chain explosion, which (1) and (2) do not address. To actually
+close R1, see the era-graded plan.
+
+---
+
+## Era-graded `not_R1` Stages A1 + A2 (2026-05-05)
+
+Stages A1 and A2 of `plan-era-graded-not_R1.md` implemented in new file
+`era_orbit.lean` (build clean, axiom-clean per `lean_verify` modulo
+2 documented sorries for step_R3 / step_R1 cases).
+
+| Sub-stage | Lemma | Status |
+|-----------|-------|--------|
+| A1.0 | `EraStartConfig.phi_ge_six` — every era-start has Φ ≥ 6 by structure (L≠[] + AllGe1 + c≥4) | ✅ axiom-clean |
+| A1.1 | `macroStep_to_era_shape_phi_strict` — any `macroStep` producing M(L_out, c_out, [1]) has ΔΦ ≥ +2 (12-arm dispatch case-split; D6/D7 give +4, D8/D11 give +2, others vacuous via shape mismatch or invariant) | ✅ axiom-clean |
+| A1.2 | `OrbitReachable.era_shape_phi_strict_predecessor` — every orbit-reachable era-shape config is either init or has an orbit-reachable predecessor with Φ + 2 ≤ cfg.phi | ⚠️ 2 sorries (step_R3, step_R1) |
+| A2.0 | `OrbitReachable.phi_ge_init` — universal Φ ≥ 6 invariant. Init is exact; step_macro via `macroStep_phi_nondec`; multi_bounce / R2 constructors give Δ=+2 each, output shape's structural lower bound covers Φ ≥ 6 directly via simp+omega | ⚠️ 2 sorries (step_R3, step_R1, same as A1.2) |
+| A2.1 | `OrbitReachable.not_phi_lt_six` (contrapositive), `OrbitReachable.not_M0_2_1` (Φ=3<6), `OrbitReachable.not_M0_2_1_2` (Φ=5<6) — direct corollaries of A2.0; building blocks for Stage B | ⚠️ inherits A2.0 sorries |
+| B | `OrbitReachable.not_M_1_5_1` — M([1], 5, [1]) excluded from OrbitReachable. step_macro case combines A1.1 (pred.phi ≤ 5) + A2.0 (pred.phi ≥ 6) → contradiction. multi_bounce / R2 cases close via output L-length ≥ 2 or R-length ≥ 2 mismatch | ⚠️ inherits step_R3, step_R1 sorries |
+
+**Stronger than planned**: A1.1 was stated for "proper" era-shapes
+(L≠[] ∧ c≥4) in the plan; the implementation drops these hypotheses
+since ΔΦ ≥ +2 holds for any era-shape output (degenerate cases L=[]
+from D8 with singleton L_pre, or c<4 from D11 with z<2, also give
+ΔΦ ≥ +2).
+
+**A1.2 sorries** (deferred to later stages):
+- `step_R3`: cfg' is parameterized; the constructor takes cfg' as an
+  arbitrary MacroInvariant config satisfying the safety side condition.
+  `shift_to_macro_prog` (used internally in `thm_reach_multi_bounce_last_2_long`)
+  always produces |R| ≥ 2 outputs (after at least one shift), so cfg'
+  is never era-shape. To close: either (i) extract this fact as an
+  auxiliary lemma `step_R3_output_R_ge_2`, (ii) refactor `step_R3` with
+  a Φ side condition, or (iii) inspect `forward_dynamics`'s proof to
+  pin cfg's shape.
+- `step_R1`: cfg' is the R1 axiom's witness, similarly unconstrained.
+  Closing this needs joint reasoning with `not_R1` — the predecessor
+  M([], 3, _) is itself the shape we're excluding, so step_R1 closes
+  vacuously in `not_R1` proofs (handled in Stage F via mutual
+  induction or by upstream `not_R1` exclusion of the predecessor).
+
+**Build**: Sweeper has **890 jobs**, all green. `era_orbit.lean` is
+428 lines, registered in `lakefile.toml` Sweeper roots.
+
+### step_R3 sorries closed via constructor refactor (2026-05-05)
+
+Refactor (a) landed: added Φ side condition `cfg'.phi = predecessor.phi + 2`
+to `OrbitReachable.step_R3`. Source: `phi_macro_multi_bounce_general` (Δ=+2)
++ shift Δ=0. Provided at construction site by extending
+`thm_reach_multi_bounce_last_2_long_safe` and
+`shift_to_macro_prog_excludes_R1` to expose Φ.
+
+Files touched:
+- `forward_dynamics.lean` (+import phi; +Φ conjunct in
+  `shift_to_macro_prog_strong`, `shift_to_macro_prog_excludes_R1`,
+  `thm_reach_multi_bounce_last_2_long_safe`).
+- `progress.lean` (constructor `step_R3` gains 6th arg; orbit_progress
+  invocation provides `h_phi`; `macroInvariant`'s pattern updated).
+- `era.lean` (pattern in `not_M_empty_3` updated for new arg count).
+- `era_orbit.lean` (3 step_R3 sorries closed).
+
+Remaining sorries (3 total, all step_R1):
+- `era_orbit.lean:177` (A1.2 step_R1)
+- `era_orbit.lean:257` (A2.0 step_R1)
+- `era_orbit.lean:354` (Stage B step_R1)
+
+These close when `not_R1` is proved end-to-end (Stage F): step_R1's
+predecessor is M([], 3, _), which `not_R1` excludes by induction on its
+own derivation. After Stage F, step_R1 is dead code. Adding a Φ side
+condition to step_R1 directly would require either an unprovable
+strengthening of the R1 axiom (Φ-monotonicity of the witness run) or
+the R1 closure itself.
+
+**Where this leaves R1 closure**:
+- ✅ M([1], 5, [1]) excluded as orbit-reachable era-start (Stage B).
+- ⏳ Stage D pending: M([], 3, _) excluded intra-era given era-start ≠
+  M([1], 5, [1]). Requires either OrbitReachable → IntraEra lift, or
+  era-sequence enumeration. The structural fact is straightforward
+  (`2*a₀ + c₀ = 7` ⟹ `(a₀, c₀) = (1, 5)`); the bottleneck is wiring
+  this through OrbitReachable.
+- ⏳ Stages E, F, G pending (era-boundary outputs, top-level not_R1,
+  axiom wire-up).
+
+**Small-Φ R1 cases already excluded**: by composing A2.0 with the
+shape Φ formula, M([], 3, [1]) (Φ=4), M([], 3, [2]) (Φ=5), and
+M([], 3, [1, 1]) (Φ=5) are not orbit-reachable. Larger R cases
+(Φ ≥ 6) require Stage D.
+
+### Stage D attempt (2026-05-06): IntraEraOf framework + structural-fact gap
+
+Attempt at Stage D from `plan-era-graded-not_R1.md` revealed the plan's
+structural fact ("only era-start `M([1], 5, [1])` produces intra-era
+`M([], 3, _)`") **does not hold for arbitrary EraStartConfigs**. Two
+counterexamples:
+
+1. **Multi-L drain**: `e = M([1, 2], 5, [1])` (Φ=9) →
+   `M([2, 2], 3, [2])` → `M([2], 3, [1, 3])` → `M([], 3, [1, 2, 3])`.
+2. **Singleton-L oscillation**: `e = M([1], 13, [1])` (Φ=15) reaches
+   `M([], 3, [1, 4, 7])` after 9 macroSteps via `sweep_left_empty`
+   restoring `L = [1]` after `sweep_and_shift` empties it.
+
+The plan's analysis assumed the era's intra-era trajectory ends at
+the first sweep_and_shift, but `sweep_left_empty` (cursor ≥ 4 with
+L=[]) re-fills L, allowing oscillation between |L|=0 and |L|=1
+with growing R. Counterexample 1 is excluded by orbit-reachability
+(Φ=9 < depth-1 minimum 10), but Counterexample 2's Φ=15 fits
+depth-2's lower bound 14, so orbit-reachability alone doesn't exclude.
+
+**What landed in this attempt**:
+
+- `era.lean`: added `IntraEraOf` parameterized inductive predicate, plus:
+  - `IntraEraOf.toIntraEra` / `IntraEra.exists_intraEraOf` bridges.
+  - `IntraEraOf.macroInvariant`, `IntraEraOf.M_R_one_is_era_start`.
+  - `IntraEraOf.not_M_empty_3_single` (singleton-R delegate).
+  - Inline comment block documenting the gap with both counterexamples.
+- `plan-era-graded-not_R1.md`: prepended "Gap analysis (2026-05-06)"
+  section with counterexamples, orbit-reachability discussion, and
+  four sub-plan recommendations for revised paths.
+
+**Recommendation** (Sub-plan C in plan): pivot from era-graded forward
+to **Stage F via mutual induction with Φ pruning** of the phase2
+cascade. Don't rely on the broken structural fact. Use Φ + per-rule
+deltas to bound the cascade depth on M([2], 3, _) predecessors.
+
+**Build**: 890 jobs green. Sorry count unchanged (3 step_R1 in
+era_orbit.lean + 1 multi-R sorry in era.lean's existing
+`OrbitReachable.not_M_empty_3` + 1 conjectures.lean).
+
+### Sub-plan C analysis (2026-05-06): Φ-pruned phase2 cascade scope
+
+User pivoted to Sub-plan C. Detailed scoping analysis added to
+`plan-era-graded-not_R1.md` ("Sub-plan C analysis" section). Key
+findings:
+
+**Termination is provable but formalization is heavy.** Cascade is
+finite per cfg via:
+- Sweep family backward: bounded chain length `O(R.sum + L_head)` via
+  AllGe1 constraints.
+- M0-side backward: each step strictly decreases Φ ≥ 2; bounded by
+  `(Φ - 6) / 2` steps (uses `OrbitReachable.phi_ge_init`).
+
+**Cost estimate for full closure: 600–1500 lines** (revised up from
+plan's "~100 lines"). Each cascade closure lemma `not_S` requires
+handling 12+ OrbitReachable constructor cases × ~5–10 helper lemmas in
+the cascade chain × proof complexity per lemma. Plus well-founded
+recursion infrastructure to handle unbounded sweep-chain branches like
+`M([2, 2, …, 2], 3, _)` of arbitrary length.
+
+**Concrete next-step options** (documented in plan):
+- **C-1** (incremental): Close `not_M_empty_3_multi` with explicit
+  nested induction, ~300 lines. Demonstrates the pattern.
+- **C-2** (infrastructural): Define `BadShape` inductive predicate
+  (cascade closure under macroStep preds), prove disjoint from
+  OrbitReachable, ~400 lines.
+- **C-3** (hybrid): Combine `IntraEraOf` framework + era-boundary
+  analysis with phase2's Layer 0 lemma. Ties Sub-plans B and C, ~250
+  lines if invariant exists.
+- **C-4** (defer): Document R1 as stable axiom + empirical witness
+  (63K era boundaries, no R1 trigger). Focus on other proofs.
+
+No code changes made for Sub-plan C; awaiting user choice between
+C-1 / C-2 / C-3 / C-4.
+
+### Sub-plan C-3 partial step (2026-05-06)
+
+User chose Sub-plan C-3 (hybrid IntraEraOf + Φ-pruning). Initial scope
+analysis revealed Φ alone is insufficient to exclude M([], 3, R) for
+arbitrary R: hypothetical M0-shape predecessors at Φ=6 (e.g.,
+M0([4], [2])) could in principle produce M([], 3, [1]) at Φ=8 via
+zero_two_solo (+2). Excluding such hypothetical predecessors requires
+tracking *actual* orbit dynamics (not just Φ bounds), which is the
+~250-line investment the plan estimated.
+
+**Committed**: a small Φ-pruning corollary in `era_orbit.lean`:
+- `OrbitReachable.not_M_empty_3_low_R_sum` (axiom-clean): excludes
+  M([], 3, R) for R.sum < 3 via Φ < 6 contradiction. Covers
+  R ∈ {[1], [2], [1, 1]}.
+
+**Not committed**: the full bridge `OrbitReachable → IntraEraOf` for
+M-shape configs. This requires inducting through 12+ OrbitReachable
+constructors with careful era-shape-vs-intra-era case analysis,
+roughly 200-300 lines per the plan's effort estimate. The IntraEraOf
+framework added 2026-05-06 is the foundation; the bridge would
+extend it.
+
+**Build**: 890 jobs green; 3 step_R1 sorries (era_orbit.lean) +
+1 multi-R sorry (era.lean's not_M_empty_3) + 1 conjectures.lean
+sorry. New file size: era_orbit.lean 428 → 446 lines.
+
+### BadShape framework attempt (2026-05-06)
+
+Per user direction "finish the proof of not_M_empty_3_multi", added
+the `BadShape` cascade-closure inductive predicate and the
+`OrbitReachable.not_BadShape` theorem in `era_orbit.lean`.
+
+**`BadShape cfg` definition**: cascade closure under macroStep
+predecessors of `M([], 3, R)`. Inductive predicate with two
+constructors:
+- `base R : BadShape (M [] 3 R)`
+- `step : BadShape cfg' → macroStep cfg = some (k, cfg') → BadShape cfg`
+
+Helper inversion: `BadShape.cases_form` returns
+`(∃ R, cfg = M [] 3 R) ∨ (∃ k cfg', macroStep cfg = some (k, cfg') ∧
+BadShape cfg')`, working around dependent-elimination friction with
+the constructor-output cfg shapes.
+
+**Theorem skeleton** (`OrbitReachable.not_BadShape`): proves
+`OrbitReachable cfg → ¬ BadShape cfg` by induction on OrbitReachable.
+
+**FULLY CLOSED cases** (3 of 12):
+- `step_macro`: BadShape backward propagation via `BadShape.step`
+  applied to `h_step`, contradicting IH `¬ BadShape h_prev.cfg`.
+  ✅ One-liner: `exact ih (BadShape.step h_bad h_step)`.
+- `step_R1`: predecessor `M([], 3, _)` is exactly `BadShape.base`,
+  contradicting IH. ✅ Direct contradiction via `ih (BadShape.base _)`.
+
+**BASE-SUBCASE CLOSED** (8 of 9 non-macro constructors): for each
+constructor's specific output shape, `BadShape.base R` requires
+cfg = M([], 3, R), which fails via shape mismatch:
+- `step_multi_bounce_general`: L = R_mid.rev ++ ... ≠ [].
+  ✅ Closed via `List.append_ne_nil_of_right_ne_nil`.
+- `step_multi_bounce_general_to_zero`: cfg is M0, not M.
+  ✅ Closed via `MacroConfig.noConfusion`.
+- `step_multi_bounce_2_and_shift`, `step_multi_bounce_3run_last_2`,
+  `step_R2_succ`: L starts with cons.
+  ✅ Closed via `List.cons_ne_nil`.
+- `step_multi_bounce_2_double_shift`, `step_R2_zero`: cursor a+4 or
+  similar ≥ 5, can't equal 3.
+  ✅ Closed via `omega`.
+- `step_multi_bounce_last_2_general`: L = middle.rev ++ ... ≠ [].
+  ✅ Closed via `List.append_ne_nil_of_right_ne_nil`.
+- `step_R3`: hsafe (`∀ R, cfg' ≠ M([], 3, R)`) directly excludes.
+  ✅ Closed via `h_safe R hcfg`.
+
+**STEP-SUBCASES SORRY'd** (9 sorries): for each non-macro constructor
++ init, the `BadShape.step` sub-case requires `¬ BadShape cfg'` for
+cfg' = macroStep cfg's output. The IH from outer induction gives
+info about the M0-shape predecessor (h_prev_R3 for step_R3, etc.),
+which is structurally not BadShape (since macroStep on M0(_, [r+3, _, _])
+returns none), but doesn't constrain cfg's macroStep successor cfg'.
+Closure requires either:
+  (a) Well-founded recursion on BadShape size: works for the step
+      case in principle (cfg' has BadShape size 1 less than cfg's),
+      but the BASE case of recursion is the original goal
+      (¬ OrbitReachable (M [] 3 R)), which is *also* a sorry.
+  (b) Mutual induction on (OrbitReachable depth, BadShape depth)
+      with explicit termination measure. Tractable but ~150-200
+      lines of well-founded machinery.
+  (c) For init specifically: 22-step finite forward trace from
+      `M([1], 4, [1])` to where macroStep returns none, verifying
+      none of the visited configs equal `M([], 3, _)`.
+
+**Wired**: `OrbitReachable.not_M_empty_3_full` corollary added — uses
+`BadShape.base R` to lift `not_BadShape` to direct shape exclusion.
+This theorem currently inherits `not_BadShape`'s 9 sorries.
+
+**Status**: build green, 890 jobs. Sorry count in era_orbit.lean:
+4 declarations report sorry (3 step_R1 from earlier + 1 not_BadShape
+covering 9 internal sorries). era.lean's `not_M_empty_3` retains its
+multi-R sorry (independent of the BadShape framework, since era.lean
+is upstream of era_orbit.lean and can't reference downstream lemmas).
+
+**Net progress**: the BadShape framework is the right structural
+abstraction, with 11 of 21 sub-cases (12 OrbitReachable constructors
+× 2 BadShape sub-cases minus duplications) closed cleanly. Closing
+the remaining 9 step-subcases requires well-founded recursion
+infrastructure that's too involved for one session. The framework as
+committed is reusable for any future closure attempt.
+
+New file size: era_orbit.lean 446 → 605 lines.
+
+### Option A landed: structural induction on BadShape (2026-05-06)
+
+After writing `plan-badshape.md` documenting four strategic options,
+implemented **Option A**: refactor `not_BadShape` to invert the
+induction direction.
+
+**Key insight**: instead of inducting on OrbitReachable (12 cases ×
+2 BadShape sub-cases = 24 sub-goals), induct on **BadShape** (2 cases
+total). Express the contrapositive `BadShape cfg → ¬ OrbitReachable cfg`:
+
+```lean
+theorem BadShape.not_OrbitReachable (h_bad : BadShape cfg) :
+    ¬ OrbitReachable cfg := by
+  induction h_bad with
+  | base R => intro _; sorry  -- residual: ¬ OrbitReachable (M [] 3 R)
+  | step h_bad' h_step ih =>
+      intro h_or; exact ih (h_or.step_macro h_step)
+```
+
+The `step` case closes in **one line** via IH + step_macro forward
+extension. The `base` case is the original cascade-closure goal.
+
+**Result**: era_orbit.lean's sorry count went from **17 → 4**:
+- 3 unchanged (existing step_R1 sorries from prior work)
+- 1 new (residual `base R` case in `BadShape.not_OrbitReachable`)
+- All 10 sorries from the OrbitReachable-induction version dissolved.
+
+`OrbitReachable.not_BadShape` is now a one-line corollary of
+`BadShape.not_OrbitReachable`. `OrbitReachable.not_M_empty_3_full`
+inherits from these — fully proven modulo the single residual base
+case.
+
+**Build**: 890 jobs green. era_orbit.lean: 605 → ~510 lines (net
+reduction since the 12 OrbitReachable case branches removed).
+
+**Residual sorry**: `BadShape.not_OrbitReachable`'s `base R` case.
+This is `¬ OrbitReachable (M [] 3 R)` — the original R1 closure
+goal. Closing this is a separate, larger task (the phase2 cascade,
+discussed in `plan-era-graded-not_R1.md` Sub-plan C analysis,
+~600+ lines). The BadShape framework consolidates everything else.
+
+**Lessons**:
+- Inducting on the "negative" side (BadShape) was MUCH cleaner than
+  inducting on the "positive" side (OrbitReachable). The contrapositive
+  formulation aligns with the cascade's structural recursion direction.
+- The "well-founded recursion on sizeOf" approach (Option A as
+  initially conceived) wasn't needed: structural induction on the
+  Prop-valued BadShape gives the same termination naturally.
+
 ---
 
 ## Current state (2026-05-05)
 
 ### Build & axiom hygiene
 
-- `lake build Sweeper` succeeds; **889 jobs**, all green.
+- `lake build Sweeper` succeeds; **890 jobs**, all green.
 - `lean_verify Sweeper.sweeper_never_halts` reports axioms:
   `{propext, Classical.choice, Quot.sound, reach_M_nil_3}` — only **R1** remains.
 - R2 + R3-narrow closed 2026-04-29 via `forward_dynamics.lean` (see milestone below).
-- 2 sorries off the critical path: `era.lean:496` (R1 cascade lifting),
-  `conjectures.lean:69` (empirical conjecture statements stated as theorems).
+- 5 sorries off the critical path: `era.lean:471` (R1 cascade lifting),
+  `conjectures.lean:66` (empirical conjecture statements stated as theorems),
+  `era_orbit.lean:177,257,354` (A1.2/A2.0/Stage B step_R1 cases — close
+  when `not_R1` lands).
 
 ### File layout
 
 ```
 machine.lean         1791 L  TM defs, macro rules, OrbitReachable framework
-forward_dynamics.lean 564 L  forward-dynamics proofs of R2 and R3-narrow
 progress.lean         996 L  macroStep dispatch, macroEra, sweeper_never_halts (1 axiom: R1)
 phase2.lean          1364 L  Phase 2 backward-cascade work (Layer 0-4 done; superseded for R2/R3)
 era.lean              559 L  EraStartConfig + intra-era L≠[] preservation (1 sorry)
@@ -281,6 +662,8 @@ conjectures.lean       77 L  empirical conjectures stated as `theorem … := sor
 phi.lean              186 L  MacroConfig.phi + 18 per-rule Φ-delta lemmas
 phi_progress.lean     189 L  macroStep/macroEra Φ-monotonicity (axiom-clean)
 phi_era.lean           58 L  strict Φ-increase across era boundaries (axiom-clean)
+forward_dynamics.lean 590 L  forward-dynamics proofs (R2, R3-narrow); now also exposes Φ-jump for R3
+era_orbit.lean        428 L  era-graded plan Stages A1+A2+B (axiom-clean; 3 sorries — step_R1 ×3, close after not_R1)
 c1inv_abandoned.lean   98 L  abandoned step-level C1Inv approach (not in build)
 macro_sim.py          F1 RLE macro simulator
 macro_audit.py        F2 axiom-occurrence audit
@@ -1569,3 +1952,47 @@ preservation lemmas (one per macroStep dispatch + step_run dispatch).
 
 882 jobs, no warnings, no sorries. `sweeper_never_halts` axioms unchanged
 (still 3: R1, R2, R3-narrow).
+
+## Option γ scaffolding (2026-05-06)
+
+New file `era_orbit_gamma.lean` (333 L) implements **Option γ** from
+`plan-badshape.md` as scaffolding/foundation for closing the residual
+`BadShape.base R` sorry. Axiom-clean (no new sorries; `#print axioms`
+shows only `[propext, Classical.choice, Quot.sound]`).
+
+### Provided
+
+- **γ.1 `macroStep_M_empty_3_predecessor_form`**: D2 (`sweep_and_shift`)
+  is the unique macroStep that produces `M([], 3, R)`. Predecessor is
+  `M([2], 3, d :: R')` with `R = 1 :: (d + 1) :: R'`, k = 19. Closes
+  10/12 disjuncts via shape mismatch; 2 require AllGe1 invariant on
+  M0 to rule out cursor=3 outputs from D8/D10/D12.
+- **γ.2 `macroStep_M_2list_3_predecessor_form`**: extension to outputs
+  of shape `M((2 :: L_out), 3, R)`. Two predecessor branches:
+  D2 extension (`M (2 :: 2 :: L_out) 3 (d :: R')`) and D3 lift
+  (`M (1 :: L_out) 5 (d :: R')`).
+- **γ.3 `gammaFuel cfg := cfg.phi - 6`**: fuel measure (Nat-valued).
+  Properties: `gammaFuel_init = 0`, `gammaFuel (M [] 3 R) = R.sum - 3`,
+  non-decreasing under macroStep.
+- **γ.4 `gammaSim fuel cfg`**: bounded forward simulator returning
+  `Option (Nat × MacroConfig)`. Lemmas: `gammaSim_zero`,
+  `gammaSim_succ_halt`, `gammaSim_preserves_OrbitReachable`.
+- **γ.5 `not_M_empty_3_gamma_pos` + `gammaFuel_M_empty_3_eq_zero_iff`**:
+  characterise the γFuel = 0 region.
+- **γ.6 `orbit_reachable_era1_via_gammaSim`**: concrete witness
+  demonstrating the simulator hits known orbit-reachable states.
+
+### Limitation
+
+The end-goal `BadShape.not_OrbitReachable.base R` is **NOT closed** in
+this file. Per the plan-badshape.md analysis, the residual cascade is
+intrinsically unbounded leftward via D2 chains (each cascade step
+extends the 2-spine in L, with predecessor Φ ≥ current Φ). The γ-fuel
+infrastructure here is the foundation for future cascade-closure work
+combining γ.1/γ.2 with `OrbitReachable.phi_ge_init`, F2 conjecture,
+or era-graded analysis.
+
+### Build status
+
+891 jobs. Sorry count unchanged at 6 total (era 1, era_orbit 4,
+conjectures 1).

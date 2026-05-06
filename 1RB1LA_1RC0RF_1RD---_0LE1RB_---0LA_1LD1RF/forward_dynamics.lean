@@ -10,6 +10,7 @@ halts at step 31, so closure must go through the `OrbitReachable` cascade
 -/
 
 import machine
+import phi
 
 namespace Sweeper
 
@@ -413,7 +414,8 @@ theorem thm_reach_multi_bounce_last_2_long {a r' e : Nat} {L' middle_init : List
 /-- **Strong shift lemma**: `shift_to_macro_prog`'s witness has explicit
     structure — it splits `L` into a prefix `L_pre` of all 1s, a first
     ≥ 2 element `v`, and a suffix `L_suf`. The raw-TM run reaches
-    `M_Config L_suf v R_out` for some `R_out`. -/
+    `M_Config L_suf v R_out` for some `R_out`. The output also has the
+    same Φ as the input (each shift preserves Φ; ΔΦ = 0). -/
 theorem shift_to_macro_prog_strong (L R : List Nat)
     (h_R_ne : R ≠ []) (h_R_ge1 : AllGe1 R) (h_L_ge1 : AllGe1 L)
     (h_nonone : ∃ x ∈ L, x ≥ 2) :
@@ -421,7 +423,8 @@ theorem shift_to_macro_prog_strong (L R : List Nat)
       0 < k ∧
       L = L_pre ++ v :: L_suf ∧ (∀ x ∈ L_pre, x = 1) ∧ v ≥ 2 ∧
       run sweeper (M_Config L 1 R) k = M_Config L_suf v R_out ∧
-      MacroInvariant (.M L_suf v R_out) := by
+      MacroInvariant (.M L_suf v R_out) ∧
+      (MacroConfig.M L_suf v R_out).phi = (MacroConfig.M L 1 R).phi := by
   induction L generalizing R with
   | nil =>
     exfalso
@@ -443,26 +446,35 @@ theorem shift_to_macro_prog_strong (L R : List Nat)
         · omega
         · exact ⟨x, hx, hx_ge2⟩
       obtain ⟨k_rest, L_pre_rest, v, L_suf, R_out, hk_rest, h_split, h_pre_one,
-              hv, hrun_rest, hinv'⟩ :=
+              hv, hrun_rest, hinv', hphi⟩ :=
         ih (1 :: d :: R_tail) h_R_new_ne h_R_new_ge1 h_L_tail_ge1 h_tail_nonone
       refine ⟨6 + k_rest, 1 :: L_pre_rest, v, L_suf, R_out, by omega, ?_, ?_,
-              hv, ?_, hinv'⟩
+              hv, ?_, hinv', ?_⟩
       · simp [h_split, List.cons_append]
       · intro x hx
         rcases List.mem_cons.mp hx with rfl | hx
         · rfl
         · exact h_pre_one x hx
       · rw [run_add, macro_shift 0 d L_tail R_tail, hrun_rest]
+      · -- Φ-preservation: hphi gives output = (M L_tail 1 (1::d::R_tail)).phi.
+        -- We want output = (M (1::L_tail) 1 (d::R_tail)).phi. Equal by simp.
+        rw [hphi]
+        simp only [MacroConfig.phi_M, List.sum_cons]
+        omega
     · have ha' : a' ≥ 1 := Nat.one_le_iff_ne_zero.mpr h_a'
       refine ⟨6, [], a' + 1, L_tail, 1 :: d :: R_tail, by omega, rfl, ?_,
-              by omega, macro_shift a' d L_tail R_tail, ?_⟩
+              by omega, macro_shift a' d L_tail R_tail, ?_, ?_⟩
       · intro x hx; exact (List.not_mem_nil hx).elim
       · refine ⟨h_L_tail_ge1, by omega, AllGe1_cons.mpr ⟨by omega, h_R_ge1⟩,
                 List.cons_ne_nil _ _⟩
+      · -- One-shift Φ-preservation: M((a'+1)::L_tail, 1, d::R_tail) → M(L_tail, a'+1, 1::d::R_tail).
+        simp only [MacroConfig.phi_M, List.sum_cons]
+        omega
 
 /-- Corollary: if `L` contains an element `x ≥ 5`, the shift output is
     never `M([], 3, R)` for any R. (For `x = v` we have c = v ≥ 5; for
-    `x ∈ L_suf` we have L ≠ [].) -/
+    `x ∈ L_suf` we have L ≠ [].) Also exposes Φ-preservation: cfg's Φ
+    equals the input M(L, 1, R)'s Φ. -/
 theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
     (h_R_ne : R ≠ []) (h_R_ge1 : AllGe1 R) (h_L_ge1 : AllGe1 L)
     (h_nonone : ∃ x ∈ L, x ≥ 2)
@@ -471,10 +483,11 @@ theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
       0 < k ∧
       run sweeper (M_Config L 1 R) k = cfg'.toConfig ∧
       MacroInvariant cfg' ∧
-      ∀ R', cfg' ≠ .M [] 3 R' := by
-  obtain ⟨k, L_pre, v, L_suf, R_out, hk, h_split, h_pre_one, hv, hrun, hinv'⟩ :=
+      (∀ R', cfg' ≠ .M [] 3 R') ∧
+      cfg'.phi = (MacroConfig.M L 1 R).phi := by
+  obtain ⟨k, L_pre, v, L_suf, R_out, hk, h_split, h_pre_one, hv, hrun, hinv', hphi⟩ :=
     shift_to_macro_prog_strong L R h_R_ne h_R_ge1 h_L_ge1 h_nonone
-  refine ⟨k, .M L_suf v R_out, hk, ?_, hinv', ?_⟩
+  refine ⟨k, .M L_suf v R_out, hk, ?_, hinv', ?_, hphi⟩
   · rw [hrun, MacroConfig.toConfig_M]
   · intro R' hcfg
     rw [MacroConfig.M.injEq] at hcfg
@@ -491,10 +504,13 @@ theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
 
 /-- **Safe R3 closure**: like `thm_reach_multi_bounce_last_2_long` but
     additionally returns the structural exclusion `cfg' ≠ M([], 3, R)`
-    via `shift_to_macro_prog_excludes_R1`. The `L_after` list always
-    contains `a + 4 ≥ 5` (since `a ≥ 1` from `MacroInvariant`), so the
-    safety property holds. Used in `orbit_progress`'s R3 case to
-    discharge `step_R3`'s safety precondition. -/
+    via `shift_to_macro_prog_excludes_R1`, and exposes the Φ jump
+    `cfg'.phi = predecessor.phi + 2` from composing
+    `phi_macro_multi_bounce_general` (Δ=+2) with shift Δ=0. The
+    `L_after` list always contains `a + 4 ≥ 5` (since `a ≥ 1` from
+    `MacroInvariant`), so the safety property holds. Used in
+    `orbit_progress`'s R3 case to discharge `step_R3`'s safety
+    precondition. -/
 theorem thm_reach_multi_bounce_last_2_long_safe
     {a r' e : Nat} {L' middle_init : List Nat}
     (hinv : MacroInvariant
@@ -504,7 +520,9 @@ theorem thm_reach_multi_bounce_last_2_long_safe
         (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k =
         cfg'.toConfig ∧
       MacroInvariant cfg' ∧
-      ∀ R, cfg' ≠ .M [] 3 R := by
+      (∀ R, cfg' ≠ .M [] 3 R) ∧
+      cfg'.phi =
+        (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 := by
   -- Same setup as thm_reach_multi_bounce_last_2_long.
   have hL := hinv.1
   have hR := hinv.2.1
@@ -548,7 +566,7 @@ theorem thm_reach_multi_bounce_last_2_long_safe
     apply List.mem_cons.mpr; right
     exact List.mem_cons_self
   -- Step 2: apply shift_to_macro_prog_excludes_R1.
-  obtain ⟨k_shift, cfg', hk_shift, hcfg'_shift, hinv'_shift, h_safe⟩ :=
+  obtain ⟨k_shift, cfg', hk_shift, hcfg'_shift, hinv'_shift, h_safe, hphi_shift⟩ :=
     shift_to_macro_prog_excludes_R1 L_after [1]
       (List.cons_ne_nil _ _)
       (AllGe1_singleton (by omega))
@@ -558,7 +576,15 @@ theorem thm_reach_multi_bounce_last_2_long_safe
       (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k_mb =
         M_Config L_after (0 + 1) [1] :=
     ⟨_, h_mb_raw⟩
-  refine ⟨k_mb + k_shift, cfg', by omega, ?_, hinv'_shift, h_safe⟩
-  rw [run_add, h_mb]; exact hcfg'_shift
+  refine ⟨k_mb + k_shift, cfg', by omega, ?_, hinv'_shift, h_safe, ?_⟩
+  · rw [run_add, h_mb]; exact hcfg'_shift
+  · -- cfg'.phi = (M L_after 1 [1]).phi (from hphi_shift, with 0+1=1)
+    --        = (M0 (a::L') ((r'+3)::e::middle_init++[1,2])).phi + 2
+    -- via L_after.sum expansion and arithmetic.
+    rw [hphi_shift]
+    simp only [hL_after_def, MacroConfig.phi_M, MacroConfig.phi_M0,
+               List.sum_append, List.sum_cons, List.sum_nil,
+               List.sum_reverse]
+    omega
 
 end Sweeper

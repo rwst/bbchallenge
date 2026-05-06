@@ -12,14 +12,19 @@ R2, R3) were originally posited; R2 and R3-narrow were closed
 │   ├── machine.lean              1791 L  Foundation: TM transitions, OrbitReachable, OrbitProg, macro rules
 │   ├── progress.lean              996 L  macro_progress dispatch + sweeper_never_halts (depends on machine + forward_dynamics)
 │   ├── phase2.lean               1364 L  Backward-analysis closure of R1/R2/R3 axioms via OrbitReachable
-│   ├── forward_dynamics.lean      564 L  Forward-dynamics proofs that closed R2 and R3-narrow axioms
-│   ├── era.lean                   559 L  Era-graded structures (EraStartConfig); intra-era sweep non-shrinking lemma
+│   ├── forward_dynamics.lean      590 L  Forward-dynamics proofs (R2, R3-narrow); now also exposes Φ-jump from R3
+│   ├── era.lean                   655 L  Era-graded structures (EraStartConfig, IntraEra, IntraEraOf); intra-era sweep non-shrinking lemma; Stage D gap doc
+│   ├── era_orbit.lean             513 L  Stages A1+A2+B + Φ-pruning + BadShape framework (Option A landed); 4 sorries (3 step_R1 + 1 residual base case)
+│   ├── era_orbit_gamma.lean       333 L  Option γ scaffolding: D2 predecessor characterisation + γFuel measure + bounded forward simulator gammaSim. Axiom-clean, 0 sorries. Foundation for cascade closure.
+│   ├── scout_parity.lean          125 L  Parity-argument scouting probe (Path 1 fast check, 2026-05-06): cursor stays odd along M→M predecessors of M([], 3, R) but M0→M (D11) breaks pure parity. 4 lemmas, 0 sorries.
 │   ├── conjectures.lean            77 L  Empirical conjectures from era-sim (stated as `theorem … := sorry`)
 │   └── c1inv_abandoned.lean        98 L  Abandoned step-level C1Inv/SafeRight invariant approach (kept for reference)
 │
 ├── Planning & status (markdown)
-│   ├── LOG.md                    1308 L  Master changelog; current state, axiom hygiene, layer status
-│   ├── plan-r1.md                 645 L  Plan for closing R1 via "reachable ∧ c=3 → L≠[]" (form A.3)
+│   ├── LOG.md                    1634 L  Master changelog; current state, axiom hygiene, layer status, Φ pipeline (2026-05-05)
+│   ├── plan-era-graded-not_R1.md  765 L  Plan for closing R1 via era-graded forward analysis; Sub-plan E (D2-spine bound, post-γ) is the active path
+│   ├── plan-badshape.md            336 L  Plan for closing residual base R sorry (Option A + γ scaffolding landed; cascade closure remains)
+│   ├── plan-r1.md                 645 L  Plan for closing R1 via "reachable ∧ c=3 → L≠[]" (form A.3) [superseded]
 │   ├── plan-sim-era.md            447 L  Five strategies for accelerating era-boundary discovery
 │   ├── era_findings.md            184 L  Findings from era-sim datasets (era_*.jsonl)
 │   ├── invariant_strategy.md      173 L  Taxonomy of strengthened-invariant strategies
