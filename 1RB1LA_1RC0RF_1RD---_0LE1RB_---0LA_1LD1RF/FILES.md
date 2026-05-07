@@ -19,6 +19,11 @@ R2, R3) were originally posited; R2 and R3-narrow were closed
 │   ├── scout_parity.lean          125 L  Parity-argument scouting probe (Path 1 fast check, 2026-05-06): cursor stays odd along M→M predecessors of M([], 3, R) but M0→M (D11) breaks pure parity. 4 lemmas, 0 sorries.
 │   ├── scout_2adic.lean           199 L  2-adic measure scout (Path 1′ check, 2026-05-06): defines macroMr := P_R(2) + 3; D2 forward doubles macroMr, D3 forward +1; lex(phi, macroMr) strictly decreases backward across D2/D3/D11. 0 sorries, key forward identities axiom-clean.
 │   ├── era_orbit_2adic.lean       235 L  Sub-plan E.3' foundations (2026-05-06): macroStep_lex_strict_increase (12-case forward monotonicity, axiom-clean), D2_backward_phi_eq + D2_backward_mr_double + D2_backward_lex_strict (cascade-backward analysis), cascade_unreachable structural skeleton. Delegates base case to era.lean's existing sorry.
+│   ├── era_orbit_macros.lean      275 L  Cascade tactic library (2026-05-07, expanded): `mc_dcase_close`, `mc_rule_close`, `mc_phi_lt_six`, `mc_R1_self`, `mc_R1_callback`, `mc_R3_extract`, `mc_AllGe1_a_ge1`, `mc_noconf`, `mc_inj_omega/simp` — automate boilerplate (M-vs-M0 noConfusion, M.injEq + cons.injEq + omega ladders, phi_lt_six, step_R1/R3 unpackers, AllGe1 ⊥ closer, length-mismatch via simp fallback). 602 invocations across cascade*.lean.
+│   ├── era_orbit_cascade.lean     1172 L  Cascade redesign base (2026-05-07 macro pass): InCascade predicate (4 constructors), 7 base shape-exclusion helpers + 3 starts-with helpers (callback variants for cascade IH); refactored with macros (57 invocations). 0 sorries.
+│   ├── era_orbit_cascade_chains.lean  1815 L  21 chain helpers (D11/mb2as/R2_succ chains, axiom-clean), refactored with macros (381 invocations). 0 sorries.
+│   ├── era_orbit_cascade_main.lean  451 L  cascade_strong_aux + cascade_strong + corollary `not_M_empty_3_via_cascade`. Imports d2 to use chain helpers. 6 sorries inside cascade_strong_aux (mk_M_1_2spine_5 D2/D12 + mk_M_empty_7 D12/mb2ds/R2zero/R3).
+│   ├── era_orbit_cascade_d2.lean   1663 L  D2/D3 sub-case work file (Sessions 8-12): refactored with macros (164 invocations); 25 sorries cover bridging `not_M_6_3_dR_via_ih` (D3, step_R3); helpers `not_M_2_6_3_dR_via_ih` (D2/D3 forward-ref to later helpers, multi_bounce_general/last_2_general, step_R3); `not_M_1_6_5_R_via_ih` (D2/D8/D12, step_multi_bounce_general/3run_last_2/last_2_general, step_R3); parametric `not_M_kspine_6_3_R_via_ih` (whole body — needs mathlib API rewrite for `List.length_replicate`/`nsmul_eq_mul`/`List.getElem?`).
 │   ├── conjectures.lean            77 L  Empirical conjectures from era-sim (stated as `theorem … := sorry`)
 │   └── c1inv_abandoned.lean        98 L  Abandoned step-level C1Inv/SafeRight invariant approach (kept for reference)
 │
@@ -89,6 +94,19 @@ R2, R3) were originally posited; R2 and R3-narrow were closed
                         ▲
                         │
                   conjectures.lean (sorries)
+
+       era_orbit_2adic.lean
+               ▲
+               │
+        era_orbit_cascade.lean (base)
+               ▲
+               │
+        era_orbit_cascade_chains.lean (21 chain helpers, 3 sorries)
+               ▲   ▲
+               │   │
+               │   └─── era_orbit_cascade_d2.lean (D2 sub-case work, 3 sorries)
+               │
+        era_orbit_cascade_main.lean (cascade_strong_aux, 6 sorries)
 ```
 
 `c1inv_abandoned.lean` imports only `BusyLean` and is not part of the

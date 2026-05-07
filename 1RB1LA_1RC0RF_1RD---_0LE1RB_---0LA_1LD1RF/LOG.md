@@ -2962,3 +2962,336 @@ phi_lt_six (cfg.phi < 6) or step_R1-phi-contradiction. Each helper
 mk_M_empty_7 sub-sorries. The 2 mk_M_1_2spine_5 D2/D12/D sorries
 require additional helpers for their predecessor chains (M with
 4-prefix L, M0 with 2-1-2spine prefix L).
+
+## Session 6 (2026-05-07): D2 helper scaffolded
+
+### `not_M_6_3_dR_via_ih` helper added (~165 LOC)
+
+Closes M [6] 3 (d :: R') via:
+- init: cursor 4 vs 3 ⊥.
+- 7 unproductive D-cases (D1/D4/D5/D6/D7/D9/D10) closed by shape mismatch.
+- D8, D12: cursor + AllGe1 ⊥ (a = 0 forced).
+- 3 unproductive multi-bounce shape mismatches.
+- step_R1: callback to cascade ih_phi at mk_M_empty_3.
+
+**Productive sub-cases sorry-stubbed (6):** D2 (pred M [2,6] 3 R), D3
+(pred M [5] 5 R), D11 (pred M0 [2] [6]), multi_bounce_2_and_shift
+(pred M0 [2] [r+4, 2]), R2_succ (pred M0 [2] [5,1,2]), step_R3
+(L_suf=[6], existential disjunct unhelpful).
+
+### Wire-up at `mk_M_empty_7 step_macro D2`
+
+Replaced direct sorry with `not_M_6_3_dR_via_ih` callback application
+(uses `ih_phi` at `mk_M_empty_3` for step_R1 case).
+
+### Build status
+
+820 jobs clean. **Net sorry count: 7 → 12** (D2 outer sorry replaced by
+helper application; helper introduces 6 new sub-sorries). Each sub-sorry
+is now an explicit shape exclusion (no longer an abstract "needs helper"
+TODO), making future incremental progress more tractable.
+
+**Total cascade sorries (12)**:
+- 6 in not_M_6_3_dR_via_ih (D2/D3/D11/mb2as/R2s/R3)
+- 2 in mk_M_1_2spine_5 step_macro (D2, D12/D)
+- 1 in mk_M_empty_7 step_macro D12 (pred M0 [4] (2::d::R'))
+- 1 in mk_M_empty_7 multi_bounce_2_double_shift (pred M0 [3] [3, 2])
+- 1 in mk_M_empty_7 R2_zero (pred M0 [3] [3, 1, 2])
+- 1 in mk_M_empty_7 step_R3 (pred M0 [3] (...))
+
+## Session 7 (2026-05-07): D11/mb2as/R2_succ closed; 3-file split
+
+### 21 new chain helpers added; 3 sub-sorries closed
+
+**D11 chain (8 helpers)**: `not_M0_2_2`, `not_M_empty_5_1`,
+`not_M_1_3_2`, `not_M_empty_2_1_3`, `not_M0_1_2_3`,
+`not_M_empty_4_4_via_ih`, `not_M_1_2_5_via_ih`, `not_M0_2_6_via_ih`.
+
+**mb2as chain (7 helpers)**: `not_M_2_1_3_1`, `not_M_1_3_1_2`,
+`not_M_empty_2_1_2_2`, `not_M0_1_2_2_2`, `not_M_empty_4_3_2_via_ih`,
+`not_M_1_2_4_2_via_ih`, `not_M0_2_5_2_via_ih`.
+
+**R2_succ chain (6 helpers)**: `not_M_1_3_1_1_2_via_ih`,
+`not_M_empty_2_1_2_1_2_via_ih`, `not_M0_1_2_2_1_2_via_ih`,
+`not_M_empty_4_3_1_2_via_ih`, `not_M_1_2_4_1_2_via_ih`,
+`not_M0_2_5_1_2_via_ih`.
+
+### Closures in `not_M_6_3_dR_via_ih`
+
+- D11 sub-case (pred M0 [2] [6]): closed via `not_M0_2_6_via_ih`.
+- multi_bounce_2_and_shift sub-case (pred M0 [2] [5, 2]): closed via
+  `not_M0_2_5_2_via_ih`.
+- R2_succ sub-case (pred M0 [2] [5, 1, 2]): closed via
+  `not_M0_2_5_1_2_via_ih`.
+
+### File reorganization
+
+`era_orbit_cascade.lean` was split into three modules to keep size
+manageable (was 4470 lines → 1298 + 2777 + 450):
+
+- **`era_orbit_cascade.lean`** (1298 L): InCascade definition, base
+  helpers (`not_M0_starts_1_1_R_ge2`, `not_M_3_2_1`, `not_M0_3_2`,
+  `not_M_empty_6_1`, `not_M_1_4_2`, `not_M_2_2_3`, `not_M0_3_4`,
+  `not_M0_4_2`). 0 sorries.
+- **`era_orbit_cascade_chains.lean`** (2777 L): 21 new chain helpers
+  + bridging `not_M_6_3_dR_via_ih`. 3 sorries (D2, D3, step_R3
+  sub-cases of `not_M_6_3_dR_via_ih`).
+- **`era_orbit_cascade_main.lean`** (450 L): `cascade_strong_aux`,
+  `cascade_strong`, `not_M_empty_3_via_cascade`. 6 sorries.
+
+`lakefile.toml` updated to include `era_orbit_cascade_chains` and
+`era_orbit_cascade_main` as roots.
+
+### Remaining work
+
+**3 sub-sorries in `not_M_6_3_dR_via_ih`** (mathematically harder):
+- D2: pred M [2, 6] 3 (d :: R'). Backward chain unbounded — D2
+  backward grows L by prepending 2's: M [2, 2, 6], M [2, 2, 2, 6], ...
+- D3: pred M [5] 5 (d :: R'). Similar unbounded chain.
+- step_R3: existential disjunct (∃ x ∈ [6], x ≥ 5) is satisfied
+  with x=6, so no contradiction from h_disj. Predecessor M0 (a :: L')
+  ((r'+3) :: e :: middle_init ++ [1, 2]) is generic, hard to exclude.
+
+Future work should add helpers in a new file
+`era_orbit_cascade_d2.lean` (importing `era_orbit_cascade_chains`)
+or use a structural argument (new InCascade constructor, stronger
+macroInvariant constraining L to never contain elements > 2).
+
+**Build status**: 820 jobs clean. Total cascade sorries: 9 (3 in
+chains + 6 in main).
+
+## Session 8 (2026-05-07): D2 sub-case work in fresh file
+
+### `era_orbit_cascade_d2.lean` (1203 L) added
+
+Imports `era_orbit_cascade_chains`. Contains:
+
+**Section A — `M0 [2] [4, 1]` chain (4 helpers, all self-contained at
+phi=7)**: closes the multi_bounce_general sub-case of M [2, 6] 3 R.
+- `not_M0_1_2_1_1` (phi=5, phi_lt_six base)
+- `not_M_empty_4_2_1` (D12 → not_M0_1_2_1_1)
+- `not_M_1_2_3_1` (D5 → not_M_empty_4_2_1)
+- `not_M0_2_4_1` (D1 → not_M_1_2_3_1)
+
+**Section B — `M0 [2] [4, 3, 2]` chain (5 helpers, callback variants)**:
+closes the multi_bounce_3run / multi_bounce_last_2_general sub-cases.
+- `not_M_empty_2_1_1_3_2_via_ih` (D2 AllGe1 ⊥ terminal)
+- `not_M0_1_2_1_3_2_via_ih` (D4 → not_M_empty_2_1_1_3_2_via_ih)
+- `not_M_empty_4_2_3_2_via_ih` (D12 → not_M0_1_2_1_3_2_via_ih)
+- `not_M_1_2_3_3_2_via_ih` (D5 → not_M_empty_4_2_3_2_via_ih)
+- `not_M0_2_4_3_2_via_ih` (D1 → not_M_1_2_3_3_2_via_ih)
+
+**Section C — bridging `not_M_2_6_3_dR_via_ih`**: handles backward
+analysis of `M [2, 6] 3 (d :: R')` for general d, R'.
+- 9 of 12 step_macro D-cases close via shape-⊥ or AllGe1 ⊥.
+- multi_bounce_general (R=[1] specific): pred M0 [2] [4, 1], closed
+  via Section A `not_M0_2_4_1`.
+- multi_bounce_3run_last_2 (R=[1, 1] specific): pred M0 [2] [4, 3, 2],
+  closed via Section B `not_M0_2_4_3_2_via_ih`.
+- multi_bounce_last_2_general (R=[1, 1] specific, middle_init=[]
+  forced via length argument): same pred, same closure.
+- step_R1: callback.
+
+**3 sub-sorries remain in `not_M_2_6_3_dR_via_ih`** — same structural
+problems as parent helper, shifted one level:
+- D2 recursive: pred M [2, 2, 6] 3 (...). Unbounded chain (L grows).
+- D3: pred M [1, 6] 5 (d :: R'). Deeper cursor-5 chain.
+- step_R3: existential disjunct (∃ x ∈ [2, 6], x ≥ 5) holds with x=6.
+
+### Chain technique limit
+
+The D2 sub-case of `not_M_6_3_dR_via_ih` reduces to closing
+`not_M_2_6_3_dR_via_ih`. Concrete multi_bounce sub-cases close
+cleanly; the 3 remaining structural obstacles all reduce to the same
+underlying problem: backward chase on M-shapes with L containing 6
+grows unboundedly OR encounters generic M0 predecessors that can't
+be excluded via cascade IH (since they're not in any InCascade family).
+
+**To close D2/D3/step_R3 fully**, future work needs:
+1. **Parametric helper** indexed by k for `M [2^k, 6] 3 (d :: R')`,
+   using strong induction on R'.length (D2 backward decreases R' by 1).
+2. **Cursor-5 chain helpers** for `M [1, 6] 5 (d :: R')` and its
+   own backward expansion.
+3. **Structural argument or new InCascade constructor** for
+   step_R3's generic M0 predecessor exclusion.
+
+OR add a stronger global invariant (e.g., L cannot contain elements
+> 2 at cursor 3) to macroInvariant, ruling out M [2, 6] 3 (...)
+shapes outright.
+
+### `lakefile.toml` updated
+
+Added `era_orbit_cascade_d2` as a Sweeper root.
+
+### Build status
+
+820 jobs clean. Total cascade sorries: **12**:
+- 0 in `era_orbit_cascade.lean`.
+- 3 in `era_orbit_cascade_chains.lean` (D2/D3/R3 in not_M_6_3_dR_via_ih).
+- 6 in `era_orbit_cascade_main.lean` (cascade_strong_aux internals).
+- 3 in `era_orbit_cascade_d2.lean` (D2-recursion/D3/R3 in
+  not_M_2_6_3_dR_via_ih).
+
+The 3 in chains are the original D2/D3/R3 of not_M_6_3_dR_via_ih.
+The 3 in d2 mirror them at the next level (after delegating D2 to
+not_M_2_6_3_dR_via_ih). Net: D2's chain has been extended by one
+level with 9 new closeable sub-cases, but the structural obstacles
+remain.
+
+## Session 9 (2026-05-07): D2 recursive closed via parametric helper
+
+### `not_M_kspine_6_3_R_via_ih` (Section D, ~250 LOC)
+
+Parametric helper proving `M (List.replicate k 2 ++ [6]) 3 R` is not
+orbit-reachable for any **k ≥ 2** and any nonempty R, via **Nat strong
+induction on R.length**. The D2 backward step decreases R.length by 1
+(while increasing k by 1), terminating at R.length = 1 where D2 backward
+fails (R length too small to match D2's target R = 1 :: (d+1) :: R'_pre).
+
+**Sub-cases handled in parametric helper**:
+- init: cursor 4 vs 3 ⊥.
+- D1, D4, D9: M0 ⊥.
+- D5, D7, D11: head 2 (k ≥ 2) vs [1] / a+4=2 ⊥.
+- D6, D10, D8, D12: cursor or AllGe1 ⊥.
+- D2 RECURSIVE: closed via `ih_n` at smaller R.length (D2 backward
+  reduces R.length by 1 since R = 1 :: (d2+1) :: R'2).
+- multi_bounce_general_to_zero: M0 ⊥.
+- multi_bounce_2_and_shift, R2_succ: head 2, a+4=2 ⊥.
+- multi_bounce_2_double_shift, R2_zero: cursor a+4=3 ⊥.
+- multi_bounce_3run_last_2: 2nd element 2 vs a+4=2 ⊥.
+- step_R1: callback.
+
+**4 sub-sorries remain in parametric helper** (k-specific shapes):
+- D3: pred `M (1 :: List.replicate (k-1) 2 ++ [6]) 5 R`.
+- multi_bounce_general (R=[1] specific): pred
+  `M0 [2] (4 :: List.replicate (k-1) 2 ++ [1])`.
+- multi_bounce_last_2_general (R=[1, 1] specific): pred
+  `M0 [2] (4 :: List.replicate (k-1) 2 ++ [3, 2])`.
+- step_R3: existential disjunct (6 ∈ L_suf, 6 ≥ 5) holds — generic
+  M0 R3-pred exclusion needed.
+
+### `not_M_2_6_3_dR_via_ih` D2 recursive sub-sorry CLOSED
+
+The bridging helper now invokes `not_M_kspine_6_3_R_via_ih` at k=2 to
+exclude the predecessor `M [2, 2, 6] 3 (d2 :: R'2)`.
+
+### Updated sorry counts
+
+- `era_orbit_cascade.lean`: 0
+- `era_orbit_cascade_chains.lean`: 3 (D2/D3/R3 in not_M_6_3_dR_via_ih)
+- `era_orbit_cascade_main.lean`: 6 (cascade_strong_aux internals)
+- `era_orbit_cascade_d2.lean`: 6 (D3, R3 in not_M_2_6_3_dR_via_ih
+  + D3, mb_general, mb_last_2_general, R3 in
+  not_M_kspine_6_3_R_via_ih)
+
+**Total cascade sorries**: 15 (was 12 before adding parametric helper).
+
+The parametric helper reveals the FUNDAMENTAL structure of the chain:
+the D2 recursion is bounded (via R.length descent), but the OTHER
+productive sub-cases (D3, mb_general per-k, mb_last_2_general per-k,
+step_R3) require k-specific helpers or a structural argument
+(stronger macroInvariant ruling out L containing values > 2).
+
+### Build status
+
+820 jobs clean.
+
+## Session 10 (2026-05-07): D3 sub-sorry closed via M [1, 6] 5 chain
+
+### `not_M_1_6_5_R_via_ih` (Section C3, ~620 LOC)
+
+Predecessor of D3 from `M [2, 6] 3 (d :: R')` is `M [1, 6] 5 (d-1 :: R')`
+(when d ≥ 2; for d=1 this is AllGe1 ⊥, but Lean unifies smoothly so
+no separate case needed). The new helper closes `M [1, 6] 5 (d :: R')`
+with **5 sub-cases via existing infrastructure**:
+- D10 (R=[1, 1] specific): pred `M0 [1, 1, 6] [4]` →
+  `not_M0_starts_1_1_R_ge2` (L_rest=[6], r=4).
+- mb_general (R=[1] specific): pred `M0 [2] [3, 1]` → `not_M0_2_3_1`
+  (new chain helper, Section C2).
+- mb2_double_shift (R=[1, 1, 1]): pred `M0 [1, 1, 6] [3, 2]` →
+  `not_M0_starts_1_1_R_ge2`.
+- step_R2_zero (R=[1, 1, 1, 1]): pred `M0 [1, 1, 6] [3, 1, 2]` →
+  `not_M0_starts_1_1_R_ge2`.
+- step_R3 second-disjunct (a=1, L_suf=L'): pred
+  `M0 [1, 1, 6] ((r'+3) :: e :: middle_init ++ [1, 2])` →
+  `not_M0_starts_1_1_R_ge2`.
+
+**5 sub-sorries remain in `not_M_1_6_5_R_via_ih`**:
+- D2: pred `M [4, 1, 6] 3 (d2 :: R'2)` (cursor 3, L head 4).
+- D8 (R=[1] specific): pred `M0 [2, 1, 6] [2]`.
+- D12 (generic d): pred `M0 [2, 1, 6] (2 :: d :: R')`.
+- mb3run / mb_last_2_general (R=[1, 1] specific): pred `M0 [2] [3, 5, 2]`.
+- step_R3 first-disjunct (existential x=6, generic a, L'): pred
+  `M0 (a :: L') ((r'+3) :: e :: middle_init ++ [1, 2])`.
+
+### Supporting chain `M0 [2] [3, 1]` (Section C2, 3 helpers)
+
+Closed via 3-helper chain at phi=6, all self-contained:
+- `not_M_empty_4_1_1` (phi=6, all D-cases shape ⊥ or AllGe1 ⊥).
+- `not_M_1_2_2_1` (D5 → not_M_empty_4_1_1).
+- `not_M0_2_3_1` (D1 → not_M_1_2_2_1).
+
+### `not_M_2_6_3_dR_via_ih` D3 sub-sorry CLOSED
+
+The bridging helper now invokes `not_M_1_6_5_R_via_ih` for the D3
+predecessor (with appropriate phi-bound conversion — phi is preserved
+across D3 backward).
+
+### Updated sorry counts
+
+- `era_orbit_cascade.lean`: 0
+- `era_orbit_cascade_chains.lean`: 3
+- `era_orbit_cascade_main.lean`: 6
+- `era_orbit_cascade_d2.lean`: 11
+  - 1 in `not_M_2_6_3_dR_via_ih` (step_R3)
+  - 5 in `not_M_1_6_5_R_via_ih` (D2, D8, D12, mb3run/mb_last_2, R3 first)
+  - 4 in `not_M_kspine_6_3_R_via_ih` (D3, mb_general, mb_last_2, R3)
+  - 1 in `not_M0_2_3_1` chain (no new sorries)
+
+**Total cascade sorries**: 20.
+
+### Build status
+
+820 jobs clean.
+
+## Session 11 (2026-05-07): not_M_6_3_dR_via_ih relocated; D2 sub-sorry CLOSED
+
+### Reorganization
+
+`not_M_6_3_dR_via_ih` moved from `era_orbit_cascade_chains.lean` to
+`era_orbit_cascade_d2.lean` (after Section D). `era_orbit_cascade_main.lean`
+now imports both chains and d2.
+
+### D2 sub-sorry of `not_M_6_3_dR_via_ih` CLOSED
+
+The relocated helper now invokes `not_M_2_6_3_dR_via_ih` for the D2
+predecessor `M [2, 6] 3 (d2 :: R'2)`. Both helpers live in d2, so no
+import cycle.
+
+### Updated sorry counts
+
+- `era_orbit_cascade.lean`: 0
+- `era_orbit_cascade_chains.lean`: 0 (was 3; helper moved away)
+- `era_orbit_cascade_main.lean`: 6
+- `era_orbit_cascade_d2.lean`: 13 (was 11; gained relocated helper
+  with 2 sorries: D3, step_R3 of M [6] 3)
+
+**Total cascade sorries**: 19 (was 20). Net **−1 sorry** via
+relocation + D2 closure.
+
+### Why no other "immediately possible" closures
+
+After scanning all 19 remaining sorries, none can close via existing
+infrastructure without writing new chain helpers:
+- `not_M_1_6_5_R_via_ih` D2/D8/D12/mb3run/mb_last_2: each requires a
+  new chain helper for new shapes (`M [4, 1, 6] 3`, `M0 [2, 1, 6] [2]`,
+  `M0 [2] [3, 5, 2]`, etc.).
+- `not_M_kspine_6_3_R_via_ih` D3/mb_general/mb_last_2/R3: each requires
+  parametric helpers indexed by k.
+- `not_M_2_6_3_dR_via_ih` step_R3, `not_M_6_3_dR_via_ih` D3/step_R3:
+  generic M0 R3-pred or new chain.
+- `cascade_strong_aux` 6 sorries: each requires fresh shape helpers.
+
+### Build status
+
+820 jobs clean.
