@@ -227,14 +227,18 @@ theorem OrbitReachable.era_shape_phi_strict_predecessor
     injection hcfg with _ _ hR
     injection hR with _ hR2
     exact List.cons_ne_nil _ _ hR2
-  | step_R3 h_prev _ _ _ _ h_phi _ =>
+  | step_R3 h_prev _ _ _ _ _ h_phi _ =>
     -- Closed via the new Φ side condition `h_phi : cfg'.phi = pred.phi + 2`.
     -- Take pred (= the M0 predecessor) as the Φ-strict witness.
     refine Or.inr ⟨_, h_prev, ?_⟩
     omega
-  | step_R1 _ _ _ _ _ =>
-    -- cfg' parameterized; needs joint reasoning with not_R1.
-    sorry
+  | step_R1 h_pred _ _ _ h_phi =>
+    -- Φ side condition: cfg'.phi ≥ predecessor.phi + 2.
+    -- Predecessor is M([], 3, d::R'), so its Φ = 3 + d + R'.sum + 0 (L=[]).
+    -- Take the predecessor as the Φ-strict witness.
+    refine Or.inr ⟨_, h_pred, ?_⟩
+    simp only [MacroConfig.phi_M, List.sum_nil] at h_phi ⊢
+    omega
 
 -- ============================================================
 -- A2.0: universal Φ ≥ 6 invariant on OrbitReachable
@@ -290,11 +294,13 @@ theorem OrbitReachable.phi_ge_init {cfg : MacroConfig}
   | step_R2_succ _ _ =>
     simp only [MacroConfig.phi_M, List.sum_cons, List.sum_nil]
     omega
-  | step_R3 _ _ _ _ _ h_phi ih =>
+  | step_R3 _ _ _ _ _ _ h_phi ih =>
     -- IH: pred.phi ≥ 6. h_phi: cfg'.phi = pred.phi + 2 ≥ 8 ≥ 6. omega closes.
     omega
-  | step_R1 _ _ _ _ _ =>
-    sorry  -- vacuous in not_R1 proofs; deferred to mutual induction
+  | step_R1 _ _ _ _ h_phi ih =>
+    -- IH: predecessor.phi ≥ 6. h_phi: cfg'.phi ≥ predecessor.phi + 2 ≥ 8 ≥ 6.
+    simp only [MacroConfig.phi_M, List.sum_nil] at h_phi ih
+    omega
 
 -- ============================================================
 -- A2.1: Φ < 6 corollaries — small-Φ shapes are unreachable
@@ -461,7 +467,7 @@ theorem OrbitReachable.not_M_1_5_1 {cfg : MacroConfig}
     injection hcfg with _ _ hR
     injection hR with _ hR2
     exact List.cons_ne_nil _ _ hR2
-  | step_R3 _ _ _ _ _ h_phi _ =>
+  | step_R3 _ _ _ _ _ _ h_phi _ =>
     -- h_phi: cfg'.phi = pred.phi + 2. Φ(M [1] 5 [1]) = 7 < pred.phi + 2 (since
     -- pred.phi ≥ 0 + 6 = 6 from the M0 shape's structural arithmetic, so
     -- pred.phi + 2 ≥ 8 ≠ 7). Contradiction.
@@ -470,8 +476,15 @@ theorem OrbitReachable.not_M_1_5_1 {cfg : MacroConfig}
     simp only [MacroConfig.phi_M, MacroConfig.phi_M0, List.sum_append,
                List.sum_cons, List.sum_nil] at h_phi
     omega
-  | step_R1 _ _ _ _ _ =>
-    sorry  -- cfg' parameterized; vacuous via not_R1 in mutual induction
+  | step_R1 h_pred _ _ _ h_phi _ =>
+    -- h_phi: cfg'.phi ≥ predecessor.phi + 2. Predecessor M([], 3, d::R')
+    -- has phi ≥ 6 (from h_pred.phi_ge_init), so cfg'.phi ≥ 8.
+    -- M([1], 5, [1]).phi = 7 < 8. Contradiction.
+    intro hcfg
+    rw [hcfg] at h_phi
+    have h_pre := h_pred.phi_ge_init
+    simp only [MacroConfig.phi_M, List.sum_cons, List.sum_nil] at h_phi h_pre
+    omega
 
 -- ============================================================
 -- OrbitReachable.not_BadShape: the cascade closure

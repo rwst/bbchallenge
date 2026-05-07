@@ -655,18 +655,23 @@ R1 (`reach_M_nil_3`) should be **gone**.
 
 ## 9 · Decision criteria (when to pivot)
 
-Pivot away from Sub-plan E to F2 black-box (Path 3) or strictly-decreasing
+Pivot away from Sub-plan E to strictly-decreasing
 measure (Path 1) IF:
 
 1. **Math-on-paper check (Step 1) fails** — the era-depth bound
    doesn't actually constrain cascade depth. → revisit Path 1 with
    a non-parity measure (e.g., a Diophantine quantity that decreases
    along D2-spine + D3-lift transitions).
+**Fallback**: if the simple Φ-bound fails, use a 2-counter
+well-founded measure `(era-depth, d2SpineLen)` with a non-Φ
+relationship.
 
 2. **E.2 proof exceeds 200 lines** — the IntraEraOf induction has
    more cases than expected. → split E.2 into several lemmas; if
-   still over budget, switch to F2 black-box (treat the conjecture
-   as an axiom and derive `not_M_empty_3` from it directly).
+   still over budget, switch to
+**Fallback**: define a weaker era-witness predicate that holds for all
+orbit-reachable M-configs without going through `IntraEra`. The witness
+just needs to bound `|L|` from above.
 
 3. **E.3 well-founded measure invalid** — multiple eras don't
    strictly decrease the measure. → introduce a hybrid measure or

@@ -17,12 +17,15 @@ R2, R3) were originally posited; R2 and R3-narrow were closed
 │   ├── era_orbit.lean             513 L  Stages A1+A2+B + Φ-pruning + BadShape framework (Option A landed); 4 sorries (3 step_R1 + 1 residual base case)
 │   ├── era_orbit_gamma.lean       333 L  Option γ scaffolding: D2 predecessor characterisation + γFuel measure + bounded forward simulator gammaSim. Axiom-clean, 0 sorries. Foundation for cascade closure.
 │   ├── scout_parity.lean          125 L  Parity-argument scouting probe (Path 1 fast check, 2026-05-06): cursor stays odd along M→M predecessors of M([], 3, R) but M0→M (D11) breaks pure parity. 4 lemmas, 0 sorries.
+│   ├── scout_2adic.lean           199 L  2-adic measure scout (Path 1′ check, 2026-05-06): defines macroMr := P_R(2) + 3; D2 forward doubles macroMr, D3 forward +1; lex(phi, macroMr) strictly decreases backward across D2/D3/D11. 0 sorries, key forward identities axiom-clean.
+│   ├── era_orbit_2adic.lean       235 L  Sub-plan E.3' foundations (2026-05-06): macroStep_lex_strict_increase (12-case forward monotonicity, axiom-clean), D2_backward_phi_eq + D2_backward_mr_double + D2_backward_lex_strict (cascade-backward analysis), cascade_unreachable structural skeleton. Delegates base case to era.lean's existing sorry.
 │   ├── conjectures.lean            77 L  Empirical conjectures from era-sim (stated as `theorem … := sorry`)
 │   └── c1inv_abandoned.lean        98 L  Abandoned step-level C1Inv/SafeRight invariant approach (kept for reference)
 │
 ├── Planning & status (markdown)
 │   ├── LOG.md                    1634 L  Master changelog; current state, axiom hygiene, layer status, Φ pipeline (2026-05-05)
-│   ├── plan-era-graded-not_R1.md  765 L  Plan for closing R1 via era-graded forward analysis; Sub-plan E (D2-spine bound, post-γ) is the active path
+│   ├── plan-era-graded-not_R1.md  765 L  Plan for closing R1 via era-graded forward analysis; (Sub-plan E superseded — see plan-era-graded_D2-spine bound.md)
+│   ├── plan-era-graded_D2-spine bound.md  695 L  Detailed Sub-plan E plan (2026-05-06); SUPERSEDED in §9 by 2-adic Path 1′ via lex(phi, macroMr) measure (math-on-paper check failed Φ-only bound; scout_2adic validates lex measure)
 │   ├── plan-badshape.md            336 L  Plan for closing residual base R sorry (Option A + γ scaffolding landed; cascade closure remains)
 │   ├── plan-r1.md                 645 L  Plan for closing R1 via "reachable ∧ c=3 → L≠[]" (form A.3) [superseded]
 │   ├── plan-sim-era.md            447 L  Five strategies for accelerating era-boundary discovery

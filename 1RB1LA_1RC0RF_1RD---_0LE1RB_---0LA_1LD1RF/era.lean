@@ -633,13 +633,13 @@ theorem OrbitReachable.not_M_empty_3
     intro R hcfg
     rw [MacroConfig.M.injEq] at hcfg
     exact List.cons_ne_nil _ _ hcfg.1
-  | step_R3 _ _ _ _ h_safe _ _ =>
+  | step_R3 _ _ _ _ h_safe _ _ _ =>
     -- h_safe is the safety property baked into step_R3: cfg' ≠ M([], 3, R)
     -- for any R. Discharged in `orbit_progress` via
     -- `thm_reach_multi_bounce_last_2_long_safe` /
     -- `shift_to_macro_prog_excludes_R1`.
     exact h_safe
-  | @step_R1 d_pre R'_pre _ _ _ _ _ _ ih =>
+  | @step_R1 d_pre R'_pre _ _ _ _ _ _ _ ih =>
     -- IH says predecessor (M([], 3, d_pre :: R'_pre)) ≠ M([], 3, R) for any R.
     -- Specifically, instantiating R = d_pre :: R'_pre: contradiction.
     exact (ih (d_pre :: R'_pre) rfl).elim

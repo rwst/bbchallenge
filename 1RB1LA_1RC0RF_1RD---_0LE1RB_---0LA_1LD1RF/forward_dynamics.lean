@@ -474,7 +474,13 @@ theorem shift_to_macro_prog_strong (L R : List Nat)
 /-- Corollary: if `L` contains an element `x ≥ 5`, the shift output is
     never `M([], 3, R)` for any R. (For `x = v` we have c = v ≥ 5; for
     `x ∈ L_suf` we have L ≠ [].) Also exposes Φ-preservation: cfg's Φ
-    equals the input M(L, 1, R)'s Φ. -/
+    equals the input M(L, 1, R)'s Φ.
+
+    Strengthened (2026-05-07) to also expose the structural fact
+    `v ≥ 5 ∨ ∃ x ∈ L_suf, x ≥ 5`: cfg' is M-shape and either its
+    cursor or L_suf has a ≥5 element. Used to exclude cascade
+    shapes (e.g. `mk_M_2spine_3` requires v=3 but also L_suf 2-spine,
+    which contradicts the ∃ x ∈ L_suf, x ≥ 5 in the v < 5 case). -/
 theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
     (h_R_ne : R ≠ []) (h_R_ge1 : AllGe1 R) (h_L_ge1 : AllGe1 L)
     (h_nonone : ∃ x ∈ L, x ≥ 2)
@@ -484,10 +490,12 @@ theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
       run sweeper (M_Config L 1 R) k = cfg'.toConfig ∧
       MacroInvariant cfg' ∧
       (∀ R', cfg' ≠ .M [] 3 R') ∧
+      (∃ L_suf v R_out, cfg' = .M L_suf v R_out ∧
+          (v ≥ 5 ∨ ∃ x ∈ L_suf, x ≥ 5)) ∧
       cfg'.phi = (MacroConfig.M L 1 R).phi := by
   obtain ⟨k, L_pre, v, L_suf, R_out, hk, h_split, h_pre_one, hv, hrun, hinv', hphi⟩ :=
     shift_to_macro_prog_strong L R h_R_ne h_R_ge1 h_L_ge1 h_nonone
-  refine ⟨k, .M L_suf v R_out, hk, ?_, hinv', ?_, hphi⟩
+  refine ⟨k, .M L_suf v R_out, hk, ?_, hinv', ?_, ?_, hphi⟩
   · rw [hrun, MacroConfig.toConfig_M]
   · intro R' hcfg
     rw [MacroConfig.M.injEq] at hcfg
@@ -501,6 +509,15 @@ theorem shift_to_macro_prog_excludes_R1 (L R : List Nat)
       · omega
       · rw [hLsuf] at hx_suf
         exact List.not_mem_nil hx_suf
+  · -- strict_safe: ∃ L_suf v R_out, cfg' = M L_suf v R_out ∧ (v ≥ 5 ∨ ∃ x ∈ L_suf, x ≥ 5)
+    refine ⟨L_suf, v, R_out, rfl, ?_⟩
+    obtain ⟨x, hx, hx_ge5⟩ := h_has_5
+    rw [h_split] at hx
+    rcases List.mem_append.mp hx with hx_pre | hx_post
+    · have hx_eq_1 := h_pre_one x hx_pre; omega
+    · rcases List.mem_cons.mp hx_post with rfl | hx_suf
+      · left; omega
+      · right; exact ⟨x, hx_suf, hx_ge5⟩
 
 /-- **Safe R3 closure**: like `thm_reach_multi_bounce_last_2_long` but
     additionally returns the structural exclusion `cfg' ≠ M([], 3, R)`
@@ -521,6 +538,12 @@ theorem thm_reach_multi_bounce_last_2_long_safe
         cfg'.toConfig ∧
       MacroInvariant cfg' ∧
       (∀ R, cfg' ≠ .M [] 3 R) ∧
+      -- Strict safe (2026-05-07): cfg' = M L_suf v R_out, and either there's
+      -- a ≥5 element in L_suf, or v = a+4 with L_suf = L'. The first case
+      -- excludes cascade shapes where L_suf is bounded; the second case
+      -- exposes the predecessor structure for M0 backward chase.
+      (∃ L_suf v R_out, cfg' = .M L_suf v R_out ∧
+          ((∃ x ∈ L_suf, x ≥ 5) ∨ (v = a + 4 ∧ L_suf = L'))) ∧
       cfg'.phi =
         (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 := by
   -- Same setup as thm_reach_multi_bounce_last_2_long.
@@ -565,22 +588,88 @@ theorem thm_reach_multi_bounce_last_2_long_safe
     apply List.mem_append.mpr; right
     apply List.mem_cons.mpr; right
     exact List.mem_cons_self
-  -- Step 2: apply shift_to_macro_prog_excludes_R1.
-  obtain ⟨k_shift, cfg', hk_shift, hcfg'_shift, hinv'_shift, h_safe, hphi_shift⟩ :=
-    shift_to_macro_prog_excludes_R1 L_after [1]
+  -- Step 2: apply shift_to_macro_prog_strong directly to get structural info.
+  obtain ⟨k_shift, L_pre, v_out, L_suf, R_out, hk_shift, h_split, h_pre_one, hv_ge2,
+          hrun_shift, hinv'_shift, hphi_shift⟩ :=
+    shift_to_macro_prog_strong L_after [1]
       (List.cons_ne_nil _ _)
       (AllGe1_singleton (by omega))
-      h_L_after_ge1 h_L_after_nonone h_L_after_has_5
+      h_L_after_ge1 h_L_after_nonone
+  -- Derive h_safe from the ≥5 element fact.
+  have h_safe : ∀ R', (MacroConfig.M L_suf v_out R_out) ≠ .M [] 3 R' := by
+    intro R' hcfg
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hLsuf, hv_eq, _⟩ := hcfg
+    obtain ⟨x, hx, hx_ge5⟩ := h_L_after_has_5
+    rw [h_split] at hx
+    rcases List.mem_append.mp hx with hx_pre | hx_post
+    · have := h_pre_one x hx_pre; omega
+    · rcases List.mem_cons.mp hx_post with rfl | hx_suf
+      · omega
+      · rw [hLsuf] at hx_suf; exact List.not_mem_nil hx_suf
+  -- Derive the NEW strict_safe: (∃ x ∈ L_suf, x ≥ 5) ∨ (v = a+4 ∧ L_suf = L')
+  have h_strict_safe : ∃ L_suf' v R_out',
+      (MacroConfig.M L_suf v_out R_out) = .M L_suf' v R_out' ∧
+      ((∃ x ∈ L_suf', x ≥ 5) ∨ (v = a + 4 ∧ L_suf' = L')) := by
+    refine ⟨L_suf, v_out, R_out, rfl, ?_⟩
+    -- Case split: is (a+4) at v_out position (v_out = a+4) or in L_suf?
+    -- L_after = [1] ++ middle_init.reverse ++ [e] ++ (r'+1) :: (a+4) :: L'.
+    -- L_after = L_pre ++ v_out :: L_suf with L_pre all 1s.
+    -- (a+4) is in L_after; since L_pre all 1s and a+4 ≥ 5 ≠ 1, (a+4) ∉ L_pre.
+    -- So (a+4) = v_out OR (a+4) ∈ L_suf.
+    -- Define the structural prefix.
+    set prefix_L : List Nat :=
+      ((e :: middle_init) ++ [1]).reverse ++ [r' + 1] with hprefix_def
+    have h_after_eq : L_after = prefix_L ++ (a + 4) :: L' := by
+      rw [hL_after_def]
+      simp [hprefix_def, List.append_assoc]
+    -- We have: L_pre ++ v_out :: L_suf = prefix_L ++ (a + 4) :: L'
+    have h_eq : L_pre ++ v_out :: L_suf = prefix_L ++ (a + 4) :: L' := by
+      rw [← h_after_eq]; exact h_split.symm
+    -- Apply List.append_eq_append_iff to do case analysis.
+    rcases List.append_eq_append_iff.mp h_eq with
+      ⟨k, hLpre_eq, h_tail⟩ | ⟨k, hpre_eq, h_tail⟩
+    · -- prefix_L = L_pre ++ k AND v_out :: L_suf = k ++ (a + 4) :: L'
+      cases k with
+      | nil =>
+        -- prefix_L = L_pre, v_out :: L_suf = (a + 4) :: L'.
+        right
+        injection h_tail with hv_eq hL_suf_eq
+        exact ⟨hv_eq, hL_suf_eq⟩
+      | cons k_head k_tail =>
+        -- v_out :: L_suf = (k_head :: k_tail) ++ (a + 4) :: L'
+        -- Cons-injection: v_out = k_head, L_suf = k_tail ++ (a + 4) :: L'.
+        injection h_tail with _hv_eq hL_suf_eq
+        -- L_suf has (a + 4) somewhere (in the trailing part).
+        left
+        refine ⟨a + 4, ?_, by omega⟩
+        rw [hL_suf_eq]
+        apply List.mem_append_right
+        exact List.mem_cons_self
+    · -- L_pre = prefix_L ++ k AND (a + 4) :: L' = k ++ v_out :: L_suf
+      cases k with
+      | nil =>
+        -- L_pre = prefix_L, (a + 4) :: L' = v_out :: L_suf.
+        right
+        injection h_tail with hv_eq hL_suf_eq
+        exact ⟨hv_eq.symm, hL_suf_eq.symm⟩
+      | cons k_head k_tail =>
+        -- (a + 4) :: L' = (k_head :: k_tail) ++ v_out :: L_suf
+        -- Cons-injection: a + 4 = k_head; k_head ∈ L_pre → all 1 → contradiction.
+        injection h_tail with hkh _
+        have h_kh_in : k_head ∈ L_pre := by
+          rw [hpre_eq]; exact List.mem_append_right _ List.mem_cons_self
+        have := h_pre_one k_head h_kh_in
+        omega
   -- Step 3: combine.
   obtain ⟨k_mb, h_mb⟩ : ∃ k_mb, run sweeper
       (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k_mb =
         M_Config L_after (0 + 1) [1] :=
     ⟨_, h_mb_raw⟩
-  refine ⟨k_mb + k_shift, cfg', by omega, ?_, hinv'_shift, h_safe, ?_⟩
-  · rw [run_add, h_mb]; exact hcfg'_shift
-  · -- cfg'.phi = (M L_after 1 [1]).phi (from hphi_shift, with 0+1=1)
-    --        = (M0 (a::L') ((r'+3)::e::middle_init++[1,2])).phi + 2
-    -- via L_after.sum expansion and arithmetic.
+  refine ⟨k_mb + k_shift, .M L_suf v_out R_out, by omega, ?_, hinv'_shift,
+          h_safe, h_strict_safe, ?_⟩
+  · rw [run_add, h_mb, hrun_shift, MacroConfig.toConfig_M]
+  · -- phi computation
     rw [hphi_shift]
     simp only [hL_after_def, MacroConfig.phi_M, MacroConfig.phi_M0,
                List.sum_append, List.sum_cons, List.sum_nil,

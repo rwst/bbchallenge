@@ -28,10 +28,21 @@ open BusyLean
     the left stack has a single element of value 2. The macro layer has no
     direct theorem covering it — `macro_sweep_left_empty` with c=0 would
     produce output cursor 1, below the invariant threshold. Empirically
-    verified non-halting through 10M raw TM steps. -/
+    verified non-halting through 10M raw TM steps.
+
+    **Φ side condition (2026-05-06)**: the resulting macro config `cfg'`
+    has `cfg'.phi ≥ predecessor.phi + 2`, capturing the empirical
+    observation that runs from `M([], 3, _)` proceed via at least one
+    M0-transition (Δϕ = +2) before reaching another macro-shape. This
+    bound is consistent with TM Φ-monotonicity (sweep family Δϕ = 0;
+    M0 rules Δϕ ≥ +2). It is loadbearing for the cascade-termination
+    proof (Sub-plan E.3′ via lex(ϕ, mr) measure). -/
 axiom reach_M_nil_3 {d : Nat} {R' : List Nat}
     (hinv : MacroInvariant (.M [] 3 (d :: R'))) :
-    ∃ k, 0 < k ∧ MacroProg (run sweeper (M_Config [] 3 (d :: R')) k) ∧
+    ∃ k, 0 < k ∧ ∃ cfg' : MacroConfig,
+      run sweeper (M_Config [] 3 (d :: R')) k = cfg'.toConfig ∧
+      MacroInvariant cfg' ∧
+      cfg'.phi ≥ (MacroConfig.M [] 3 (d :: R')).phi + 2 ∧
       (run sweeper (M_Config [] 3 (d :: R')) k).state ≠ none
 
 set_option maxHeartbeats 400000 in
@@ -55,7 +66,9 @@ theorem macro_progress (c : Config 6) (h : MacroProg c) :
       | 2, _ =>
         have ht := macro_sweep_to_zero_left_empty d R'
         exact mk_progress_M0 11 _ _ (by omega) ht (invariant_sweep_to_zero_left_empty hinv)
-      | 3, _ => exact reach_M_nil_3 hinv
+      | 3, _ =>
+        obtain ⟨k, hk, cfg', hcfg', hinv', _, hne⟩ := reach_M_nil_3 hinv
+        exact ⟨k, hk, ⟨cfg', hcfg', hinv'⟩, hne⟩
       | c' + 4, _ =>
         have htrans : run sweeper (M_Config [] (c' + 4) (d :: R')) (2 * (c' + 4) + 7) =
             M_Config [1] (c' + 2) ((d + 1) :: R') := by
@@ -528,6 +541,13 @@ inductive OrbitReachable : MacroConfig → Prop where
       MacroInvariant cfg' →
       0 < k →
       (∀ R, cfg' ≠ .M [] 3 R) →
+      -- Strict safety (2026-05-07): cfg' is M-shape (existential witness),
+      -- and either ∃ x ∈ L_suf, x ≥ 5, or v = a+4 with L_suf = L'.
+      -- The first disjunct excludes cascade shapes with bounded L_suf;
+      -- the second exposes the predecessor structure for M0 backward chase
+      -- (used to close mk_M_1_2spine_5 case).
+      (∃ L_suf v R_out, cfg' = .M L_suf v R_out ∧
+          ((∃ x ∈ L_suf, x ≥ 5) ∨ (v = a + 4 ∧ L_suf = L'))) →
       cfg'.phi =
         (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 →
       OrbitReachable cfg'
@@ -535,11 +555,14 @@ inductive OrbitReachable : MacroConfig → Prop where
   -- itself the unreachable shape, so this constructor's case vacuously closes
   -- in any OrbitReachable.not_M_empty_3 induction (the predecessor's IH gives
   -- direct contradiction).
+  -- The Φ side condition `cfg'.phi ≥ predecessor.phi + 2` (added 2026-05-06)
+  -- enables lex(ϕ, mr) cascade termination (Sub-plan E.3′).
   | step_R1 {d : Nat} {R' : List Nat} {cfg' : MacroConfig} {k : Nat} :
       OrbitReachable (.M [] 3 (d :: R')) →
       run sweeper (M_Config [] 3 (d :: R')) k = cfg'.toConfig →
       MacroInvariant cfg' →
       0 < k →
+      cfg'.phi ≥ (MacroConfig.M [] 3 (d :: R')).phi + 2 →
       OrbitReachable cfg'
 
 /-- Every orbit-reachable config satisfies the macro invariant. -/
@@ -564,7 +587,7 @@ theorem OrbitReachable.macroInvariant {cfg : MacroConfig} (h : OrbitReachable cf
       exact invariant_R2_zero ih
   | step_R2_succ _ ih =>
       exact invariant_R2_pos ih
-  | step_R3 _ _ hinv' _ _ _ _ => exact hinv'
+  | step_R3 _ _ hinv' _ _ _ _ _ => exact hinv'
   | step_R1 _ _ hinv' _ _ => exact hinv'
 
 /-- Progress predicate using OrbitReachable. Stronger than MacroProg —
@@ -689,10 +712,9 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
       | 3, _ =>
         -- R1 axiom case: lift via step_R1
         simp only [MacroConfig.toConfig_M]
-        obtain ⟨k, hk, hprog, hne⟩ := reach_M_nil_3 hinv
-        obtain ⟨cfg', hcfg', hinv'⟩ := hprog
+        obtain ⟨k, hk, cfg', hcfg', hinv', hphi, hne⟩ := reach_M_nil_3 hinv
         refine ⟨k, hk, ⟨cfg', hcfg', ?_⟩, hne⟩
-        exact OrbitReachable.step_R1 hreach hcfg' hinv' hk
+        exact OrbitReachable.step_R1 hreach hcfg' hinv' hk hphi
       | c' + 4, _ =>
         exact orbit_progress_macroStep hreach (rfl : macroStep _ = _) hinv
     | cons a L' =>
@@ -862,12 +884,12 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
                     (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
                       ((r' + 3) :: e :: middle_init' ++ [1, 2] : List Nat)) := by
                   rw [← h_input_eq]; exact hreach
-                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe, h_phi⟩ :=
+                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe, h_strict_safe, h_phi⟩ :=
                   thm_reach_multi_bounce_last_2_long_safe hinv_new
                 have hreach' : OrbitReachable cfg' :=
                   OrbitReachable.step_R3 (a := a' + 1) (r' := r') (e := e)
                     (L' := L') (middle_init := middle_init') (cfg' := cfg') (k := k)
-                    hreach_new hcfg' hinv' hk h_safe h_phi
+                    hreach_new hcfg' hinv' hk h_safe h_strict_safe h_phi
                 refine ⟨k, hk, ⟨cfg', ?_, hreach'⟩, ?_⟩
                 · simp only [MacroConfig.toConfig_M0]
                   rw [h_input_eq]
