@@ -307,3 +307,193 @@ issue, not the underlying mathematical non-termination.
 ### D. Inline approach in era.lean
 
 [skipped — same reason]
+
+## Issue: dep-elim cannot auto-eliminate cons-cons mismatches in `cases`
+
+### Setting (2026-05-07, cascade closure session 3)
+
+Adding a new constructor `mk_M0_2_1_2spine_2_R` to `InCascade`:
+
+```lean
+inductive InCascade : MacroConfig → Prop where
+  | mk_M_empty_3 (R : List Nat) : InCascade (.M [] 3 R)
+  | mk_M_2spine_3 ... : InCascade (.M L 3 R)
+  | mk_M_1_2spine_5 ... : InCascade (.M (1 :: L) 5 R)
+  | mk_M0_2_1_2spine_2_R {L : List Nat} (R : List Nat)
+      (h_2s : Is2Spine L) :
+      InCascade (.M0 (2 :: 1 :: L) (2 :: R))   -- NEW
+```
+
+In `cascade_strong_aux`, the original `step_multi_bounce_general_to_zero`
+case used:
+
+```lean
+| step_multi_bounce_general_to_zero _ => cases h_in
+```
+
+This worked when `InCascade` had only M-producing constructors —
+all 3 fail unification with the M0 cfg, auto-eliminated.
+
+### The problem
+
+After adding `mk_M0_2_1_2spine_2_R`, `cases h_in` fails with:
+
+```
+error: Dependent elimination failed: Failed to solve equation
+```
+
+`cfg` is refined to `M0 (R_mid.reverse ++ (r' + 1) :: (a + 4) :: L') [1]`
+by the outer `step_multi_bounce_general_to_zero` case-match. The new
+constructor wants `cfg = M0 (2 :: 1 :: L) (2 :: R)`. The R-component
+unification `[1] = 2 :: R` is impossible (cons-injection: `1 = 2` is
+false), but Lean's dependent elimination cannot auto-derive this from
+`List.cons.noConfusion` — it leaves the case open.
+
+Even explicit pattern `| @mk_M0_2_1_2spine_2_R L R h_2s => sorry`
+fails with the same error before reaching the body. `nomatch h_in`
+also fails.
+
+### Workaround tried
+
+- `cases h_in with | @mk_M0_2_1_2spine_2_R L R h_2s => sorry` —
+  fails at the pattern, not in the body.
+- `nomatch h_in` — "Missing cases" error.
+- `cases h_in <;> ...` — same dep-elim issue.
+
+### Why this matters
+
+The natural way to extend `InCascade` for `step_macro mk_M_1_2spine_5`
+case D (D12 zero_two predecessor `M0 (2 :: 1 :: L) (2 :: d :: R')`)
+is to add the corresponding constructor and let cascade IH (`ih_phi`)
+fire on the smaller-measure predecessor.
+
+But every `cases h_in` site in `cascade_strong_aux` (10+ locations)
+needs explicit handling for the new constructor — even when the
+constructor's output shape contradicts the outer cfg shape.
+
+In sites like `step_multi_bounce_general_to_zero` where the contradiction
+is a list cons-cons mismatch, Lean's dep-elim doesn't auto-derive `False`
+from it.
+
+### Workaround needed
+
+Manual handling at each site:
+
+```lean
+| step_multi_bounce_general_to_zero _ =>
+  cases h_in with
+  | @mk_M0_2_1_2spine_2_R L R h_2s =>
+    -- Manually derive ⊥ from cfg double-refinement.
+    -- ... but Lean can't even reach the body.
+    ???
+```
+
+For now: **reverted the constructor addition**. Cascade closure for
+case D requires either:
+- Massive refactor with explicit per-site handling (~200 LOC).
+- Custom unfolding tactic to coerce dep-elim into recognizing
+  cons-cons contradictions.
+- Different approach (recursive helper family, not InCascade extension).
+
+## Issue: cascade chain extends unboundedly for `step_macro mk_M_1_2spine_5`
+
+### Setting (2026-05-07)
+
+In `cascade_strong_aux`, the `step_macro mk_M_1_2spine_5` case has 4
+productive predecessor cases via γ.3 (predecessor analysis lemma):
+
+- **B** (D7 era_and_sweep_solo): `M0 [2] [1]` — closed via existing
+  `OrbitReachable.not_M0_2_1`.
+- **C** (D8 zero_two_solo): `M0 (2 :: 1 :: L_2s) [2]` — closed via
+  new helpers H1 (`not_M_starts_1_1_2spine_2_R1`) and H2
+  (`not_M0_starts_2_1_2spine_2`). Chain depth 2 (H2 calls H1 via
+  step_macro D1; H1's chain bottoms out at step_R1 + ih_phi).
+- **A** (D5 sweep_left_empty, L_2s = []): predecessor `M [] 7 (d :: R')`.
+  Phi preserved by sweep; chain extends backward via D2
+  (sweep_and_shift) to `M [6] 3 (...)`, then γ.2 to `M [2, 6] 3 (...)`,
+  ad infinitum (each γ.2 step prepends a 2 to L).
+- **D** (D12 zero_two): predecessor `M0 (2 :: 1 :: L_2s) (2 :: d :: R')`.
+  Chain extends backward to `M (1 :: 1 :: L_2s) 2 (1 :: d :: R')` →
+  `M (1 :: 1 :: 1 :: L_2s) 3 ((d-1) :: R')` → ... bounded by `d`,
+  but `d` is unbounded over instances.
+
+### The mathematical structure
+
+The cascade chain for cases A, D2, D involves shapes like
+`M ([2^i, 1^j] :: L_2s) cursor R` for unbounded i, j. The lex measure
+`(phi, mr)` strictly decreases backward — phi is preserved but
+`macroMr R` halves at each D2 step (Probe 2 in `scout_2adic.lean`).
+So total chain length is finite, bounded by `log₂(macroMr R₀)`.
+
+### Why a finite cascade extension doesn't suffice
+
+Encoding all chain shapes as `InCascade` constructors requires
+parameterizing by chain depth. For example:
+
+```lean
+| mk_M_1ones_2spine_5 (n : Nat) {L_2s : List Nat} (h_2s : Is2Spine L_2s)
+    (R : List Nat) :
+    InCascade (.M (List.replicate (n + 1) 1 ++ L_2s) 5 R)
+```
+
+But this is one of MANY parameterized families needed:
+- `M (1^k ++ L_2s) 5 R` for cursor 5 (extension of `mk_M_1_2spine_5`)
+- `M (2^i ++ 1^j ++ L_2s) 3 R` for cursor 3 (extension of `mk_M_2spine_3`)
+- `M (1^k ++ L_2s) 2 (1^? ++ R) ` for cursor 2
+- `M0 (2 :: 1 :: ... ) (2 :: ...)` for M0 shapes
+- `M [] (c+3) R` for the empty-L cascade (case A)
+
+Each family needs predecessor preservation lemmas (γ-style). Estimated
+~500-1000 LOC of new infrastructure.
+
+### What was achieved (session 3)
+
+Closed cases B and C via specific helpers H1, H2. Cases A, D2, D
+remain as sorries inside `cascade_strong_aux` (lines ~568, 582, 652
+in `era_orbit_cascade.lean`). Build clean: 895 jobs, cascade has 3
+sorries inside step_macro mk_M_1_2spine_5.
+
+### What was achieved (session 4) — D5/A closed via mk_M_empty_high_3
+
+Added 4th `InCascade` constructor:
+
+```lean
+| mk_M_empty_high_3 (c : Nat) (R : List Nat) :
+    InCascade (.M [] (c + 4) R)
+```
+
+D5/A closed via `ih_mr` on `cfg_pre = M [] 7 (d :: R')` (smaller mr
+at same phi as outer cfg). The D5/A sorry at the original line is
+gone; in its place is a 20-line block computing the lex decrease and
+applying `ih_mr`.
+
+However, the new constructor created 4 new sorries elsewhere (the
+predecessor analysis of `M [] (c+4) R` has the same constructor-
+explosion problem):
+
+- `mk_M_empty_high_3` case in `step_macro` (predecessors: D2/D8/D10/D12).
+- `mk_M_empty_high_3` in `step_multi_bounce_2_double_shift` (pred `M0 [c] [3, 2]`).
+- `mk_M_empty_high_3` in `step_R2_zero` (pred `M0 [c] [3, 1, 2]`).
+- `mk_M_empty_high_3` in `step_R3` (pred `M0 [c] (...)`).
+
+**Net cascade sorry count**: 3 → 6. Structural difficulty is now
+centralized to the new constructor's predecessor dispatch.
+
+### Recommended approach for future work
+
+1. Define a parameterized inductive `CascadeShape` with constructors
+   for all chain-step targets (~6-8 constructors needed):
+   - `M [] (c+4) R` (`mk_M_empty_high_3`, added in session 4).
+   - `M [n] 3 R` for n ≥ 1 (D2 pred chain).
+   - `M [2^k, n] 3 R` (further D2 extensions).
+   - `M [n] 5 R` (D3-lift).
+   - `M0 [n] [2]`, `M0 [n] [4]`, `M0 [n] (2 :: ...)`, `M0 [n] [3, 2]`,
+     `M0 [n] [3, 1, 2]` shapes.
+2. Prove `CascadeShape.predecessor_preservation` (γ-family) for each.
+3. Use lex-measure induction `(phi, mr, depth)` where `depth` is
+   the constructor's parameter (number of prepended 1's/2's).
+4. The induction terminates because `mr = macroMr R` halves on D2
+   steps and decreases monotonically on others.
+
+This is genuinely a 1-2 week effort given the careful invariant
+design needed.

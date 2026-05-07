@@ -2665,3 +2665,300 @@ closure IS achievable (foundational lemmas are axiom-clean and the
 recursion has proper lex descent). Closing the residual 5 sorries
 is mechanical work (~150–250 L) but requires care around the
 circular-dependency cases.
+
+## 2026-05-07 cascade closure session 2
+
+### Strict_safe disjunction repair (forward_dynamics.lean)
+
+Previous session left `thm_reach_multi_bounce_last_2_long_safe`'s
+disjunction proof broken (used non-existent `Nat.eq_or_gt_one_lt_iff`).
+Replaced with `List.append_eq_append_iff`-based case split. Initially
+had cases swapped (mistook left/right of the iff); fixed by reordering.
+
+New disjunction (added 2026-05-06): cfg' = .M L_suf v R_out where
+EITHER ∃ x ∈ L_suf, x ≥ 5 OR (v = a + 4 ∧ L_suf = L'). The second
+disjunct (rather than just v ≥ 5) is critical: it lets us reconstruct
+the predecessor structure for the M0 backward chase in
+`step_R3 mk_M_1_2spine_5`.
+
+### `step_R3 mk_M_1_2spine_5` — **CLOSED** 2026-05-07
+
+Approach: M0 backward chase via new helper
+`OrbitReachable.not_M0_starts_1_1_R_ge2 cfg L_rest r R_rest` proving
+`cfg = M0 (1 :: 1 :: L_rest) (r :: R_rest) → ¬ OrbitReachable cfg`
+when `r ≥ 2`. Helper case-analyzes h_or (12 macroStep dispatches +
+6 multi-bounce/R2/R3/R1 constructors); the only "live" branches are:
+- D1 (sweep_to_zero): predecessor would have L head = 0 (a + 1 = 1
+  → a = 0), violating AllGe1. ⊥.
+- step_R1: cfg' could be M0 (1 :: 1 :: ...) in principle.
+
+**`step_R1` sub-case**: parameterized helper with phi-bounded
+predecessor exclusion `h_excl_R1_pred`:
+```
+∀ d R', OrbitReachable (M [] 3 (d :: R')) →
+        (M [] 3 (d :: R')).phi < cfg.phi → False
+```
+Step_R1's φ side condition (cfg.phi ≥ pred.phi + 2) makes the
+hypothesis inhabited; caller supplies it via cascade `ih_phi` at
+`InCascade.mk_M_empty_3`.
+
+In `cascade_strong_aux step_R3 mk_M_1_2spine_5`: discharge the
+right disjunct of `h_disj` (v = a+4 = 5 → a = 1, L_suf = L' →
+L' = 1 :: L_2s). Helper instantiated with `L_rest := L_2s`,
+`r := r' + 3` (≥ 2 ✓), `R_rest := e :: middle_init ++ [1, 2]`.
+The h_excl_R1_pred lambda uses `h_phi_side` (binds `cfg.phi =
+(M0 (a :: L') (...)).phi + 2` from `step_R3`) to relate
+helper.cfg.phi to outer.phi for `ih_phi`.
+
+### `step_multi_bounce_2_double_shift mk_M_1_2spine_5` — **CLOSED** 2026-05-07
+
+Output `M L' (a + 4) [1, 1, 1]` unifies with `M (1 :: L_2s) 5 R₀`
+giving L' = 1 :: L_2s, a = 1 (Lean's elim solves a + 4 = 5).
+Predecessor `OrbitReachable (M0 (1 :: 1 :: L_2s) [3, 2])` —
+direct call to helper with `r := 3`, `R_rest := [2]`. Same
+h_excl_R1_pred via cascade IH.
+
+### `step_R2_zero mk_M_1_2spine_5` — **CLOSED** 2026-05-07
+
+Output `M L' (a+4) [1, 1, 1, 1]` similar setup. Predecessor
+`M0 (1 :: 1 :: L_2s) [3, 1, 2]`. Helper with `r := 3`,
+`R_rest := [1, 2]`.
+
+### Remaining: `step_macro mk_M_1_2spine_5`
+
+Still sorry-stubbed (line 306 of `era_orbit_cascade.lean`).
+Predecessor analysis (γ.3-style) reveals 4 productive cases for
+`macroStep cfg_pre = some (k, M (1 :: L_2s) 5 R₀)`:
+
+- **A** (sweep_left_empty, c'=3): `cfg_pre = M [] 7 (d :: R')`,
+  `L_2s = []`, `R₀ = (d+1) :: R'`. **Not in cascade**, requires
+  separate exclusion (M [] high cursor unreachable).
+- **B** (era_and_sweep_solo, a=1): `cfg_pre = M0 [2] [1]`,
+  `L_2s = []`, `R₀ = [1]`. Closeable via existing
+  `OrbitReachable.not_M0_2_1`.
+- **C** (zero_two_solo, a=2): `cfg_pre = M0 (2 :: 1 :: L_2s) [2]`,
+  `R₀ = [1]`. Predecessor M0 not in cascade; recursive backward
+  chain via D1 leads to M (1 :: 1 :: L_2s) 2 (1 :: ...) — also
+  not in cascade.
+- **D** (zero_two, a=2): `cfg_pre = M0 (2 :: 1 :: L_2s) (2 :: d :: R')`,
+  `R₀ = (d+1) :: R'`. Similar to C.
+
+Closing this requires either:
+- Extending `InCascade` with new constructors (M0_2_1_2spine_2_R,
+  M_1_1_2spine_2_R, M_empty_high) and proving their predecessor
+  preservation (multi-step γ-lemmas).
+- Per-case ad-hoc exclusions using more invariants.
+
+Estimated ~200–400 L of new infrastructure. **Deferred.**
+
+### Net session progress (session 2)
+
+Closed 3 of 4 mk_M_1_2spine_5 cases. Cascade now has only 1 sorry
+remaining (`step_macro mk_M_1_2spine_5`). The disjunction proof
+repair + step_R3 closure validates the strict_safe v2 design.
+
+Build status: 895 jobs, 4 declarations using sorry (was 5).
+
+## 2026-05-07 cascade closure session 3 — step_macro mk_M_1_2spine_5 partial
+
+### γ.3 inline dispatch in cascade_strong_aux
+
+Replaced the step_macro mk_M_1_2spine_5 sorry with an inline
+`rcases macroStep_eq_some_cases` dispatching all 12 macroStep cases.
+Closed (no sorry):
+- D1, D4, D9: target M0 vs M shape contradiction.
+- D3: a + 1 = 1 → a = 0 violates AllGe1 of predecessor's L.
+- D6: target L head b + 1 = 1 → b = 0 violates AllGe1 of predecessor's L.
+- D7 (CASE B, era_and_sweep_solo): predecessor M0 [2] [1] excluded
+  via `OrbitReachable.not_M0_2_1`.
+- D10 (zero_bounce_and_shift): predecessor M0 (1 :: 1 :: L_2s) [4]
+  excluded via `not_M0_starts_1_1_R_ge2` (r = 4 ≥ 2 ✓).
+- D11: target L head a + 4 = 1 → impossible (Nat).
+
+### New helpers H1, H2 (axiom-clean)
+
+- **H1** `OrbitReachable.not_M_starts_1_1_2spine_2_R1`: closes
+  `M (1 :: 1 :: L_2s) 2 [1]` with `Is2Spine L_2s`. Uses 12-case
+  macroStep dispatch + multi-bounce/R2/R3 shape contradictions; the
+  step_R3 case requires `Is2Spine.mem_eq_2` for the L_2s membership
+  contradiction; step_R1 closes via callback.
+- **H2** `OrbitReachable.not_M0_starts_2_1_2spine_2`: closes
+  `M0 (2 :: 1 :: L_2s) [2]` with `Is2Spine L_2s`. Uses H1 for the
+  D1 sweep_to_zero predecessor, and structural mismatches for other
+  constructors. step_R1 closes via callback.
+
+### Closed CASE C (D8 zero_two_solo) using H2
+
+Predecessor `M0 (2 :: 1 :: L_2s) [2]` discharged via H2 with
+phi-bounded `h_excl_R1_pred` callback supplied by cascade ih_phi.
+
+### Remaining sorries (3) in step_macro mk_M_1_2spine_5
+
+- **D2 sweep_and_shift**: predecessor `M (4 :: 1 :: L_2s) 3 (d :: R')`.
+  L head 4 is not 2-spine; predecessor isn't in current InCascade.
+  Phi preserved (D2 phi-conserving), so lex needs mr decrease via
+  ih_mr — but predecessor not in cascade.
+- **D5 sweep_left_empty (CASE A)**: predecessor `M [] 7 (d :: R')`,
+  L_2s = []. Phi preserved (D5 phi-conserving). Predecessor's
+  predecessor would be `M [6] 3 (...)` (via D2 again) — also not
+  in cascade.
+- **D12 zero_two (CASE D)**: predecessor
+  `M0 (2 :: 1 :: L_2s) (2 :: d :: R')`. Same shape as H2 but with
+  non-empty R suffix. Would need H2_R generalization, plus H3 for
+  `M (1 :: 1 :: L_2s) 2 (1 :: d :: R')`, plus H4 for
+  `M (1 :: 1 :: 1 :: L_2s) 3 ((d - 1) :: R')`, etc.
+  Chain depth ≈ d (the R₀ first-element parameter), requires
+  unbounded helper family OR cascade constructor parameterized by
+  "1-prefix length" and "2-spine + 1-suffix" patterns.
+
+These three residuals genuinely require:
+- (D2, A): extending InCascade with shapes `M [a] 3 R` for general
+  a ≥ 1 (γ.2 generalization to non-2-spine L head) AND
+  `M [] (c+3) R` for general c (M-empty-high cascade).
+- (D): chain-length parameterization.
+
+Estimated multi-day work. **Build status**: 895 jobs, 4 declarations
+using sorry. Of cascade's residual sorry: D2, A, D in cascade_strong_aux.
+
+## 2026-05-07 cascade closure session 4 — D5/A closed via constructor extension
+
+### Approach
+
+Closed D5/A's specific sorry by extending `InCascade` with a fourth
+constructor `mk_M_empty_high_3 (c R) : InCascade (M [] (c+4) R)` and
+calling `ih_mr` on the predecessor `M [] 7 (d :: R')`.
+
+Key arithmetic:
+- cfg = `M [1] 5 ((d+1) :: R')` (from D5 unification, L_2s = [], c' = 3).
+- cfg_pre = `M [] 7 (d :: R')`.
+- cfg_pre.phi = cfg.phi = 7 + d + R'.sum.
+- cfg_pre.mr = `macroMr (d :: R')` = d + 3 + 2P.
+- cfg.mr = `macroMr ((d+1) :: R')` = d + 4 + 2P.
+- cfg_pre.mr < cfg.mr ✓ (D5 backward decreases mr by 1).
+
+So `ih_mr cfg_pre.mr h_lt cfg_pre rfl rfl (mk_M_empty_high_3 3 (d::R')) h_prev`
+discharges D5/A.
+
+### Deletions
+
+- Removed `InCascade.not_M_empty_high` (it claimed `¬ InCascade (M [] (c+4) R)`,
+  now invalid since the constructor proves it).
+
+### Updates
+
+- `InCascade.L_mem_le_2`: added `mk_M_empty_high_3` case (vacuous, L = []).
+- `cases h_in with` in main `step_macro` cascade body: added
+  `mk_M_empty_high_3 c R` case (sorry-stubbed; predecessor analysis
+  for M [] (c+4) R requires additional infrastructure).
+- Three other cascade case sites required explicit
+  `| mk_M_empty_high_3 _ _` clauses where the rule output's L was
+  unconstrained (Lean dep-elim couldn't auto-close):
+  - `step_multi_bounce_2_double_shift` (output `M L' (a+4) [1, 1, 1]`).
+  - `step_R2_zero` (output `M L' (a+4) [1, 1, 1, 1]`).
+  - `step_R3` (output `M L_suf v R_out`, second h_disj branch).
+
+### Net session progress
+
+- D5/A's original sorry at line 582 **closed** (replaced by `ih_mr`
+  call with `mk_M_empty_high_3`).
+- New sorries created in mk_M_empty_high_3 cases: 4 sites
+  (1 in step_macro main dispatch; 3 in other cases h_or branches).
+- D2 and D12/D sorries unchanged.
+- **Net cascade sorry count**: 3 → 6.
+
+The new sorries are STRUCTURALLY UNIFORM: all relate to predecessor
+exclusion of M [] (c+4) R. Closing them requires:
+- M [c+3] 3 (...) exclusion (D2 pred — ~M[n] 3 R with n ≥ 3 unbounded chain).
+- M0 [c+1] [2], M0 [c] [4], M0 [c+1] (2 :: ...) exclusions (D8, D10, D12 pred).
+- M0 [c] [3, 2], M0 [c] [3, 1, 2] exclusions (multi_bounce_2_double_shift,
+  R2_zero pred).
+- M0 [c] (...) exclusion (R3 pred via phi-bound callback).
+
+Per `lean-issues.md` "cascade chain extends unboundedly", each M0
+shape requires its own backward analysis helper. The unbounded
+M [n] 3 R chain (D2 case) requires either ~6-8 new InCascade
+constructors (with γ-style predecessor preservation) or self-contained
+strong-induction helpers per chain depth.
+
+**Build status**: 895 jobs clean, 6 declarations using sorry total
+(was 4 — net +2 for cascade extension; era/era_orbit/era_orbit_2adic/conjectures unchanged).
+6 sorries inside cascade_strong_aux: D2, D12/D, mk_M_empty_high_3 main,
+mk_M_empty_high_3 in step_multi_bounce_2_double_shift / step_R2_zero / step_R3.
+
+## 2026-05-07 cascade closure session 5 — chain helpers + D8/D10 closures
+
+### Approach: narrow `mk_M_empty_high_3` to `mk_M_empty_7`
+
+Replaced general `mk_M_empty_high_3 (c R)` with narrow `mk_M_empty_7 R`
+(cursor=7 fixed). With cursor 7 fixed, predecessor analysis for
+`M [] 7 R` is tractable since:
+- All chain shapes have phi ≤ 8.
+- step_R1 phi-side condition (`cfg.phi ≥ pred.phi + 2`) combined with
+  `phi_ge_init` (`pred.phi ≥ 6`) yields contradiction for cfg.phi ≤ 7.
+- Many shapes have phi < 6 directly → `not_phi_lt_six`.
+
+### Chain helpers added (~600 LOC, all axiom-clean)
+
+7 standalone OrbitReachable helpers in `era_orbit_cascade.lean`:
+
+1. **`not_M_3_2_1`** (~80 L): cfg = M [3] 2 [1], phi = 6. step_R1 ⊥
+   via phi_ge_init. All other constructors: shape mismatches (D1-D12
+   12-way dispatch + 8 multi_bounce/R2/R3 cases).
+2. **`not_M0_4_2`** (~60 L): cfg = M0 [4] [2], phi = 6. Only D1 pred
+   = M [3] 2 [1] (use `not_M_3_2_1`). step_R1 ⊥ via phi.
+3. **`not_M0_3_2`** (~5 L): cfg = M0 [3] [2], phi = 5 < 6. Direct
+   `not_phi_lt_six`.
+4. **`not_M_empty_6_1`** (~80 L): cfg = M [] 6 [1], phi = 7. D8 pred
+   M0 [3] [2] (`not_M0_3_2`). D12 pred M0 with d = 0 violates AllGe1.
+   step_R3: pred.phi = 5 < 6 ⊥. step_R1 ⊥ via phi.
+5. **`not_M_1_4_2`** (~110 L): cfg = M [1] 4 [2], phi = 7. D5 pred
+   M [] 6 [1] (`not_M_empty_6_1`). D12 pred M0 [1, 1] [2, 1], phi = 5 < 6.
+   step_R1 ⊥.
+6. **`not_M_2_2_3`** (~90 L): cfg = M [2] 2 [3], phi = 7. D3 pred
+   M [1] 4 [2] (`not_M_1_4_2`). step_R1 ⊥.
+7. **`not_M0_3_4`** (~60 L): cfg = M0 [3] [4], phi = 7. D1 pred
+   M [2] 2 [3] (`not_M_2_2_3`). step_R1 ⊥.
+
+### Closures using new helpers
+
+In `cascade_strong_aux mk_M_empty_7 step_macro` 12-way dispatch:
+- D8 sub-case (pred M0 [4] [2]): closed via `not_M0_4_2`.
+- D10 sub-case (pred M0 [3] [4]): closed via `not_M0_3_4`.
+
+### Sub-cases REMAINING (5 sorries)
+
+- **mk_M_empty_7 step_macro D2**: pred M [6] 3 (d :: R'). Backward
+  chain through M [6] 3 R involves D2 (M [2, 6] 3 R'), D3 (M [5] 5 R'),
+  D11 (M0 [2] [6]), step_R3 (M0 with phi-bound). Each branch needs
+  ~3-5 chain helpers. Estimated ~400 LOC.
+- **mk_M_empty_7 step_macro D12**: pred M0 [4] (2 :: d :: R'_d12).
+  General d ≥ 1 means chain depth depends on d. Helper needs
+  cascade IH callback for step_R1 cases at deep cfgs.
+- **mk_M_empty_7 step_multi_bounce_2_double_shift**: pred M0 [3] [3, 2].
+  Backward chain M0 [3] [3, 2] ← M [2] 2 [2, 2] ← M [1] 4 [1, 2] ←
+  M [] 6 [1, 1]. Each phi = 8, step_R1 may not auto-close.
+- **mk_M_empty_7 step_R2_zero**: pred M0 [3] [3, 1, 2]. Similar.
+- **mk_M_empty_7 step_R3**: pred M0 [3] (general R from R3).
+  h_phi_side gives cfg.phi = pred.phi + 2 = 9. step_R1 may fire.
+
+### Net session progress
+
+- **D8, D10 closed** (D5/A's residual chain progressed by 2 of 4 cases).
+- 7 reusable helpers added (axiom-clean).
+- The chain technique is **demonstrated viable**: each chain shape
+  is closeable via a helper that ends at either phi_lt_six or
+  step_R1-phi-contradiction.
+
+**Build status**: 895 jobs clean, 6 declarations using sorry total
+(unchanged from session 4 since splitting). 7 sorries inside
+cascade_strong_aux: D2, D12/D (mk_M_1_2spine_5); D2, D12 (mk_M_empty_7
+step_macro); 3 in mk_M_empty_7 multi_bounce/R2_zero/R3.
+
+### Recommended path forward
+
+For each remaining sorry, write 3-5 chain helpers ending in
+phi_lt_six (cfg.phi < 6) or step_R1-phi-contradiction. Each helper
+~50-100 LOC. Total estimated ~1500 LOC to close all 5 remaining
+mk_M_empty_7 sub-sorries. The 2 mk_M_1_2spine_5 D2/D12/D sorries
+require additional helpers for their predecessor chains (M with
+4-prefix L, M0 with 2-1-2spine prefix L).
