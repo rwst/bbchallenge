@@ -676,4 +676,303 @@ theorem thm_reach_multi_bounce_last_2_long_safe
                List.sum_reverse]
     omega
 
+-- ============================================================
+-- Inverse-shift case decomposition
+-- ============================================================
+
+/-- **Inverse-shift 4-case decomposition**: given the structural list equation
+    `1 :: middle_init.reverse ++ e :: (r'+1) :: (a+4) :: L' = L_pre ++ v :: L_suf`
+    with `L_pre` all 1s, `v ≥ 2`, and `AllGe1` invariants, exactly one of the
+    following 4 structural cases holds. Used to invert
+    `shift_to_macro_prog_strong` applied to the multi-bounce output. -/
+theorem shift_inverse_4cases
+    (a r' e : Nat) (L' middle_init L_pre L_suf : List Nat) (v : Nat)
+    (h_a_ge1 : a ≥ 1)
+    (_h_e_ge1 : e ≥ 1)
+    (_h_mi_ge1 : AllGe1 middle_init)
+    (h_pre_one : ∀ x ∈ L_pre, x = 1)
+    (hv : v ≥ 2)
+    (h_eq : 1 :: middle_init.reverse ++ e :: (r' + 1) :: (a + 4) :: L'
+           = L_pre ++ v :: L_suf) :
+    -- Case 1: v sits within middle_init: middle_init = mi_A ++ v :: mi_B with
+    -- mi_B all 1s. L_pre = 1 :: mi_B.reverse, L_suf = mi_A.reverse ++ tail.
+    (∃ mi_A mi_B : List Nat, middle_init = mi_A ++ v :: mi_B ∧
+       (∀ x ∈ mi_B, x = 1) ∧
+       L_pre = 1 :: mi_B.reverse ∧
+       L_suf = mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L') ∨
+    -- Case 2: middle_init all 1s, v = e.
+    ((∀ x ∈ middle_init, x = 1) ∧ e = v ∧
+       L_pre = 1 :: middle_init.reverse ∧
+       L_suf = (r' + 1) :: (a + 4) :: L') ∨
+    -- Case 3: middle_init all 1s, e = 1, v = r' + 1.
+    ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' + 1 = v ∧
+       L_pre = 1 :: middle_init.reverse ++ [1] ∧
+       L_suf = (a + 4) :: L') ∨
+    -- Case 4: middle_init all 1s, e = 1, r' = 0, v = a + 4.
+    ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' = 0 ∧ a + 4 = v ∧
+       L_pre = 1 :: middle_init.reverse ++ [1, 1] ∧
+       L_suf = L') := by
+  -- L_pre starts with 1 (since LHS head is 1 and L_pre all 1s; if L_pre empty, v = 1 ⊥).
+  cases L_pre with
+  | nil =>
+    rw [List.nil_append] at h_eq
+    simp only [List.cons_append] at h_eq
+    injection h_eq with h_head _
+    omega
+  | cons h_pre L_pre' =>
+    have h_head : h_pre = 1 := h_pre_one h_pre List.mem_cons_self
+    subst h_head
+    simp only [List.cons_append] at h_eq
+    injection h_eq with _ h_eq'
+    have h_pre'_one : ∀ x ∈ L_pre', x = 1 :=
+      fun x hx => h_pre_one x (List.mem_cons.mpr (Or.inr hx))
+    -- List.append_eq_append_iff: ws ++ xs = ys ++ zs ↔
+    --   (∃ as, ys = ws ++ as ∧ xs = as ++ zs) ∨ (∃ bs, ws = ys ++ bs ∧ zs = bs ++ xs)
+    -- Here ws = middle_init.reverse, xs = e::rest, ys = L_pre', zs = v::L_suf.
+    -- Disjunct 1: L_pre' = middle_init.reverse ++ as ∧ e::rest = as ++ v::L_suf.
+    -- Disjunct 2: middle_init.reverse = L_pre' ++ bs ∧ v::L_suf = bs ++ e::rest.
+    rcases List.append_eq_append_iff.mp h_eq' with
+      ⟨k, h_pre_eq, h_tail⟩ | ⟨k, h_mi_eq, h_tail⟩
+    · -- Disjunct 1: L_pre' = middle_init.reverse ++ k AND e :: rest = k ++ v :: L_suf.
+      have h_mi_rev_one : ∀ x ∈ middle_init.reverse, x = 1 := by
+        intro x hx
+        have : x ∈ L_pre' := by rw [h_pre_eq]; exact List.mem_append_left _ hx
+        exact h_pre'_one x this
+      have h_mi_one : ∀ x ∈ middle_init, x = 1 := by
+        intro x hx
+        exact h_mi_rev_one x (List.mem_reverse.mpr hx)
+      cases k with
+      | nil =>
+        -- e :: rest = [] ++ v :: L_suf = v :: L_suf. injection: e = v, rest = L_suf.
+        rw [List.append_nil] at h_pre_eq
+        rw [List.nil_append] at h_tail
+        injection h_tail with hev_eq hLsuf_eq
+        right; left
+        refine ⟨h_mi_one, hev_eq, ?_, hLsuf_eq.symm⟩
+        rw [h_pre_eq]
+      | cons k_head k_tail =>
+        simp only [List.cons_append] at h_tail
+        injection h_tail with hk_head_eq h_tail2
+        have h_kh_in : k_head ∈ L_pre' := by
+          rw [h_pre_eq]; exact List.mem_append_right _ List.mem_cons_self
+        have h_kh_eq_1 : k_head = 1 := h_pre'_one k_head h_kh_in
+        -- hk_head_eq : e = k_head. h_kh_eq_1 : k_head = 1. Combine.
+        have h_e_eq_1 : e = 1 := hk_head_eq.trans h_kh_eq_1
+        cases k_tail with
+        | nil =>
+          rw [List.nil_append] at h_tail2
+          injection h_tail2 with hrv_eq hLsuf_eq
+          right; right; left
+          refine ⟨h_mi_one, h_e_eq_1, hrv_eq, ?_, hLsuf_eq.symm⟩
+          rw [h_pre_eq, h_kh_eq_1]
+          simp
+        | cons k_t_head k_t_tail =>
+          simp only [List.cons_append] at h_tail2
+          injection h_tail2 with hkth_eq h_tail3
+          have h_kth_in : k_t_head ∈ L_pre' := by
+            rw [h_pre_eq]
+            exact List.mem_append_right _ (List.mem_cons.mpr (Or.inr List.mem_cons_self))
+          have h_kth_eq_1 : k_t_head = 1 := h_pre'_one k_t_head h_kth_in
+          have h_r_eq_0 : r' = 0 := by
+            -- hkth_eq : r' + 1 = k_t_head. h_kth_eq_1 : k_t_head = 1.
+            have : r' + 1 = 1 := hkth_eq.trans h_kth_eq_1
+            omega
+          cases k_t_tail with
+          | nil =>
+            rw [List.nil_append] at h_tail3
+            injection h_tail3 with hav_eq hLsuf_eq
+            right; right; right
+            refine ⟨h_mi_one, h_e_eq_1, h_r_eq_0, hav_eq, ?_, hLsuf_eq.symm⟩
+            rw [h_pre_eq, h_kh_eq_1, h_kth_eq_1]
+            simp
+          | cons k_tt_head _ =>
+            simp only [List.cons_append] at h_tail3
+            injection h_tail3 with hktth_eq _
+            have h_ktth_in : k_tt_head ∈ L_pre' := by
+              rw [h_pre_eq]
+              exact List.mem_append_right _ (List.mem_cons.mpr (Or.inr
+                (List.mem_cons.mpr (Or.inr List.mem_cons_self))))
+            have h_ktth_eq_1 : k_tt_head = 1 := h_pre'_one k_tt_head h_ktth_in
+            -- hktth_eq : a + 4 = k_tt_head. h_ktth_eq_1 : k_tt_head = 1.
+            have : a + 4 = 1 := hktth_eq.trans h_ktth_eq_1
+            omega
+    · -- Disjunct 2: middle_init.reverse = L_pre' ++ k AND v :: L_suf = k ++ e :: rest.
+      cases k with
+      | nil =>
+        -- middle_init.reverse = L_pre' (all 1s). v :: L_suf = e :: rest.
+        rw [List.append_nil] at h_mi_eq
+        rw [List.nil_append] at h_tail
+        injection h_tail with hve_eq hLsuf_eq
+        right; left
+        have h_mi_rev_one : ∀ x ∈ middle_init.reverse, x = 1 := by
+          intro x hx
+          rw [h_mi_eq] at hx
+          exact h_pre'_one x hx
+        have h_mi_one : ∀ x ∈ middle_init, x = 1 := by
+          intro x hx
+          exact h_mi_rev_one x (List.mem_reverse.mpr hx)
+        -- hve_eq : v = e. We need e = v.
+        refine ⟨h_mi_one, hve_eq.symm, ?_, hLsuf_eq⟩
+        rw [h_mi_eq]
+      | cons k_head k_tail =>
+        simp only [List.cons_append] at h_tail
+        injection h_tail with hv_eq hLsuf_eq
+        -- hv_eq : v = k_head, hLsuf_eq : L_suf = k_tail ++ e :: rest.
+        left
+        refine ⟨k_tail.reverse, L_pre'.reverse, ?_, ?_, ?_, ?_⟩
+        · -- middle_init = k_tail.reverse ++ v :: L_pre'.reverse
+          have h_rev := congrArg List.reverse h_mi_eq
+          rw [List.reverse_reverse, List.reverse_append, List.reverse_cons] at h_rev
+          -- h_rev : middle_init = k_tail.reverse ++ k_head :: L_pre'.reverse
+          rw [h_rev, ← hv_eq]
+          simp [List.append_assoc]
+        · intro x hx
+          exact h_pre'_one x (List.mem_reverse.mp hx)
+        · rw [List.reverse_reverse]
+        · rw [hLsuf_eq, List.reverse_reverse]
+
+-- ============================================================
+-- step_R3 4-case decomposition wrapper
+-- ============================================================
+
+/-- **Strengthened R3 closure**: like `thm_reach_multi_bounce_last_2_long_safe`,
+    but the strict-safe disjunct is replaced with a 4-way structural decomposition
+    of `(L_suf, v, R_out)` in terms of the predecessor's `(a, L', r', e, middle_init)`.
+    Each case forces a specific `L_suf` shape in terms of `(a+4) :: L'` plus a prefix
+    of `e, r'+1`, enabling phi+AllGe1 contradictions in cascade step_R3 branches.
+
+    Cases:
+    - **Case 1** (`v ∈ middle_init`): middle_init = mi_A ++ v :: mi_B, mi_B all 1s,
+      L_suf = mi_A.reverse ++ e :: (r'+1) :: (a+4) :: L'.
+    - **Case 2** (`v = e`): middle_init all 1s, L_suf = (r'+1) :: (a+4) :: L'.
+    - **Case 3** (`v = r'+1`): middle_init all 1s, e = 1, L_suf = (a+4) :: L'.
+    - **Case 4** (`v = a+4`): middle_init all 1s, e = 1, r' = 0, L_suf = L'.
+
+    Note Cases 1, 2, 3 all force `(a+4) ∈ L_suf` (with a+4 ≥ 5 since a ≥ 1),
+    while Case 4 has L_suf = L' (the original predecessor's L'). -/
+theorem thm_reach_multi_bounce_last_2_long_4cases
+    {a r' e : Nat} {L' middle_init : List Nat}
+    (hinv : MacroInvariant
+      (.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2]))) :
+    ∃ (k : Nat) (L_suf : List Nat) (v : Nat) (R_out : List Nat), 0 < k ∧
+      run sweeper
+        (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k =
+        (MacroConfig.M L_suf v R_out).toConfig ∧
+      MacroInvariant (.M L_suf v R_out) ∧
+      (∀ R, (MacroConfig.M L_suf v R_out) ≠ .M [] 3 R) ∧
+      v ≥ 2 ∧
+      ((∃ mi_A mi_B : List Nat, middle_init = mi_A ++ v :: mi_B ∧
+          (∀ x ∈ mi_B, x = 1) ∧
+          L_suf = mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = v ∧
+          L_suf = (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' + 1 = v ∧
+          L_suf = (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' = 0 ∧ a + 4 = v ∧
+          L_suf = L')) ∧
+      (MacroConfig.M L_suf v R_out).phi =
+        (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 := by
+  -- Same setup as `thm_reach_multi_bounce_last_2_long_safe`.
+  have hL := hinv.1
+  have hR := hinv.2.1
+  have ha : a ≥ 1 := (AllGe1_cons.mp hL).1
+  have hL' : AllGe1 L' := (AllGe1_cons.mp hL).2
+  have hR1 : AllGe1 ((r' + 3) :: e :: middle_init : List Nat) :=
+    AllGe1_of_append_left hR
+  have ⟨_, hR2⟩ := AllGe1_cons.mp hR1
+  have ⟨he, h_mi_All⟩ := AllGe1_cons.mp hR2
+  have h_mid : ∀ x ∈ ((e :: middle_init) ++ [1] : List Nat), x ≥ 1 := by
+    intro x hx
+    rcases List.mem_append.mp hx with hx | hx
+    · rcases List.mem_cons.mp hx with rfl | hx
+      · exact he
+      · exact AllGe1_mem h_mi_All hx
+    · rcases List.mem_singleton.mp hx with rfl
+      omega
+  have h_in_eq : ((r' + 3) :: e :: middle_init ++ [1, 2] : List Nat) =
+      (r' + 3) :: ((e :: middle_init) ++ [1]) ++ [0 + 2] := by
+    simp [List.cons_append, List.append_assoc]
+  have h_mb_raw := macro_multi_bounce_general a r' 0 L' ((e :: middle_init) ++ [1]) h_mid
+  rw [← h_in_eq] at h_mb_raw
+  set L_after : List Nat :=
+    ((e :: middle_init) ++ [1]).reverse ++ (r' + 1) :: (a + 4) :: L' with hL_after_def
+  have h_L_after_ge1 : AllGe1 L_after := by
+    apply AllGe1_append
+    · apply AllGe1_reverse
+      apply AllGe1_append
+      · exact AllGe1_cons.mpr ⟨he, h_mi_All⟩
+      · exact AllGe1_singleton (by omega)
+    · exact AllGe1_cons.mpr ⟨by omega, AllGe1_cons.mpr ⟨by omega, hL'⟩⟩
+  have h_L_after_nonone : ∃ x ∈ L_after, x ≥ 2 := by
+    refine ⟨a + 4, ?_, by omega⟩
+    apply List.mem_append.mpr; right
+    apply List.mem_cons.mpr; right
+    exact List.mem_cons_self
+  obtain ⟨k_shift, L_pre, v_out, L_suf, R_out, hk_shift, h_split, h_pre_one, hv_ge2,
+          hrun_shift, hinv'_shift, hphi_shift⟩ :=
+    shift_to_macro_prog_strong L_after [1]
+      (List.cons_ne_nil _ _)
+      (AllGe1_singleton (by omega))
+      h_L_after_ge1 h_L_after_nonone
+  -- Re-express L_after in canonical form for shift_inverse_4cases.
+  have h_L_after_canonical : L_after
+      = 1 :: middle_init.reverse ++ e :: (r' + 1) :: (a + 4) :: L' := by
+    rw [hL_after_def]
+    simp [List.reverse_append, List.reverse_cons, List.append_assoc, List.cons_append]
+  -- h_split : L_after = L_pre ++ v_out :: L_suf.
+  -- Combine with h_L_after_canonical to apply shift_inverse_4cases.
+  have h_eq_for_inv : 1 :: middle_init.reverse ++ e :: (r' + 1) :: (a + 4) :: L'
+                   = L_pre ++ v_out :: L_suf := by
+    rw [← h_L_after_canonical]; exact h_split
+  -- Apply the 4-case decomposition.
+  have h_4cases_full := shift_inverse_4cases a r' e L' middle_init L_pre L_suf v_out
+                       ha he h_mi_All h_pre_one hv_ge2 h_eq_for_inv
+  -- Project out the L_pre information; keep only L_suf-related facts.
+  have h_4cases :
+      (∃ mi_A mi_B : List Nat, middle_init = mi_A ++ v_out :: mi_B ∧
+          (∀ x ∈ mi_B, x = 1) ∧
+          L_suf = mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = v_out ∧
+          L_suf = (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' + 1 = v_out ∧
+          L_suf = (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' = 0 ∧ a + 4 = v_out ∧
+          L_suf = L') := by
+    rcases h_4cases_full with ⟨mi_A, mi_B, hmi, hmi_one, _, hLsuf⟩ |
+      ⟨h1, h2, _, h4⟩ | ⟨h1, h2, h3, _, h5⟩ | ⟨h1, h2, h3, h4, _, h6⟩
+    · left; exact ⟨mi_A, mi_B, hmi, hmi_one, hLsuf⟩
+    · right; left; exact ⟨h1, h2, h4⟩
+    · right; right; left; exact ⟨h1, h2, h3, h5⟩
+    · right; right; right; exact ⟨h1, h2, h3, h4, h6⟩
+  -- Derive h_safe.
+  have h_L_after_has_5 : ∃ x ∈ L_after, x ≥ 5 := by
+    refine ⟨a + 4, ?_, by omega⟩
+    apply List.mem_append.mpr; right
+    apply List.mem_cons.mpr; right
+    exact List.mem_cons_self
+  have h_safe : ∀ R', (MacroConfig.M L_suf v_out R_out) ≠ .M [] 3 R' := by
+    intro R' hcfg
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hLsuf, hv_eq, _⟩ := hcfg
+    obtain ⟨x, hx, hx_ge5⟩ := h_L_after_has_5
+    rw [h_split] at hx
+    rcases List.mem_append.mp hx with hx_pre | hx_post
+    · have := h_pre_one x hx_pre; omega
+    · rcases List.mem_cons.mp hx_post with rfl | hx_suf
+      · omega
+      · rw [hLsuf] at hx_suf; exact List.not_mem_nil hx_suf
+  -- Combine.
+  obtain ⟨k_mb, h_mb⟩ : ∃ k_mb, run sweeper
+      (M0_Config (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])) k_mb =
+        M_Config L_after (0 + 1) [1] :=
+    ⟨_, h_mb_raw⟩
+  refine ⟨k_mb + k_shift, L_suf, v_out, R_out, by omega, ?_, hinv'_shift,
+          h_safe, hv_ge2, h_4cases, ?_⟩
+  · rw [run_add, h_mb, hrun_shift, MacroConfig.toConfig_M]
+  · rw [hphi_shift]
+    simp only [hL_after_def, MacroConfig.phi_M, MacroConfig.phi_M0,
+               List.sum_append, List.sum_cons, List.sum_nil,
+               List.sum_reverse]
+    omega
+
 end Sweeper

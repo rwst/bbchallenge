@@ -232,7 +232,7 @@ theorem OrbitReachable.not_M0_starts_1_1_R_ge2 {cfg : MacroConfig}
     exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ =>
     exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- step_R3's cfg' is M shape (from h_strict_safe's existential witness).
     -- But hcfg : cfg' = M0 (1 :: 1 :: L_rest) (r :: R_rest). M ≠ M0. ⊥.
     obtain ⟨L_suf, v, R_out, hcfg_M, _⟩ := h_strict_safe
@@ -347,10 +347,11 @@ theorem OrbitReachable.not_M_starts_1_1_2spine_2_R1 {cfg : MacroConfig}
     -- v = a + 4 = 2 → a = -2 impossible. So ∃ x ∈ L_suf = 1 :: 1 :: L_rest, x ≥ 5.
     -- Elements all 1 — contradiction.
     obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
+    have h_disj_2 := strict_safe_2_disjunct_of_4cases (AllGe1_cons.mp h_prev_R3.macroInvariant.1).1 h_disj
     rw [hcfg_M] at hcfg
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rw [hL_eq] at hx
       rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
@@ -438,7 +439,7 @@ theorem OrbitReachable.not_M0_starts_2_1_2spine_2 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => exact MacroConfig.noConfusion hcfg
   | step_R2_zero _ => exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ => exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
     rw [hcfg_M] at hcfg
     exact MacroConfig.noConfusion hcfg
@@ -523,14 +524,14 @@ theorem OrbitReachable.not_M_3_2_1 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [3], v = 2. h_disj: ∃ x ∈ [3], x ≥ 5 ⊥. v = a+4 = 2 ⊥ (Nat).
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -670,12 +671,13 @@ theorem OrbitReachable.not_M_empty_6_1 {cfg : MacroConfig}
     -- Pred M0 (a :: L') (...) = M0 [2] (...). h_phi_side: cfg.phi = pred.phi + 2.
     -- pred.phi = 7 - 2 = 5 < 6 ⊥ via phi_lt_six.
     obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
+    have h_disj_2 := strict_safe_2_disjunct_of_4cases (AllGe1_cons.mp h_prev_R3.macroInvariant.1).1 h_disj
     rw [hcfg_M] at hcfg
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, hR_eq⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, _⟩ | ⟨h_v_eq, hL_eq⟩
+    rcases h_disj_2 with ⟨x, hx, _⟩ | ⟨h_v_eq, hL_eq⟩
     · exact absurd hx List.not_mem_nil
     · have ha : a = 2 := by omega
       subst ha
@@ -835,12 +837,13 @@ theorem OrbitReachable.not_M_1_4_2 {cfg : MacroConfig}
   | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
     -- L_suf = [1], v = 4. h_disj: ∃ x ∈ [1] x ≥ 5 (1 < 5) ⊥. v = a+4 = 4, a = 0 violates AllGe1.
     obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
+    have h_disj_2 := strict_safe_2_disjunct_of_4cases (AllGe1_cons.mp h_prev_R3.macroInvariant.1).1 h_disj
     rw [hcfg_M] at hcfg
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, hL_eq⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, hL_eq⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -964,15 +967,16 @@ theorem OrbitReachable.not_M_2_2_3 {cfg : MacroConfig}
     obtain ⟨hL, _, _⟩ := hcfg
     injection hL with hh _
     omega
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [2], v = 2. h_disj: ∃ x ∈ [2], x ≥ 5 (2 < 5) ⊥. v = a+4 = 2 ⊥.
     obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
+    have h_disj_2 := strict_safe_2_disjunct_of_4cases (AllGe1_cons.mp h_prev_R3.macroInvariant.1).1 h_disj
     rw [hcfg_M] at hcfg
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -1057,7 +1061,7 @@ theorem OrbitReachable.not_M0_3_4 {cfg : MacroConfig}
     exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ =>
     exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- M target ≠ M0. ⊥.
     obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
     rw [hcfg_M] at hcfg
@@ -1155,7 +1159,7 @@ theorem OrbitReachable.not_M0_4_2 {cfg : MacroConfig}
     exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ =>
     exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- cfg' = M L_suf v R_out. M target ≠ M0 [4] [2]. ⊥.
     obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
     rw [hcfg_M] at hcfg
@@ -1168,5 +1172,4334 @@ theorem OrbitReachable.not_M0_4_2 {cfg : MacroConfig}
       List.sum_cons, List.sum_nil] at h_phi h_pred_phi
     omega
 
+-- ============================================================
+-- Section 8: Chain helpers for #20 (mk_M_empty_7 step_R3 closure)
+-- ============================================================
+-- Chain: M0 [3] (3 :: 1 :: X ++ [1, 2]) ← D1 ← M [2] 2 (2 :: 1 :: X ++ [1, 2])
+--         ← D3 ← M [1] 4 (1 :: 1 :: X ++ [1, 2]). Each level all-closes via
+-- shape ⊥ / AllGe1 ⊥ / step_R3 4-case ⊥ / step_R1 callback. Parametric in X.
+
+/-- **`M [1] 4 (1 :: 1 :: X ++ [1, 2])` is not orbit-reachable** (callback variant).
+    All forward producers close. -/
+theorem OrbitReachable.not_M_1_4_for_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 4 (1 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    -- hcfg : M [1] 4 [1] = M [1] 4 (1::1::X++[1, 2]).
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : ([1] : List Nat).length = (1 :: 1 :: X ++ [1, 2]).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    -- D1: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L'2 (a+1) (1::(d+1)::R'2). cursor 4 = a+1 (a=3). L'2=[1].
+    --     R = 1::(d+1)::R'_2. R[1] = (d+1) = 1 → d=0. AllGe1 ⊥.
+    · injection htgt with hL hc hR
+      have ha : a2 = 3 := by omega
+      injection hR with hd_eq hR_tail
+      injection hR_tail with hd_eq2 _
+      have hd : d2 = 0 := by omega
+      subst ha; subst hd
+      subst hcfg'2
+      have hAL := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAL).1
+      omega
+    -- D3: (a+1)::L'3 = [1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    -- D4: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target M [1] (c'+2) ((d+1)::R'). c'+2 = 4 → c'=2. (d+1)::R' = R = 1::1::X++[1, 2].
+    --     d+1 = 1 → d=0. AllGe1 ⊥.
+    · injection htgt with _ hc hR
+      injection hR with hd_eq _
+      have hd : d5 = 0 := by omega
+      subst hd
+      subst hcfg'5
+      have hAL := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAL).1
+      omega
+    -- D6: target R=[1]. R has length ≥ 4 mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: same.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D8: target R=[1]. Mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D9: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1]. Mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target R=[1]. Mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D12: cursor 4 = a+3 (a=1). L'12=[1]. (d+1)::R' = R[0]=1 → d=0 AllGe1 ⊥.
+    --     pred M0 form: macroInvariant.2.1 = AllGe1 R, R = 2::d::R'12 = 2::0::...
+    · injection htgt with hL hc hR
+      have ha : a12 = 1 := by omega
+      injection hR with hd_eq _
+      have hd : d12 = 0 := by omega
+      subst ha; subst hd
+      subst hcfg'12
+      have hAR := h_prev.macroInvariant.2.1
+      have h_tail := (AllGe1_cons.mp hAR).2
+      have hd_ge := (AllGe1_cons.mp h_tail).1
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_last_2_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    -- hR : [1, 1, 1, 1] = 1 :: 1 :: X ++ [1, 2]. Inject deeply, X = [] forced; element ⊥.
+    injection hR with _ hR1
+    injection hR1 with _ hR2
+    -- hR2 : [1, 1] = X ++ [1, 2]
+    cases X with
+    | nil => injection hR2 with _ hR3; injection hR3 with hh _; omega
+    | cons xh xt =>
+      have h_len : ([1, 1] : List Nat).length = ((xh :: xt) ++ [1, 2]).length := by
+        rw [hR2]; rfl
+      simp [List.length_append, List.length_cons] at h_len
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf = [1], v = 4. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · -- a+4 = 4 → a = 0, AllGe1 ⊥.
+      have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **`M [2] 2 (2 :: 1 :: X ++ [1, 2])` is not orbit-reachable** (callback variant).
+    D3 productive → `not_M_1_4_for_X_via_ih`. Other cases close via shape ⊥. -/
+theorem OrbitReachable.not_M_2_2_for_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [2] 2 (2 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor 2 = a+1 (a=1). R[0] = 2 ≠ 1 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hd _
+      omega
+    -- D3: pred M [1] 4 (1::1::X++[1, 2]). Use level 1.
+    · injection htgt with hL hc hR
+      injection hL with ha_eq hL_rest
+      injection hR with hd_eq hR_tail
+      have ha : a3 = 1 := by omega
+      have hc : c'3 = 0 := by omega
+      have hL' : L'3 = [] := hL_rest.symm
+      have hd : d3 = 1 := by omega
+      have hR' : R'3 = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hc; subst hL'; subst hd; subst hR'
+      subst hcfg'3
+      apply OrbitReachable.not_M_1_4_for_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D4: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs [2] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D6: R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1] vs [2] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D8: R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D9: M0 ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D10: R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D12: cursor 2 = a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_last_2_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    -- hR : [1, 1, 1, 1] = 2 :: 1 :: X ++ [1, 2]. Head: 1 = 2 ⊥.
+    injection hR with hh _
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[2], v=2. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **`M0 [3] (3 :: 1 :: X ++ [1, 2])` is not orbit-reachable** (callback variant).
+    D1 productive → `not_M_2_2_for_X_via_ih`. Other cases close via shape ⊥. -/
+theorem OrbitReachable.not_M0_3_for_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [3] (3 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a, L', d, R', hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: pred M [2] 2 (2::1::X++[1, 2]). Use level 2.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a = 2 := by omega
+      have hd : d = 2 := by omega
+      have hL' : L' = [] := hL_eq.symm
+      have hR' : R' = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_2_2_for_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D2: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D3: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [3] ⊥.
+    · injection htgt with hL _
+      injection hL with hh _
+      omega
+    -- D5: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D6: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D7: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D8: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D10: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D11: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D12: M ⊥
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+-- ============================================================
+-- Section 9: Chain helpers for #14 Case 3 (M [6] 3 (d::R') step_R3)
+-- ============================================================
+-- 6-level chain for pred = M0 [2] (5 :: 1 :: X ++ [1, 2]):
+--   M0 [2] (5::1::X++[1, 2]) ← D1 ← M [1] 2 (4::1::X++[1, 2])
+--   ← D5 ← M [] 4 (3::1::X++[1, 2]) ← D12 ← M0 [1] (2::2::1::X++[1, 2])
+--   ← D4 ← M [] 2 (1::2::1::X++[1, 2]) ← D2 ← M [1] 3 (1::1::X++[1, 2]).
+-- Level 6 closes all backward via AllGe1 ⊥ / step_R3 4-case / step_R1.
+
+/-- **Level 6: `M [1] 3 (1 :: 1 :: X ++ [1, 2])` is not orbit-reachable**. -/
+theorem OrbitReachable.not_M_1_3_X_terminal_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 3 (1 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor 3 = a+1 (a=2), L'=[1]. R = 1::(d+1)::R'. R[0]=1 ✓, (d+1)=R[1]=1 → d=0 AllGe1.
+    · injection htgt with hL hc hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq _
+      have hd : d2 = 0 := by omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: (a+1)::L'=[1] → a=0 AllGe1.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] ✓. cursor 3 = c'+2 → c'=1, cfg cursor 5. (d+1)::R'=R[0]=1 → d=0 AllGe1.
+    · injection htgt with _ hc hR
+      injection hR with hd_eq _
+      have hd : d5 = 0 := by omega
+      subst hd
+      subst hcfg'5
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D12: cursor 3 = a+3 (a=0) AllGe1 ⊥.
+    · rename_i a12 L'12 d12 R'12 hcfg'12 _
+      injection htgt with _ hc _
+      have ha : a12 = 0 := by omega
+      subst ha
+      subst hcfg'12
+      mc_AllGe1_a_ge1
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_last_2_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    -- target M L' (a+4) [1, 1, 1, 1]. cursor a+4 ≥ 4 ≠ 3.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1], v=3. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 5: `M [] 2 (1 :: 2 :: 1 :: X ++ [1, 2])` is not orbit-reachable**.
+    D2 productive → level 6. Other cases ⊥. -/
+theorem OrbitReachable.not_M_empty_2_1_2_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 2 (1 :: 2 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L'2 (a+1) (1::(d+1)::R'). cursor 2 = a+1 (a=1). L'2=[].
+    --     R = 1::(d+1)::R'_pred = 1::2::1::X++[1, 2]. d+1=2 (d=1). R'_pred = 1::X++[1, 2].
+    --     Pred M [1] 3 (1::1::X++[1, 2]). Use level 6.
+    · injection htgt with hL hc hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq hR_tail2
+      have ha : a2 = 1 := by omega
+      have hL' : L'2 = [] := hL.symm
+      have hd : d2 = 1 := by omega
+      have hR' : R'2 = 1 :: X ++ [1, 2] := hR_tail2.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'2
+      apply OrbitReachable.not_M_1_3_X_terminal_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D3: target L=(a+1)::L' vs []. ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D4: target M0 [1] (...). M0 ⊥ for M cfg.
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs []. ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D6: R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1] vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 2 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target L=(a+4)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: cursor 2 = a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    -- target L = middle_init.reverse ++ (r'+1)::(a+4)::L'. For target L=[], length 0 vs ≥ 2.
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=2. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 4: `M0 [1] (2 :: 2 :: 1 :: X ++ [1, 2])` is not orbit-reachable**.
+    D4 productive → level 5. Other cases ⊥. -/
+theorem OrbitReachable.not_M0_1_2_2_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [1] (2 :: 2 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨d4, R'4, hcfg'4, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: (a+1)::L' = [1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _
+      injection hL with ha _
+      have ha0 : a1 = 0 := by omega
+      subst ha0
+      subst hcfg'1
+      mc_AllGe1_a_ge1
+    -- D2: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D3: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] ((d+1)::R'). cfg from M [] 2 (d::R'). target R = (d+1)::R' = 2::2::1::X++[1, 2].
+    --     d+1=2 (d=1). R'=2::1::X++[1, 2]. Pred M [] 2 (1::2::1::X++[1, 2]). Use level 5.
+    · injection htgt with hL hR
+      injection hR with hd_eq hR_tail
+      have hd : d4 = 1 := by omega
+      have hR' : R'4 = 2 :: 1 :: X ++ [1, 2] := hR_tail.symm
+      subst hd; subst hR'
+      subst hcfg'4
+      apply OrbitReachable.not_M_empty_2_1_2_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D5: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D6: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D7: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D8: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (2 :: 2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D10: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D11: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D12: M ⊥
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (2 :: 2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 3: `M [] 4 (3 :: 1 :: X ++ [1, 2])` is not orbit-reachable**.
+    D12 productive → level 4. Other cases ⊥. -/
+theorem OrbitReachable.not_M_empty_4_3_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 4 (3 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L' (a+1) (1::(d+1)::R'). target = M [] 4 (3::1::X++[1, 2]).
+    --     L'=[], a+1=4 (a=3). 1::(d+1)::R'_pred = 3::1::X++[1, 2]. 1=3 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs []. ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: target M L' (a+3) ((d+1)::R'). For target M [] 4 (3::1::X++[1, 2]):
+    --     L'=[], a+3=4 (a=1). (d+1)::R' = 3::1::X++[1, 2]. d+1=3 (d=2). R' = 1::X++[1, 2].
+    --     Pred M0 [1] (2::2::1::X++[1, 2]). Use level 4.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have ha : a12 = 1 := by omega
+      have hL' : L'12 = [] := hL.symm
+      have hd : d12 = 2 := by omega
+      have hR' : R'12 = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'12
+      apply OrbitReachable.not_M0_1_2_2_1_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    -- target R=[1, 1, 1, 1] vs 3::1::X++[1, 2]. R[0]=3≠1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=4. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · -- a+4 = 4 → a = 0 AllGe1 ⊥.
+      have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 2: `M [1] 2 (4 :: 1 :: X ++ [1, 2])` is not orbit-reachable**.
+    D5 productive → level 3. Other cases ⊥. -/
+theorem OrbitReachable.not_M_1_2_4_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 2 (4 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor 2 = a+1 (a=1). R[0]=4≠1 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: (a+1)::L'=[1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target M [1] (c'+2) ((d+1)::R'). cursor 2 = c'+2 (c'=0). cfg cursor 4.
+    --     (d+1)::R' = R = 4::1::X++[1, 2]. d+1=4 (d=3). R'=1::X++[1, 2].
+    --     Pred M [] 4 (3::1::X++[1, 2]). Use level 3.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have hc' : c'5 = 0 := by omega
+      have hd : d5 = 3 := by omega
+      have hR' : R'5 = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst hd; subst hR'
+      subst hcfg'5
+      apply OrbitReachable.not_M_empty_4_3_1_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D6: R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1]. Match cfg [1]. R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D8: cursor 2 = a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D12: cursor 2 = a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_last_2_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: 1 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1], v=2. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 1: `M0 [2] (5 :: 1 :: X ++ [1, 2])` is not orbit-reachable**.
+    D1 productive → level 2. Other cases ⊥. Used to close #14 Case 3. -/
+theorem OrbitReachable.not_M0_2_5_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [2] (5 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). For target M0 [2] (5::1::X++[1, 2]):
+    --     (a+1)::L' = [2] → a=1, L'=[]. (d+1)::R' = 5::1::X++[1, 2]. d+1=5 (d=4). R'=1::X++[1, 2].
+    --     Pred M [1] 2 (4::1::X++[1, 2]). Use level 2.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 1 := by omega
+      have hd : d1 = 4 := by omega
+      have hL' : L'1 = [] := hL_eq.symm
+      have hR' : R'1 = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_1_2_4_1_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [2] ⊥.
+    · injection htgt with hL _
+      injection hL with hh _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (5 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (5 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+-- ============================================================
+-- Section 10: Chain helpers for #4 Case 2 (M [2, 6] 3 (d::R') step_R3)
+-- ============================================================
+-- 5-level chain for pred = M0 [2] (4 :: 3 :: X ++ [1, 2]):
+--   M0 [2] (4::3::X++[1, 2]) ← D1 ← M [1] 2 (3::3::X++[1, 2])
+--   ← D5 ← M [] 4 (2::3::X++[1, 2]) ← D12 ← M0 [1] (2::1::3::X++[1, 2])
+--   ← D4 ← M [] 2 (1::1::3::X++[1, 2]).
+-- Level 5 closes all backward via AllGe1 ⊥ / step_R3 4-case / step_R1.
+
+/-- **Level 5: `M [] 2 (1 :: 1 :: 3 :: X ++ [1, 2])` is not orbit-reachable**.
+    All backward cases close via shape ⊥ / AllGe1 ⊥ / step_R3 4-case / step_R1. -/
+theorem OrbitReachable.not_M_empty_2_1_1_3_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 2 (1 :: 1 :: 3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L' (a+1) (1::(d+1)::R'). cursor 2=a+1 (a=1), L'=[]. R = 1::(d+1)::R'_pred =
+    --     1::1::3::X++[1, 2]. d+1=1 (d=0). R'_pred = 3::X++[1, 2]. AllGe1 ⊥ on d=0.
+    · injection htgt with hL hc hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq _
+      have hd : d2 = 0 := by omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: target L=(a+1)::L' vs []. ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D4: target M0 ⊥.
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs []. ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D6: target cursor=a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: target cursor=a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D8: target cursor=a+3 ≥ 3 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D9: target M0 ⊥.
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target cursor=a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: target L=(a+4)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: cursor 2 = a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=2. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 4: `M0 [1] (2 :: 1 :: 3 :: X ++ [1, 2])` is not orbit-reachable**.
+    D4 productive → Level 5. Other cases ⊥. -/
+theorem OrbitReachable.not_M0_1_2_1_3_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [1] (2 :: 1 :: 3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨d4, R'4, hcfg'4, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [1] vs (a+1)::L' → a=0 AllGe1 ⊥.
+    · injection htgt with hL _
+      injection hL with ha _
+      have ha0 : a1 = 0 := by omega
+      subst ha0
+      subst hcfg'1
+      mc_AllGe1_a_ge1
+    -- D2: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D3: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] ((d+1)::R'). For target M0 [1] (2::1::3::X++[1, 2]):
+    --     d+1=2 (d=1). R'=1::3::X++[1, 2]. Pred M [] 2 (1::1::3::X++[1, 2]). Use Level 5.
+    · injection htgt with hL hR
+      injection hR with hd_eq hR_tail
+      have hd : d4 = 1 := by omega
+      have hR' : R'4 = 1 :: 3 :: X ++ [1, 2] := hR_tail.symm
+      subst hd; subst hR'
+      subst hcfg'4
+      apply OrbitReachable.not_M_empty_2_1_1_3_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D5: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D6: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D7: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D8: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (2 :: 1 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D10: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D11: M ⊥
+    · exact MacroConfig.noConfusion htgt
+    -- D12: M ⊥
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 3: `M [] 4 (2 :: 3 :: X ++ [1, 2])` is not orbit-reachable**.
+    D12 productive → Level 4. Other cases ⊥. -/
+theorem OrbitReachable.not_M_empty_4_2_3_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 4 (2 :: 3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L' (a+1) (1::(d+1)::R'). For target M [] 4 (2::3::X++[1, 2]):
+    --     L'=[], a+1=4 (a=3). 1::(d+1)::R'_pred = 2::3::X++[1, 2]. 1=2 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: target L=(a+1)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D4: target M0 ⊥.
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 3 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: target M L' (a+3) ((d+1)::R'). For target M [] 4 (2::3::X++[1, 2]):
+    --     L'=[], a+3=4 (a=1). (d+1)::R'_pred = 2::3::X++[1, 2]. d+1=2 (d=1). R'_pred = 3::X++[1, 2].
+    --     Pred M0 [1] (2::1::3::X++[1, 2]). Use Level 4.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have ha : a12 = 1 := by omega
+      have hL' : L'12 = [] := hL.symm
+      have hd : d12 = 1 := by omega
+      have hR' : R'12 = 3 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'12
+      apply OrbitReachable.not_M0_1_2_1_3_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 3 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=4. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · -- a+4 = 4 → a = 0 AllGe1 ⊥.
+      have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 2: `M [1] 2 (3 :: 3 :: X ++ [1, 2])` is not orbit-reachable**.
+    D5 productive → Level 3. Other cases ⊥. -/
+theorem OrbitReachable.not_M_1_2_3_3_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 2 (3 :: 3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L' (a+1) (1::(d+1)::R'). cursor 2=a+1 (a=1). R[0]=1 vs 3 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: target L=(a+1)::L' = [1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    -- D4: target M0 ⊥.
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target M [1] (c'+2) ((d+1)::R'). cursor 2=c'+2 (c'=0). cfg cursor 4.
+    --     (d+1)::R'_pred = R = 3::3::X++[1, 2]. d+1=3 (d=2). R'_pred = 3::X++[1, 2].
+    --     Pred M [] 4 (2::3::X++[1, 2]). Use Level 3.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have hc' : c'5 = 0 := by omega
+      have hd : d5 = 2 := by omega
+      have hR' : R'5 = 3 :: X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst hd; subst hR'
+      subst hcfg'5
+      apply OrbitReachable.not_M_empty_4_2_3_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1] ✓ but R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D8: target cursor=a+3 ≥ 3 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D9: target M0 ⊥.
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D12: cursor 2=a+3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: 3 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1], v=2. 4-case all ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **Level 1: `M0 [2] (4 :: 3 :: X ++ [1, 2])` is not orbit-reachable**.
+    D1 productive → Level 2. Other cases ⊥. Used to close #4 Case 2. -/
+theorem OrbitReachable.not_M0_2_4_3_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [2] (4 :: 3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). For target M0 [2] (4::3::X++[1, 2]):
+    --     (a+1)::L' = [2] → a=1, L'=[]. (d+1)::R' = 4::3::X++[1, 2]. d+1=4 (d=3). R'=3::X++[1, 2].
+    --     Pred M [1] 2 (3::3::X++[1, 2]). Use Level 2.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 1 := by omega
+      have hd : d1 = 3 := by omega
+      have hL' : L'1 = [] := hL_eq.symm
+      have hR' : R'1 = 3 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_1_2_3_3_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [2] ⊥.
+    · injection htgt with hL _
+      injection hL with hh _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (4 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (4 :: 3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+-- ============================================================
+-- Section 11: Chain helpers for #11 Case 2 (M [1, 6] 5 (d::R') step_R3)
+-- ============================================================
+-- Main chain (7 levels) for pred = M0 [2] (3 :: 5 :: X ++ [1, 2]):
+--   L1 → D1 → L2 → D5 → L3 → D2 → L4 → D3 → L5 → D3 → L6 → D5 → L7
+-- Plus sub-chains:
+--   L5 D12: M0 [2, 2] (2::2::X++[1, 2]) → D1 → M [1, 2] 2 → D2 → M [1, 1, 2] 3 (terminal).
+--   L5 sR3 Case 4: M0 [1, 2] (3::1::Y++[1, 2]) terminal.
+--   L6 D12: M0 [4, 1] (2::1::X++[1, 2]) → D1 → M [3, 1] 2 (terminal).
+--   L6 sR3 Case 4: M0 [3, 1] (3::1::Y++[1, 2]) → D1 → M [2, 1] 2 → D3 → M [1, 1] 4 (terminal).
+--   L7 D2: closes via h_X_one (X all 1s → d=0 AllGe1 ⊥).
+--   L7 sR3 Case 4: M0 [5] (3::1::Y++[1, 2]) → D1 → M [4] 2 → D3 → M [3] 4 (terminal).
+-- Total: 19 helpers.
+
+-- Sub-chain helpers (Y is parametric; closes via fixed structural 1s in R).
+
+/-- **L7sR3c (terminal): `M [3] 4 (1 :: 1 :: Y ++ [1, 2])` is not orbit-reachable.** -/
+theorem OrbitReachable.not_M_3_4_1_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [3] 4 (1 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=4 (a=3). target.R=1::(d+1)::R'. R[1]=1 (d=0). AllGe1 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq _
+      have hd : d2 = 0 := by omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: cursor 4=c'+2 (c'=2). cfg cursor c'+4=6. (a+1)::L'_pred=[3] → a=2. (d+1)=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d3 = 0 := by omega
+      subst hd
+      subst hcfg'3
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs [3] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1] vs [3] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target L=(a+4)::L' vs [3] → a+4=3 (a=-1) ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=4 (a=1). target.R=(d+1)::R'_pred=1::1::Y++[1, 2]. d+1=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d12 = 0 := by omega
+      subst hd
+      subst hcfg'12
+      have hAR := h_prev.macroInvariant.2.1
+      have hd_ge := (AllGe1_cons.mp (AllGe1_cons.mp hAR).2).1
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R2_zero a L' h_pred_r2z =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    have ha : a = 0 := by omega
+    subst ha
+    have hAL := h_pred_r2z.macroInvariant.1
+    have ha_ge := (AllGe1_cons.mp hAL).1
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[3], v=4. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([3] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([3] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · -- a+4 = v = 4 → a = 0 AllGe1 ⊥.
+      have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L7sR3b: `M [4] 2 (2 :: 1 :: Y ++ [1, 2])` is not orbit-reachable**. D3 → L7sR3c. -/
+theorem OrbitReachable.not_M_4_2_2_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [4] 2 (2 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=2 (a=1). target.R=1::(d+1)::R'. R[0]=1 vs cfg.R[0]=2 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor 2=c'+2 (c'=0). cfg cursor c'+4=4. (a+1)::L'_pred=[4] → a=3. (d+1)=2 (d=1).
+    --     R'_pred=1::Y++[1, 2]. Pred = M [3] 4 (1::1::Y++[1, 2]). Use L7sR3c.
+    · injection htgt with hL hc hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have hc' : c'3 = 0 := by omega
+      have ha : a3 = 3 := by omega
+      have hL' : L'3 = [] := hL_eq.symm
+      have hd : d3 = 1 := by omega
+      have hR' : R'3 = 1 :: Y ++ [1, 2] := hR_tail.symm
+      subst hc'; subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'3
+      apply OrbitReachable.not_M_3_4_1_1_Y_via_ih Y (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[4] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: cfg.L=[4] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D8: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4=2 (a=-2) ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cfg.L=[4]=(a+4)::L'_pred → a+4=4 (a=0) AllGe1 ⊥.
+    · rename_i a11 z11 L'11 hcfg'11 _
+      injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a11 = 0 := by omega
+      subst ha
+      subst hcfg'11
+      mc_AllGe1_a_ge1
+    -- D12: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1]. cfg.L=[4]=(a+4)::L' → a+4=4 (a=0) AllGe1 ⊥.
+    rename_i a r' L' h_pred_2as
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with ha _
+    have ha0 : a = 0 := by omega
+    subst ha0
+    have hAL := h_pred_2as.macroInvariant.1
+    have ha_ge := (AllGe1_cons.mp hAL).1
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | @step_multi_bounce_3run_last_2 a r' e L' h_pred_3run =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : ((r' + 1) :: (a + 4) :: L').length = ([4] : List Nat).length := by rw [hL]
+    simp [List.length_cons] at h_len
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[4], v=2. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([4] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([4] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · -- Case 3: L_suf=(a+4)::L'=[4]. a+4 ≥ 5 (a≥1) but a+4=4 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L7sR3a: `M0 [5] (3 :: 1 :: Y ++ [1, 2])` is not orbit-reachable**. D1 → L7sR3b.
+    Used to close L7 step_R3 Case 4 (#11 Case 2 main chain). -/
+theorem OrbitReachable.not_M0_5_3_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [5] (3 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [5] = (a+1)::L' → a=4, L'=[]. d+1=3 (d=2).
+    --     R'=1::Y++[1, 2]. Pred = M [4] 2 (2::1::Y++[1, 2]). Use L7sR3b.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 4 := by omega
+      have hd : d1 = 2 := by omega
+      have hL' : L'1 = [] := hL_eq.symm
+      have hR' : R'1 = 1 :: Y ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_4_2_2_1_Y_via_ih Y (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [5] ⊥.
+    · injection htgt with hL _
+      injection hL with hh _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6sR3c (terminal): `M [1, 1] 4 (1 :: 1 :: Y ++ [1, 2])` is not orbit-reachable.** -/
+theorem OrbitReachable.not_M_1_1_4_1_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [1, 1] 4 (1 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : ([1] : List Nat).length = (1 :: 1 :: Y ++ [1, 2]).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=4 (a=3). target.R=1::(d+1)::R'. R[1]=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq _
+      have hd : d2 = 0 := by omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: cursor 4=c'+2 (c'=2). cfg cursor c'+4=6. (a+1)::L'_pred=[1, 1] → a=0 AllGe1.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[1, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: cfg.L=[1, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target L=(a+4)::L' vs [1, 1]. a+4=1 (a=-3) ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=4 (a=1). target.R=(d+1)::R'_pred=1::1::Y++[1, 2]. d+1=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d12 = 0 := by omega
+      subst hd
+      subst hcfg'12
+      have hAR := h_prev.macroInvariant.2.1
+      have hd_ge := (AllGe1_cons.mp (AllGe1_cons.mp hAR).2).1
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_multi_bounce_2_double_shift a L' h_pred_2ds =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    have ha : a = 0 := by omega
+    subst ha
+    have hAL := h_pred_2ds.macroInvariant.1
+    have ha_ge := (AllGe1_cons.mp hAL).1
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R2_zero a L' h_pred_r2z =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    have ha : a = 0 := by omega
+    subst ha
+    have hAL := h_pred_r2z.macroInvariant.1
+    have ha_ge := (AllGe1_cons.mp hAL).1
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1, 1], v=4. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1, 1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · -- Case 2: (r'+1)::(a+4)::L'=[1, 1]. a+4=1 (a=-3) ⊥. Or use AllGe1.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with h_a4 _
+      omega
+    · injection hLsuf.symm with h_head _; omega
+    · -- a+4 = v = 4 → a = 0 AllGe1 ⊥.
+      have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6sR3b: `M [2, 1] 2 (2 :: 1 :: Y ++ [1, 2])` is not orbit-reachable**. D3 → L6sR3c. -/
+theorem OrbitReachable.not_M_2_1_2_2_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [2, 1] 2 (2 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target.R=1::(d+1)::R'. R[0]=1 vs 2 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor 2=c'+2 (c'=0). cfg cursor c'+4=4. (a+1)::L'_pred=[2, 1] → a=1, L'_pred=[1].
+    --     (d+1)=2 (d=1). R'_pred=1::Y++[1, 2]. Pred = M [1, 1] 4 (1::1::Y++[1, 2]). Use L6sR3c.
+    · injection htgt with hL hc hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have hc' : c'3 = 0 := by omega
+      have ha : a3 = 1 := by omega
+      have hL' : L'3 = [1] := hL_eq.symm
+      have hd : d3 = 1 := by omega
+      have hR' : R'3 = 1 :: Y ++ [1, 2] := hR_tail.symm
+      subst hc'; subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'3
+      apply OrbitReachable.not_M_1_1_4_1_1_Y_via_ih Y (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[2, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([2, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D6: cursor a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: cfg.L=[2, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([2, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D8: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4=2 (a=-2) ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cursor z+2=2 (z=0). cfg.L=[2, 1]=(a+4)::L'_pred → a+4=2 (a=-2) ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1]. cfg.cursor=2=r+2 (r=0). cfg.L=[2, 1]=(a+4)::L'_pred → a+4=2 (a=-2) ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    -- target M ((r'+1)::(a+4)::L') (e+2) [1, 1]. cfg.L=[2, 1]=(r'+1)::(a+4)::L'_pred → r'+1=2 (r'=1), a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with _ hL_tail
+    injection hL_tail with h_a4 _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: Y ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[2, 1], v=2. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([2, 1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · -- Case 2: (r'+1)::(a+4)::L'=[2, 1]. a+4=1 (a=-3) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with h_a4 _
+      omega
+    · -- Case 3: (a+4)::L'=[2, 1]. a+4=2 (a=-2) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6sR3a: `M0 [3, 1] (3 :: 1 :: Y ++ [1, 2])` is not orbit-reachable**. D1 → L6sR3b.
+    Used to close L6 step_R3 Case 4. -/
+theorem OrbitReachable.not_M0_3_1_3_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [3, 1] (3 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [3, 1] = (a+1)::L' → a=2, L'=[1]. d+1=3 (d=2).
+    --     R'=1::Y++[1, 2]. Pred = M [2, 1] 2 (2::1::Y++[1, 2]). Use L6sR3b.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 2 := by omega
+      have hd : d1 = 2 := by omega
+      have hL' : L'1 = [1] := hL_eq.symm
+      have hR' : R'1 = 1 :: Y ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_2_1_2_2_1_Y_via_ih Y (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [3, 1] ⊥.
+    · injection htgt with hL _
+      have h_len : ([3, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6c (terminal): `M [3, 1] 2 (1 :: 1 :: X ++ [1, 2])` is not orbit-reachable.** Used in L6 D12 sub-chain. -/
+theorem OrbitReachable.not_M_3_1_2_1_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M [3, 1] 2 (1 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=2 (a=1). target.R=1::(d+1)::R'. R[1]=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq _
+      have hd : d2 = 0 := by omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: cursor 2=c'+2 (c'=0). cfg cursor c'+4=4. (a+1)::L'_pred=[3, 1] → a=2, L'_pred=[1].
+    --     (d+1)::R'_pred=1::1::X++[1, 2]. d+1=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d3 = 0 := by omega
+      subst hd
+      subst hcfg'3
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[3, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([3, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D6: cursor a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: cfg.L=[3, 1] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([3, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D8: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4=2 (a=-2) ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cursor z+2=2 (z=0). cfg.L=[3, 1]=(a+4)::L'_pred → a+4=3 (a=-1) ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1]. cfg.L=[3, 1]=(a+4)::L'_pred → a+4=3 (a=-1) ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    -- target.L = (r'+1)::(a+4)::L' = [3, 1]. r'+1=3, a+4=1 (a=-3) ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with _ hL_tail
+    injection hL_tail with h_a4 _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1, 1]. cfg.L=[3, 1]=(a+4)::L'_pred → a+4=3 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[3, 1], v=2. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([3, 1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · -- Case 2: (r'+1)::(a+4)::L'=[3, 1]. a+4=1 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with h_a4 _
+      omega
+    · -- Case 3: (a+4)::L'=[3, 1]. a+4=3 (a=-1) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6b: `M0 [4, 1] (2 :: 1 :: X ++ [1, 2])` is not orbit-reachable**. D1 → L6c.
+    Used to close L6 D12 sub-chain. -/
+theorem OrbitReachable.not_M0_4_1_2_1_X_via_ih (X : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [4, 1] (2 :: 1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [4, 1] = (a+1)::L' → a=3, L'=[1]. d+1=2 (d=1).
+    --     R'=1::X++[1, 2]. Pred = M [3, 1] 2 (1::1::X++[1, 2]). Use L6c.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 3 := by omega
+      have hd : d1 = 1 := by omega
+      have hL' : L'1 = [1] := hL_eq.symm
+      have hR' : R'1 = 1 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_3_1_2_1_1_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [4, 1] ⊥.
+    · injection htgt with hL _
+      have h_len : ([4, 1] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (2 :: 1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L5sR3 (terminal): `M0 [1, 2] (3 :: 1 :: Y ++ [1, 2])` is not orbit-reachable.**
+    Used to close L5 step_R3 Case 4. -/
+theorem OrbitReachable.not_M0_1_2_3_1_Y_via_ih (Y : List Nat) {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [1, 2] (3 :: 1 :: Y ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [1, 2] = (a+1)::L' → a=0 AllGe1 ⊥.
+    · injection htgt with hL _
+      injection hL with ha_eq _
+      have ha : a1 = 0 := by omega
+      subst ha
+      subst hcfg'1
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [1, 2] ⊥.
+    · injection htgt with hL _
+      have h_len : ([1, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (3 :: 1 :: Y ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L5d (terminal): `M [1, 1, 2] 3 (1 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s).
+    Used in L5 D12 sub-chain. -/
+theorem OrbitReachable.not_M_1_1_2_3_1_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [1, 1, 2] 3 (1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : ([1] : List Nat).length = ([1, 1, 2] : List Nat).length := by rw [hL]
+    simp [List.length_cons] at h_len
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target M L' (a+1) (1::(d+1)::R'). cursor a+1=3 (a=2). target.L=[1, 1, 2]=L'_pred.
+    --     R: 1::(d+1)::R'_pred=1::X++[1, 2]. R[0]=1 ✓. (d+1)::R'_pred=X++[1, 2].
+    --     Need d2=0 via h_X_one. Then AllGe1 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with _ hR_tail
+      -- hR_tail : (d2+1)::R'2 = X ++ [1, 2]. With h_X_one, X[0]=1 (or X=[]), so d2+1=1, d2=0.
+      have hd : d2 = 0 := by
+        cases X with
+        | nil =>
+          injection hR_tail with hd_eq _
+          omega
+        | cons h X' =>
+          have hh : h = 1 := h_X_one h (by simp)
+          injection hR_tail with hd_eq _
+          omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: cursor 3=c'+2 (c'=1). cfg cursor c'+4=5. (a+1)::L'_pred=[1, 1, 2] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[1, 1, 2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 1, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D6: cursor a+4 ≥ 4 ≠ 3 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: cfg.L=[1, 1, 2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 1, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D8: cursor a+3=3 (a=0). cfg.L=[1, 1, 2]=L'_pred (in pred M0 (a::L') [2]). target.R=[1] vs cfg.R len ≥ 3 ⊥.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4=3 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cfg.L=[1, 1, 2]=(a+4)::L'_pred → a+4=1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=3 (a=0) AllGe1 ⊥.
+    · injection htgt with _ hc _
+      have ha : a12 = 0 := by omega
+      subst ha
+      subst hcfg'12
+      mc_AllGe1_a_ge1
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target.L=(a+4)::L' vs [1, 1, 2] → a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    -- target.L=(r'+1)::(a+4)::L' vs [1, 1, 2]. r'+1=1 (r'=0), a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with _ hL_tail
+    injection hL_tail with h_a4 _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    -- target.L=(a+4)::L' vs [1, 1, 2] → a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1, 1, 2], v=3. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · -- Case 1: mi_A.reverse++e::(r'+1)::(a+4)::L'=[1, 1, 2]. Length: |mi_A|+3+|L'|=3.
+      -- mi_A=[], L'=[]. Then e::(r'+1)::(a+4)::[]=[e, r'+1, a+4]=[1, 1, 2].
+      -- a+4=2 (a=-2) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1, 1, 2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      have hmi_len : mi_A.length = 0 := by omega
+      have hL'_len : L'.length = 0 := by omega
+      have hmi_eq : mi_A = [] := List.eq_nil_of_length_eq_zero hmi_len
+      have hL'_eq : L' = [] := List.eq_nil_of_length_eq_zero hL'_len
+      subst hmi_eq
+      subst hL'_eq
+      simp only [List.reverse_nil, List.nil_append] at hLsuf
+      -- hLsuf : [1, 1, 2] = e :: (r' + 1) :: (a + 4) :: []
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with _ hLsuf_tail2
+      injection hLsuf_tail2 with h_a4 _
+      omega
+    · -- Case 2: (r'+1)::(a+4)::L'=[1, 1, 2]. r'+1=1, a+4=1 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with h_a4 _
+      omega
+    · -- Case 3: (a+4)::L'=[1, 1, 2]. a+4=1 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · -- Case 4: a+4=v=3 (a=-1) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L5c: `M [1, 2] 2 (1 :: 2 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s). D2 → L5d. -/
+theorem OrbitReachable.not_M_1_2_2_1_2_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [1, 2] 2 (1 :: 2 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=2 (a=1). cfg.L=[1, 2]=L'_pred. target.R=1::(d+1)::R'_pred=1::2::X++[1, 2].
+    --     R[0]=1 ✓. (d+1)=2 (d=1). R'_pred=X++[1, 2]. Pred = M [1, 1, 2] 3 (1::X++[1, 2]). Use L5d.
+    · injection htgt with hL hc hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq hR_tail2
+      have ha : a2 = 1 := by omega
+      have hL' : L'2 = [1, 2] := hL.symm
+      have hd : d2 = 1 := by omega
+      have hR' : R'2 = X ++ [1, 2] := hR_tail2.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'2
+      apply OrbitReachable.not_M_1_1_2_3_1_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D3: cursor c'+2=2 (c'=0). cfg cursor c'+4=4. (a+1)::L'_pred=[1, 2] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[1, 2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D6: cursor a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: cfg.L=[1, 2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      have h_len : ([1, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    -- D8: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4=2 (a=-2) ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cfg.L=[1, 2]=(a+4)::L'_pred → a+4=1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target.L=(a+4)::L' vs [1, 2] → a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    -- target.L=(r'+1)::(a+4)::L' vs [1, 2]. r'+1=1, a+4=2 (a=-2) ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with _ hL_tail
+    injection hL_tail with h_a4 _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 2 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    -- target.L=(a+4)::L' vs [1, 2] → a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1, 2], v=2. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1, 2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · -- Case 2: (r'+1)::(a+4)::L'=[1, 2]. r'+1=1 (r'=0), a+4=2 (a=-2) ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with _ hLsuf_tail
+      injection hLsuf_tail with h_a4 _
+      omega
+    · -- Case 3: (a+4)::L'=[1, 2]. a+4=1 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L5b: `M0 [2, 2] (2 :: 2 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s). D1 → L5c.
+    Used to close L5 D12 sub-chain. -/
+theorem OrbitReachable.not_M0_2_2_2_2_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [2, 2] (2 :: 2 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [2, 2]=(a+1)::L' → a=1, L'=[2]. d+1=2 (d=1).
+    --     R'=2::X++[1, 2]. Pred = M [1, 2] 2 (1::2::X++[1, 2]). Use L5c.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 1 := by omega
+      have hd : d1 = 1 := by omega
+      have hL' : L'1 = [2] := hL_eq.symm
+      have hR' : R'1 = 2 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_1_2_2_1_2_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [2, 2] ⊥.
+    · injection htgt with hL _
+      have h_len : ([2, 2] : List Nat).length = ([1] : List Nat).length := by rw [hL]
+      simp [List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (2 :: 2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (2 :: 2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+-- ============================================================
+-- Section 11 main chain: Levels 7 → 1 (each uses h_X_one for X all 1s)
+-- ============================================================
+
+/-- **L7 (main): `M [] 9 (1 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s).
+    D2 closes via h_X_one. step_R3 Case 4 → L7sR3a (M0 [5]). -/
+theorem OrbitReachable.not_M_empty_9_1_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 9 (1 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=9 (a=8). target.L=L'_pred=[]. R: 1::(d+1)::R'_pred=1::X++[1, 2].
+    --     R[0]=1 ✓. (d+1)::R'_pred=X++[1, 2]. With h_X_one, d=0 → AllGe1 ⊥.
+    · injection htgt with hL _ hR
+      injection hR with _ hR_tail
+      have hd : d2 = 0 := by
+        cases X with
+        | nil =>
+          injection hR_tail with hd_eq _
+          omega
+        | cons h X' =>
+          have hh : h = 1 := h_X_one h (by simp)
+          injection hR_tail with hd_eq _
+          omega
+      subst hd
+      subst hcfg'2
+      have hAR := h_prev.macroInvariant.2.2.1
+      have hd_ge := (AllGe1_cons.mp hAR).1
+      omega
+    -- D3: target L=(a+1)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target L=[1] vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (1 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: target L=(a+4)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: cursor a+3=9 (a=6). target.L=[]=L'_pred. (d+1)::R'_pred=1::X++[1, 2]. d+1=1 (d=0) AllGe1.
+    · rename_i a12 L'12 d12 R'12 hcfg'12 _
+      injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d12 = 0 := by omega
+      subst hd
+      subst hcfg'12
+      have hAR := h_prev.macroInvariant.2.1
+      have hd_ge := (AllGe1_cons.mp (AllGe1_cons.mp hAR).2).1
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    -- cfg.R = 1::X++[1, 2] vs target.R = [1, 1, 1]. For X=[]: differs in last elt; for X≠[]: length differs.
+    cases X with
+    | nil =>
+      injection hR with _ hR_tail
+      injection hR_tail with _ hR_tail2
+      injection hR_tail2 with hh _
+      omega
+    | cons h X' =>
+      have h_len : (1 :: h :: X' ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    -- cfg.R = 1::X++[1, 2]. For X=[]: length 3 vs 4 ⊥. For X≠[]: length ≥ 4. For X=[h]: length 4 = 4 match needed; check elt.
+    cases X with
+    | nil =>
+      have h_len : (1 :: ([] : List Nat) ++ [1, 2]).length = ([1, 1, 1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    | cons h X' =>
+      cases X' with
+      | nil =>
+        -- X=[h], cfg.R=[1, h, 1, 2] vs [1, 1, 1, 1]. Last elt 2 vs 1 ⊥.
+        injection hR with _ hR_tail
+        injection hR_tail with _ hR_tail2
+        injection hR_tail2 with _ hR_tail3
+        injection hR_tail3 with hh _
+        omega
+      | cons h2 X'' =>
+        have h_len : (1 :: h :: h2 :: X'' ++ [1, 2]).length = ([1, 1, 1, 1] : List Nat).length := by rw [hR]
+        simp [List.length_append, List.length_cons] at h_len
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=9. Cases 1-3: empty L_suf ⊥. Case 4: a+4=9 (a=5), L'=[], pred M0 [5].
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, hR_eq⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    subst hR_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨h_mi_one, h_e, hr', hav, hLsuf⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · -- Case 4: a+4=9 (a=5), L'=[], r'=0, e=1, middle_init Y all 1s.
+      -- Pred = M0 [5] (3::1::Y++[1, 2]). Use L7sR3a.
+      have ha : a = 5 := by omega
+      subst ha
+      have hL'' : L' = [] := hLsuf.symm
+      subst hL''
+      subst hr'
+      subst h_e
+      apply OrbitReachable.not_M0_5_3_1_Y_via_ih middle_init (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt h_phi_side ⊢
+          omega)
+        h_prev_R3
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L6 (main): `M [1] 7 (2 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s).
+    D5 → L7. D12 → L6b. step_R3 Case 4 → L6sR3a. -/
+theorem OrbitReachable.not_M_1_7_2_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 7 (2 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=7 (a=6). cfg.L=[1]=L'_pred. target.R=1::(d+1)::R' vs cfg.R=2::X++[1, 2]. R[0]=1 vs 2 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor c'+2=7 (c'=5). cfg cursor c'+4=9. (a+1)::L'_pred=[1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[1] ✓. cursor c'+2=7 (c'=5). cfg cursor c'+4=9. (d+1)::R'_pred=2::X++[1, 2].
+    --     d+1=2 (d=1). R'_pred=X++[1, 2]. Pred = M [] 9 (1::X++[1, 2]). Use L7.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have hc' : c'5 = 5 := by omega
+      have hd : d5 = 1 := by omega
+      have hR' : R'5 = X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst hd; subst hR'
+      subst hcfg'5
+      apply OrbitReachable.not_M_empty_9_1_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: cfg.L=[1] ✓. target M [1] (a+4) [1]. cfg.cursor 7 = a+4 (a=3). target.R=[1] vs len ≥ 4 ⊥.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D8: cursor a+3=7 (a=4). target.R=[1] vs len ≥ 4 ⊥.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: cursor z+2=7 (z=5). cfg.L=[1]=(a+4)::L'_pred → a+4=1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=7 (a=4). cfg.L=[1]=L'_pred. (d+1)::R'_pred=2::X++[1, 2]. d+1=2 (d=1).
+    --     R'_pred=X++[1, 2]. Pred = M0 [4, 1] (2::1::X++[1, 2]). Use L6b.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have ha : a12 = 4 := by omega
+      have hL' : L'12 = [1] := hL.symm
+      have hd : d12 = 1 := by omega
+      have hR' : R'12 = X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'12
+      apply OrbitReachable.not_M0_4_1_2_1_X_via_ih X (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    -- target.R=[1, 1] vs cfg.R[0]=2 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_succ _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1, 1]. cfg.L=[1]=(a+4)::L'_pred → a+4=1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1], v=7. Cases 1-3: shape ⊥. Case 4: a+4=7 (a=3), L'=[1], pred M0 [3, 1].
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨h_mi_one, h_e, hr', hav, hLsuf⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · -- Case 3: L_suf=(a+4)::L'=[1]. a+4=1 ⊥ (a≥1).
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · -- Case 4: a+4=7 (a=3), L'=[1], pred = M0 [3, 1] (3::1::Y++[1, 2]). Use L6sR3a.
+      have ha : a = 3 := by omega
+      subst ha
+      have hL'' : L' = [1] := hLsuf.symm
+      subst hL''
+      subst hr'
+      subst h_e
+      apply OrbitReachable.not_M0_3_1_3_1_Y_via_ih middle_init (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt h_phi_side ⊢
+          omega)
+        h_prev_R3
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L5 (main): `M [2] 5 (3 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s).
+    D3 → L6. D12 → L5b. step_R3 Case 4 → L5sR3. -/
+theorem OrbitReachable.not_M_2_5_3_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [2] 5 (3 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target.R=1::(d+1)::R' vs 3::X++[1, 2]. R[0]=1 vs 3 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor c'+2=5 (c'=3). cfg cursor c'+4=7. (a+1)::L'_pred=[2] → a=1, L'_pred=[].
+    --     (d+1)::R'_pred=3::X++[1, 2]. d+1=3 (d=2). R'_pred=X++[1, 2]. Pred = M [1] 7 (2::X++[1, 2]). Use L6.
+    · injection htgt with hL hc hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have hc' : c'3 = 3 := by omega
+      have ha : a3 = 1 := by omega
+      have hL' : L'3 = [] := hL_eq.symm
+      have hd : d3 = 2 := by omega
+      have hR' : R'3 = X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'3
+      apply OrbitReachable.not_M_1_7_2_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: cfg.L=[2] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (3 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: cursor z+2=5 (z=3). cfg.L=[2]=(a+4)::L'_pred → a+4=2 ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=5 (a=2). cfg.L=[2]=L'_pred. (d+1)::R'_pred=3::X++[1, 2]. d+1=3 (d=2).
+    --     R'_pred=X++[1, 2]. Pred = M0 [2, 2] (2::2::X++[1, 2]). Use L5b.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have ha : a12 = 2 := by omega
+      have hL' : L'12 = [2] := hL.symm
+      have hd : d12 = 2 := by omega
+      have hR' : R'12 = X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'12
+      apply OrbitReachable.not_M0_2_2_2_2_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (3 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_zero _ =>
+    -- target.R=[1, 1, 1, 1] vs cfg.R=3::X++[1, 2]. R[0]=3 vs 1 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_R2_succ _ =>
+    -- target M ((a+4)::L') (r+2) [1, 1, 1]. cfg.L=[2]=(a+4)::L'_pred → a+4=2 ⊥.
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[2], v=5. Cases 1-3: shape ⊥. Case 4: a+4=5 (a=1), L'=[2], pred M0 [1, 2].
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨h_mi_one, h_e, hr', hav, hLsuf⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([2] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · -- Case 3: a+4 ≥ 5 vs 2 ⊥.
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · -- Case 4: a+4=5 (a=1), L'=[2], pred = M0 [1, 2] (3::1::Y++[1, 2]). Use L5sR3.
+      have ha : a = 1 := by omega
+      subst ha
+      have hL'' : L' = [2] := hLsuf.symm
+      subst hL''
+      subst hr'
+      subst h_e
+      apply OrbitReachable.not_M0_1_2_3_1_Y_via_ih middle_init (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt h_phi_side ⊢
+          omega)
+        h_prev_R3
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L4 (main): `M [3] 3 (4 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s). D3 → L5. -/
+theorem OrbitReachable.not_M_3_3_4_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [3] 3 (4 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target.R=1::(d+1)::R' vs 4::X++[1, 2]. R[0]=1 vs 4 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor c'+2=3 (c'=1). cfg cursor c'+4=5. (a+1)::L'_pred=[3] → a=2, L'_pred=[].
+    --     (d+1)::R'_pred=4::X++[1, 2]. d+1=4 (d=3). R'_pred=X++[1, 2]. Pred = M [2] 5 (3::X++[1, 2]). Use L5.
+    · injection htgt with hL hc hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have hc' : c'3 = 1 := by omega
+      have ha : a3 = 2 := by omega
+      have hL' : L'3 = [] := hL_eq.symm
+      have hd : d3 = 3 := by omega
+      have hR' : R'3 = X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'3
+      apply OrbitReachable.not_M_2_5_3_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[3] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D6: cursor a+4 ≥ 4 ≠ 3 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D7: cfg.L=[3] vs [1] ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D8: cursor a+3=3 (a=0). target.R=[1] vs cfg.R len ≥ 4 ⊥.
+    · injection htgt with _ _ hR
+      have h_len : (4 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: cursor a+4 ≥ 4 ≠ 3 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D11: cfg.L=[3]=(a+4)::L'_pred → a+4=3 (a=-1) ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=3 (a=0) AllGe1 ⊥.
+    · injection htgt with _ hc _
+      have ha : a12 = 0 := by omega
+      subst ha
+      subst hcfg'12
+      mc_AllGe1_a_ge1
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with hh _
+    omega
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (4 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[3], v=3. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([3] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([3] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      injection hLsuf.symm with h_head _
+      omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L3 (main): `M [] 4 (1 :: 5 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s). D2 → L4. -/
+theorem OrbitReachable.not_M_empty_4_1_5_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [] 4 (1 :: 5 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a2, L'2, d2, R'2, hcfg'2, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨a12, L'12, d12, R'12, hcfg'12, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: cursor a+1=4 (a=3). target.L=[]=L'_pred. R: 1::(d+1)::R'_pred=1::5::X++[1, 2].
+    --     R[0]=1 ✓. (d+1)=5 (d=4). R'_pred=X++[1, 2]. Pred = M [3] 3 (4::X++[1, 2]). Use L4.
+    · injection htgt with hL hc hR
+      injection hR with _ hR_tail
+      injection hR_tail with hd_eq hR_tail2
+      have ha : a2 = 3 := by omega
+      have hL' : L'2 = [] := hL.symm
+      have hd : d2 = 4 := by omega
+      have hR' : R'2 = X ++ [1, 2] := hR_tail2.symm
+      subst ha; subst hL'; subst hd; subst hR'
+      subst hcfg'2
+      apply OrbitReachable.not_M_3_3_4_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D3: target L=(a+1)::L' vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · exact MacroConfig.noConfusion htgt
+    -- D5: target L=[1] vs [] ⊥.
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · injection htgt with _ _ hR
+      have h_len : (1 :: 5 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · injection htgt with hL _ _
+      exact (List.cons_ne_nil _ _) hL.symm
+    -- D12: cursor a+3=4 (a=1). target.L=[]=L'_pred. (d+1)::R'_pred=1::5::X++[1, 2]. d+1=1 (d=0) AllGe1.
+    · injection htgt with _ _ hR
+      injection hR with hd_eq _
+      have hd : d12 = 0 := by omega
+      subst hd
+      subst hcfg'12
+      have hAR := h_prev.macroInvariant.2.1
+      have hd_ge := (AllGe1_cons.mp (AllGe1_cons.mp hAR).2).1
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (1 :: 5 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_multi_bounce_last_2_general a r' m_last L' middle_init _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    have h_len : (middle_init.reverse ++ (r' + 1) :: (a + 4) :: L').length =
+        ([] : List Nat).length := by rw [hL]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    injection hR with _ hR_tail
+    injection hR_tail with hh _
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    exact (List.cons_ne_nil _ _) hL
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[], v=4. Cases 1-3: empty L_suf ⊥. Case 4: a+4=4 (a=0) AllGe1 ⊥.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+    · have ha : a = 0 := by omega
+      subst ha
+      have hAL := h_prev_R3.macroInvariant.1
+      have ha_ge := (AllGe1_cons.mp hAL).1
+      omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L2 (main): `M [1] 2 (2 :: 5 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s). D5 → L3. -/
+theorem OrbitReachable.not_M_1_2_2_5_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M [1] 2 (2 :: 5 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨a3, c'3, L'3, d3, R'3, hcfg'3, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨c'5, d5, R'5, hcfg'5, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    · exact MacroConfig.noConfusion htgt
+    -- D2: target.R=1::(d+1)::R' vs 2::5::X++[1, 2]. R[0]=1 vs 2 ⊥.
+    · injection htgt with _ _ hR
+      injection hR with hh _
+      omega
+    -- D3: cursor c'+2=2 (c'=0). cfg cursor c'+4=4. (a+1)::L'_pred=[1] → a=0 AllGe1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with ha_eq _
+      have ha : a3 = 0 := by omega
+      subst ha
+      subst hcfg'3
+      mc_AllGe1_a_ge1
+    · exact MacroConfig.noConfusion htgt
+    -- D5: cfg.L=[1] ✓. cursor c'+2=2 (c'=0). cfg cursor c'+4=4. (d+1)::R'_pred=2::5::X++[1, 2].
+    --     d+1=2 (d=1). R'_pred=5::X++[1, 2]. Pred = M [] 4 (1::5::X++[1, 2]). Use L3.
+    · injection htgt with hL hc hR
+      injection hR with hd_eq hR_tail
+      have hc' : c'5 = 0 := by omega
+      have hd : d5 = 1 := by omega
+      have hR' : R'5 = 5 :: X ++ [1, 2] := hR_tail.symm
+      subst hc'; subst hd; subst hR'
+      subst hcfg'5
+      apply OrbitReachable.not_M_empty_4_1_5_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    -- D6: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D7: target M [1] (a+4) [1]. cursor a+4 ≥ 4 ≠ 2 ⊥.
+    · injection htgt with _ hc _
+      omega
+    -- D8: target R=[1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    -- D10: target R=[1, 1] mismatch.
+    · injection htgt with _ _ hR
+      have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    -- D11: cfg.L=[1]=(a+4)::L'_pred → a+4=1 ⊥.
+    · injection htgt with hL _ _
+      injection hL with hh _
+      omega
+    -- D12: cursor a+3=2 (a=-1) ⊥.
+    · injection htgt with _ hc _
+      omega
+  | step_multi_bounce_general _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_general_to_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_and_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL, _, _⟩ := hcfg
+    injection hL with hh _
+    omega
+  | step_multi_bounce_2_double_shift _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_multi_bounce_3run_last_2 _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_multi_bounce_last_2_general _ _ _ _ _ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_R2_zero _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, hc, _⟩ := hcfg
+    omega
+  | step_R2_succ _ =>
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨_, _, hR⟩ := hcfg
+    have h_len : (2 :: 5 :: X ++ [1, 2]).length = ([1, 1, 1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | @step_R3 a r' e L' middle_init _ _ h_prev_R3 _ _ _ h_safe h_strict_safe h_phi_side =>
+    -- L_suf=[1], v=2. All 4 cases close.
+    mc_R3_extract
+    rw [MacroConfig.M.injEq] at hcfg
+    obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
+    subst hL_eq
+    subst hv_eq
+    rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+      ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, _⟩
+    · have h_len :
+          (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_append, List.length_cons] at h_len
+      omega
+    · have h_len :
+          ((r' + 1) :: (a + 4) :: L').length = ([1] : List Nat).length := by
+        rw [← hLsuf]
+      simp [List.length_cons] at h_len
+    · injection hLsuf.symm with h_head _; omega
+    · omega
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
+
+/-- **L1 (main, top): `M0 [2] (3 :: 5 :: X ++ [1, 2])` is not orbit-reachable** (X all 1s).
+    D1 → L2. Used to close #11 Case 2 step_R3 sub-case in d2.lean. -/
+theorem OrbitReachable.not_M0_2_3_5_X_via_ih (X : List Nat) (h_X_one : ∀ x ∈ X, x = 1)
+    {cfg : MacroConfig}
+    (hcfg : cfg = .M0 [2] (3 :: 5 :: X ++ [1, 2]))
+    (h_excl_R1_pred : ∀ {d_pre : Nat} {R'_pre : List Nat},
+       OrbitReachable (.M [] 3 (d_pre :: R'_pre)) →
+       (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi < cfg.phi → False) :
+    ¬ OrbitReachable cfg := by
+  intro h_or
+  cases h_or with
+  | init => exact MacroConfig.noConfusion hcfg
+  | step_macro h_prev h_step =>
+    rw [hcfg] at h_step
+    rcases macroStep_eq_some_cases _ _ _ h_step with
+      ⟨a1, L'1, d1, R'1, hcfg'1, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, htgt⟩
+    | ⟨_, _, _, _, _, _, htgt⟩
+    -- D1: target M0 ((a+1)::L') ((d+1)::R'). [2]=(a+1)::L' → a=1, L'=[]. d+1=3 (d=2).
+    --     R'=5::X++[1, 2]. Pred = M [1] 2 (2::5::X++[1, 2]). Use L2.
+    · injection htgt with hL hR
+      injection hL with ha_eq hL_eq
+      injection hR with hd_eq hR_tail
+      have ha : a1 = 1 := by omega
+      have hd : d1 = 2 := by omega
+      have hL' : L'1 = [] := hL_eq.symm
+      have hR' : R'1 = 5 :: X ++ [1, 2] := hR_tail.symm
+      subst ha; subst hd; subst hL'; subst hR'
+      subst hcfg'1
+      apply OrbitReachable.not_M_1_2_2_5_X_via_ih X h_X_one (by rfl)
+        (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pre h_phi_lt => by
+          apply h_excl_R1_pred h_or_pre
+          rw [hcfg]
+          simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+            List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt ⊢
+          omega)
+        h_prev
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D4: target M0 [1] (...). L=[1] vs [2] ⊥.
+    · injection htgt with hL _
+      injection hL with hh _
+      omega
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    -- D9: target R=[1] mismatch.
+    · injection htgt with _ hR
+      have h_len : (3 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+      simp [List.length_append, List.length_cons] at h_len
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+    · exact MacroConfig.noConfusion htgt
+  | step_multi_bounce_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_general_to_zero _ =>
+    rw [MacroConfig.M0.injEq] at hcfg
+    obtain ⟨_, hR⟩ := hcfg
+    have h_len : (3 :: 5 :: X ++ [1, 2]).length = ([1] : List Nat).length := by rw [hR]
+    simp [List.length_append, List.length_cons] at h_len
+  | step_multi_bounce_2_and_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_2_double_shift _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_3run_last_2 _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_multi_bounce_last_2_general _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_zero _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R2_succ _ =>
+    exact MacroConfig.noConfusion hcfg
+  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+    obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
+    rw [hcfg_M] at hcfg
+    exact MacroConfig.noConfusion hcfg
+  | step_R1 h_pred _ _ _ h_phi =>
+    mc_R1_callback
 
 end Sweeper

@@ -282,12 +282,17 @@ macro "mc_AllGe1_a_ge1" : tactic =>
 -- step_R3 unpacker
 -- ============================================================
 
--- `mc_R3_extract`: open `h_strict_safe`'s existential, rewrite into `hcfg`.
--- After this, `h_disj`, `L_suf`, `v`, `R_out` are in scope.
+-- `mc_R3_extract`: open `h_strict_safe`'s existential (4-case form), rewrite
+-- into `hcfg`, and derive `h_disj_2` (the 2-disjunct projection) using
+-- `h_prev_R3.macroInvariant`. After this, `h_disj` (4-case),
+-- `h_disj_2` (2-disjunct), `L_suf`, `v`, `R_out` are in scope.
+-- Requires `h_prev_R3` to be bound by the caller's pattern.
 set_option hygiene false in
 macro "mc_R3_extract" : tactic =>
   `(tactic| (
     obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
-    rw [hcfg_M] at hcfg))
+    rw [hcfg_M] at hcfg
+    have h_disj_2 := strict_safe_2_disjunct_of_4cases
+      (AllGe1_cons.mp h_prev_R3.macroInvariant.1).1 h_disj))
 
 end Sweeper

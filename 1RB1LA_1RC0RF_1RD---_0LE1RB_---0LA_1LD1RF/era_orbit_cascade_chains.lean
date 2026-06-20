@@ -116,7 +116,7 @@ theorem OrbitReachable.not_M_empty_5_1 {cfg : MacroConfig}
     obtain ⟨hL_eq, hv_eq, hR_eq⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, hL_eq⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, hL_eq⟩
     · exact absurd hx List.not_mem_nil
     · have ha : a = 1 := by omega
       subst ha
@@ -210,14 +210,14 @@ theorem OrbitReachable.not_M_1_3_2 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [1], v = 3. h_disj first: 1 ≥ 5 ⊥. Second: v = a+4 = 3 → a = -1 ⊥.
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -293,14 +293,14 @@ theorem OrbitReachable.not_M_empty_2_1_3 {cfg : MacroConfig}
     mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [], v = 2. h_disj first: ⊥. Second: v = a+4 = 2 → a = -2 ⊥.
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · omega
   | step_R1 h_pred _ _ _ h_phi =>
@@ -368,7 +368,7 @@ theorem OrbitReachable.not_M0_1_2_3 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     mc_noconf hcfg
   | step_R1 h_pred _ _ _ h_phi =>
@@ -451,7 +451,7 @@ theorem OrbitReachable.not_M_empty_4_4_via_ih {cfg : MacroConfig}
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · have ha : a = 0 := by omega
       subst ha
@@ -540,14 +540,14 @@ theorem OrbitReachable.not_M_1_2_5_via_ih {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [1], v = 2. h_disj first: 1 ≥ 5 ⊥. Second: v = a+4 = 2 → a = -2 ⊥.
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -623,7 +623,7 @@ theorem OrbitReachable.not_M0_2_6_via_ih {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     mc_noconf hcfg
   | step_R1 h_pred _ _ _ h_phi =>
@@ -715,14 +715,14 @@ theorem OrbitReachable.not_M_2_1_3_1 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [2, 1], v = 3. h_disj first: 2≥5 ⊥, 1≥5 ⊥. Second: a+4=3 → a=-1 ⊥.
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · rcases List.mem_cons.mp hx_tail with rfl | hx_tail2
@@ -822,13 +822,13 @@ theorem OrbitReachable.not_M_1_3_1_2 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -901,13 +901,13 @@ theorem OrbitReachable.not_M_empty_2_1_2_2 {cfg : MacroConfig}
     mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · omega
   | step_R1 h_pred _ _ _ h_phi =>
@@ -976,7 +976,7 @@ theorem OrbitReachable.not_M0_1_2_2_2 {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     mc_noconf hcfg
   | step_R1 h_pred _ _ _ h_phi =>
@@ -1057,7 +1057,7 @@ theorem OrbitReachable.not_M_empty_4_3_2_via_ih {cfg : MacroConfig}
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · have ha : a = 0 := by omega
       subst ha
@@ -1146,14 +1146,14 @@ theorem OrbitReachable.not_M_1_2_4_2_via_ih {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     -- L_suf = [1], v = 2. h_disj first: 1 ≥ 5 ⊥. Second: a+4=2 → a=-2 ⊥.
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -1229,7 +1229,7 @@ theorem OrbitReachable.not_M0_2_5_2_via_ih {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     mc_noconf hcfg
   | step_R1 h_pred _ _ _ h_phi =>
@@ -1321,13 +1321,13 @@ theorem OrbitReachable.not_M_1_3_1_1_2_via_ih {cfg : MacroConfig}
   | step_multi_bounce_last_2_general _ => mc_rule_close
   | step_R2_zero _ => mc_rule_close
   | step_R2_succ _ => mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -1421,13 +1421,13 @@ theorem OrbitReachable.not_M_empty_2_1_2_1_2_via_ih {cfg : MacroConfig}
     mc_rule_close
   | step_R2_succ _ =>
     mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · omega
   | step_R1 h_pred _ _ _ h_phi =>
@@ -1512,7 +1512,7 @@ theorem OrbitReachable.not_M0_1_2_2_1_2_via_ih {cfg : MacroConfig}
     exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ =>
     exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
     rw [hcfg_M] at hcfg
     exact MacroConfig.noConfusion hcfg
@@ -1611,7 +1611,7 @@ theorem OrbitReachable.not_M_empty_4_3_1_2_via_ih {cfg : MacroConfig}
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨_, hx, _⟩ | ⟨h_v_eq, _⟩
     · exact absurd hx List.not_mem_nil
     · have ha : a = 0 := by omega
       subst ha
@@ -1708,13 +1708,13 @@ theorem OrbitReachable.not_M_1_2_4_1_2_via_ih {cfg : MacroConfig}
     mc_rule_close
   | step_R2_succ _ =>
     mc_rule_close
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     mc_R3_extract
     rw [MacroConfig.M.injEq] at hcfg
     obtain ⟨hL_eq, hv_eq, _⟩ := hcfg
     subst hL_eq
     subst hv_eq
-    rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+    rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
     · rcases List.mem_cons.mp hx with rfl | hx_tail
       · omega
       · exact absurd hx_tail List.not_mem_nil
@@ -1803,7 +1803,7 @@ theorem OrbitReachable.not_M0_2_5_1_2_via_ih {cfg : MacroConfig}
     exact MacroConfig.noConfusion hcfg
   | step_R2_succ _ =>
     exact MacroConfig.noConfusion hcfg
-  | step_R3 _ _ _ _ _ h_strict_safe _ =>
+  | step_R3 h_prev_R3 _ _ _ _ h_strict_safe _ =>
     obtain ⟨_, _, _, hcfg_M, _⟩ := h_strict_safe
     rw [hcfg_M] at hcfg
     exact MacroConfig.noConfusion hcfg

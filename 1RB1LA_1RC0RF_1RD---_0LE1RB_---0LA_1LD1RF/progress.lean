@@ -541,13 +541,24 @@ inductive OrbitReachable : MacroConfig → Prop where
       MacroInvariant cfg' →
       0 < k →
       (∀ R, cfg' ≠ .M [] 3 R) →
-      -- Strict safety (2026-05-07): cfg' is M-shape (existential witness),
-      -- and either ∃ x ∈ L_suf, x ≥ 5, or v = a+4 with L_suf = L'.
-      -- The first disjunct excludes cascade shapes with bounded L_suf;
-      -- the second exposes the predecessor structure for M0 backward chase
-      -- (used to close mk_M_1_2spine_5 case).
+      -- 4-case decomposition (2026-05-08, strengthened from 2-disjunct):
+      -- cfg' = M L_suf v R_out, and one of 4 structural cases holds, each
+      -- constraining (a, L', r', e, middle_init) explicitly. Cases 1, 2, 3 all
+      -- imply (a+4) ∈ L_suf with a+4 ≥ 5; Case 4 has L_suf = L' with v = a+4.
+      -- Derived from `thm_reach_multi_bounce_last_2_long_4cases` via inversion
+      -- of the multi-bounce + shift output via `shift_inverse_4cases`.
+      -- The 2-disjunct form (∃ x ≥ 5 ∨ v = a+4 ∧ L_suf = L') is recoverable
+      -- via `strict_safe_2_disjunct_of_4cases`.
       (∃ L_suf v R_out, cfg' = .M L_suf v R_out ∧
-          ((∃ x ∈ L_suf, x ≥ 5) ∨ (v = a + 4 ∧ L_suf = L'))) →
+          ((∃ mi_A mi_B, middle_init = mi_A ++ v :: mi_B ∧
+              (∀ x ∈ mi_B, x = 1) ∧
+              L_suf = mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L') ∨
+           ((∀ x ∈ middle_init, x = 1) ∧ e = v ∧
+              L_suf = (r' + 1) :: (a + 4) :: L') ∨
+           ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' + 1 = v ∧
+              L_suf = (a + 4) :: L') ∨
+           ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' = 0 ∧ a + 4 = v ∧
+              L_suf = L'))) →
       cfg'.phi =
         (MacroConfig.M0 (a :: L') ((r' + 3) :: e :: middle_init ++ [1, 2])).phi + 2 →
       OrbitReachable cfg'
@@ -589,6 +600,37 @@ theorem OrbitReachable.macroInvariant {cfg : MacroConfig} (h : OrbitReachable cf
       exact invariant_R2_pos ih
   | step_R3 _ _ hinv' _ _ _ _ _ => exact hinv'
   | step_R1 _ _ hinv' _ _ => exact hinv'
+
+/-- **2-disjunct projection of step_R3's 4-case decomposition** (backward-compat
+    helper). Each of Cases 1-3 contributes `(a + 4) ∈ L_suf` with `a + 4 ≥ 5`
+    (since `a ≥ 1`); Case 4 contributes `(v = a + 4 ∧ L_suf = L')`. Used by
+    cascade helpers that want the simpler 2-disjunct form. -/
+theorem strict_safe_2_disjunct_of_4cases
+    {a r' e v : Nat} {L' middle_init L_suf : List Nat}
+    (h_a_ge1 : a ≥ 1)
+    (h_4cases :
+      (∃ mi_A mi_B, middle_init = mi_A ++ v :: mi_B ∧
+          (∀ x ∈ mi_B, x = 1) ∧
+          L_suf = mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = v ∧
+          L_suf = (r' + 1) :: (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' + 1 = v ∧
+          L_suf = (a + 4) :: L') ∨
+       ((∀ x ∈ middle_init, x = 1) ∧ e = 1 ∧ r' = 0 ∧ a + 4 = v ∧
+          L_suf = L')) :
+    (∃ x ∈ L_suf, x ≥ 5) ∨ (v = a + 4 ∧ L_suf = L') := by
+  rcases h_4cases with ⟨_, _, _, _, hLsuf⟩ |
+    ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, hav, hLsuf⟩
+  · -- Case 1: L_suf = mi_A.reverse ++ e :: (r'+1) :: (a+4) :: L'. a+4 is at position 2 of suffix.
+    left; refine ⟨a + 4, ?_, by omega⟩
+    rw [hLsuf]; simp
+  · -- Case 2: L_suf = (r'+1) :: (a+4) :: L'. a+4 is at position 1.
+    left; refine ⟨a + 4, ?_, by omega⟩
+    rw [hLsuf]; simp
+  · -- Case 3: L_suf = (a+4) :: L'. a+4 is head.
+    left; refine ⟨a + 4, ?_, by omega⟩
+    rw [hLsuf]; simp
+  · right; exact ⟨hav.symm, hLsuf⟩
 
 /-- Progress predicate using OrbitReachable. Stronger than MacroProg —
     additionally tracks that the macro state is reachable from the orbit's
@@ -689,11 +731,25 @@ private lemma orbit_progress_macroStep
   exact Option.some_ne_none _
 
 set_option maxHeartbeats 1600000 in
-/-- Orbit progress: every OrbitProg state runs to another OrbitProg state.
-    Dispatches by `cfg`'s shape and applies the matching `OrbitReachable`
-    constructor (`step_macro` for single-step rules, `step_multi_bounce_*` /
-    `step_R2_*` / `step_R3` for multi-bounce). -/
-theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
+/-- Orbit progress, parametric form: every OrbitProg state runs to another
+    OrbitProg state. Dispatches by `cfg`'s shape and applies the matching
+    `OrbitReachable` constructor (`step_macro` for single-step rules,
+    `step_multi_bounce_*` / `step_R2_*` / `step_R3` for multi-bounce).
+    The R1 case is discharged by the hypothesis `hR1` instead of the axiom
+    `reach_M_nil_3`. Instantiating `hR1` with the axiom recovers
+    `orbit_progress`; instantiating it with a proof that the R1 shape is
+    unreachable (e.g. via `HalvingKernel` in `halving_loop.lean`) yields an
+    axiom-free progress theorem. -/
+theorem orbit_progress_param
+    (hR1 : ∀ {d : Nat} {R' : List Nat},
+        MacroInvariant (.M [] 3 (d :: R')) →
+        OrbitReachable (.M [] 3 (d :: R')) →
+        ∃ k, 0 < k ∧ ∃ cfg' : MacroConfig,
+          run sweeper (M_Config [] 3 (d :: R')) k = cfg'.toConfig ∧
+          MacroInvariant cfg' ∧
+          cfg'.phi ≥ (MacroConfig.M [] 3 (d :: R')).phi + 2 ∧
+          (run sweeper (M_Config [] 3 (d :: R')) k).state ≠ none)
+    (c : Config 6) (h : OrbitProg c) :
     ∃ k, 0 < k ∧ OrbitProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none := by
   obtain ⟨cfg, hc, hreach⟩ := h
   have hinv := hreach.macroInvariant
@@ -712,7 +768,7 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
       | 3, _ =>
         -- R1 axiom case: lift via step_R1
         simp only [MacroConfig.toConfig_M]
-        obtain ⟨k, hk, cfg', hcfg', hinv', hphi, hne⟩ := reach_M_nil_3 hinv
+        obtain ⟨k, hk, cfg', hcfg', hinv', hphi, hne⟩ := hR1 hinv hreach
         refine ⟨k, hk, ⟨cfg', hcfg', ?_⟩, hne⟩
         exact OrbitReachable.step_R1 hreach hcfg' hinv' hk hphi
       | c' + 4, _ =>
@@ -870,8 +926,8 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
                 exact hR_mid_ge last_inner (List.mem_cons_of_mem e h_in)
               match last_inner, h_last_inner_ge with
               | 1, _ =>
-                -- Last middle = 1: R3 closure with safety via
-                -- thm_reach_multi_bounce_last_2_long_safe.
+                -- Last middle = 1: R3 closure with 4-case decomposition via
+                -- thm_reach_multi_bounce_last_2_long_4cases.
                 have h_input_eq :
                     ((r' + 3) :: (e :: f :: rest ++ [0 + 1 + 1]) : List Nat) =
                     (r' + 3) :: e :: middle_init' ++ [1, 2] := by
@@ -884,8 +940,22 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
                     (MacroConfig.M0 ((a' + 1) :: L' : List Nat)
                       ((r' + 3) :: e :: middle_init' ++ [1, 2] : List Nat)) := by
                   rw [← h_input_eq]; exact hreach
-                obtain ⟨k, cfg', hk, hcfg', hinv', h_safe, h_strict_safe, h_phi⟩ :=
-                  thm_reach_multi_bounce_last_2_long_safe hinv_new
+                obtain ⟨k, L_suf, v_out, R_out, hk, hcfg', hinv', h_safe, _hv_ge2,
+                        h_4cases, h_phi⟩ :=
+                  thm_reach_multi_bounce_last_2_long_4cases hinv_new
+                set cfg' : MacroConfig := MacroConfig.M L_suf v_out R_out with hcfg'_def
+                have h_strict_safe :
+                    ∃ L_suf' v R_out', cfg' = .M L_suf' v R_out' ∧
+                        ((∃ mi_A mi_B, middle_init' = mi_A ++ v :: mi_B ∧
+                            (∀ x ∈ mi_B, x = 1) ∧
+                            L_suf' = mi_A.reverse ++ e :: (r' + 1) :: ((a' + 1) + 4) :: L') ∨
+                         ((∀ x ∈ middle_init', x = 1) ∧ e = v ∧
+                            L_suf' = (r' + 1) :: ((a' + 1) + 4) :: L') ∨
+                         ((∀ x ∈ middle_init', x = 1) ∧ e = 1 ∧ r' + 1 = v ∧
+                            L_suf' = ((a' + 1) + 4) :: L') ∨
+                         ((∀ x ∈ middle_init', x = 1) ∧ e = 1 ∧ r' = 0 ∧
+                            (a' + 1) + 4 = v ∧ L_suf' = L')) :=
+                  ⟨L_suf, v_out, R_out, hcfg'_def, h_4cases⟩
                 have hreach' : OrbitReachable cfg' :=
                   OrbitReachable.step_R3 (a := a' + 1) (r' := r') (e := e)
                     (L' := L') (middle_init := middle_init') (cfg' := cfg') (k := k)
@@ -962,6 +1032,11 @@ theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
             have heq3 : (last'' + 1) + 2 = last'' + 3 := by omega
             rw [heq3] at ht
             exact ht ▸ M_Config_state_ne_none _ _ _
+
+/-- Every orbit config progresses (original form, R1 case via the axiom). -/
+theorem orbit_progress (c : Config 6) (h : OrbitProg c) :
+    ∃ k, 0 < k ∧ OrbitProg (run sweeper c k) ∧ (run sweeper c k).state ≠ none :=
+  orbit_progress_param (fun hinv _ => reach_M_nil_3 hinv) c h
 
 /-- Progress predicate for the era-based approach. Currently defined as `MacroProg`
     but structured to allow future refinement. -/

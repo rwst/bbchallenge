@@ -1,0 +1,1972 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.8cm}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{proposition}[definition]{Proposition}
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{corollary}[definition]{Corollary}
+\newtheorem{example}[definition]{Example}
+
+\newcommand{\lt}{<}
+\newcommand{\gt}{>}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,
+  keepspaces=true,
+  frame=single,
+  backgroundcolor=\color{gray!10},
+  rulecolor=\color{gray!50},
+  breaklines=true,
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+}
+
+\newcommand{\Nat}{\mathbb{N}}
+\newcommand{\val}{\operatorname{Val}}
+\newcommand{\ones}[1]{1^{#1}}
+\newcommand{\zeros}[1]{0^{#1}}
+\newcommand{\List}{\operatorname{List}}
+\newcommand{\conc}{{^\frown}}
+\newcommand{\pre}{\text{pre}}
+\newcommand{\foldl}{\operatorname{foldl}}
+\newcommand{\symfun}{\operatorname{symFun}}
+\newcommand{\compFun}{\operatorname{compFun}}
+\newcommand{\config}{\operatorname{config}}
+\newcommand{\countC}{\operatorname{countC}}
+\newcommand{\auxA}{\mathcal{A}}
+\newcommand{\auxB}{\mathcal{B}}
+\newcommand{\auxRules}{\mathcal{X}}
+\newcommand{\dynRules}{\mathcal{D}}
+\newcommand{\antihydraSRS}{\mathcal{R}_{A}}
+\newcommand{\macroStep}{\operatorname{Step}}
+\newcommand{\nextMathState}{\operatorname{nextMathState}}
+\newcommand{\mathHalts}{\operatorname{mathHalts}}
+\newcommand{\some}{\operatorname{some}}
+\newcommand{\none}{\operatorname{none}}
+\newcommand{\valOrbit}{\operatorname{valOrbit}}
+\newcommand{\counterZ}{\operatorname{counterZ}}
+\newcommand{\grams}{\operatorname{grams}}
+\newcommand{\lpad}{\texttt{\^{}}}
+\newcommand{\rpad}{\texttt{\$}}
+\newcommand{\macroIter}{\operatorname{macroIter}}
+\newcommand{\Option}{\operatorname{Option}}
+\newcommand{\bind}{\mathbin{>\!\!\!>\!=}}
+\newcommand{\futureDip}{\operatorname{futureDip}}
+\newcommand{\orbitCounter}{\operatorname{orbitCounter}}
+\newcommand{\IsHalting}{\operatorname{IsHalting}}
+\newcommand{\RegularInvariant}{\operatorname{RegularInvariant}}
+\newcommand{\ZZ}{\mathbb{Z}}
+\newcommand{\getD}{\operatorname{getD}}
+
+\title{A mixed-base encoding and FAR-style invariant search for Antihydra}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  Antihydra is the BB(6) candidate
+  \texttt{1RB1RA\_0LC1LE\_1LD1LC\_1LA0LB\_1LF1RE\_---0RA}.
+  We give a self-contained account of its integer dynamics and of the
+  mixed binary--ternary rewriting system used in the FAR/CPS search.
+  The rewriting system is derived from the macro-level analysis of the
+  underlying Turing machine; its transport rules preserve value and
+  counter, and every rewriting strategy simulates the integer orbit
+  step-for-step.
+\end{abstract}
+
+\section{From the Turing machine to integer dynamics}
+\label{sec:dynamics}
+
+\subsection{The Antihydra Turing machine and its macro rules}
+\label{subsec:macro}
+
+Antihydra is the 6-state Turing machine with the following transition
+ table.  The tape alphabet is $\{0,1\}$ and the states are
+$\{A,B,C,D,E,F\}$; the initial state is $A$ and the initial tape is
+blank.
+
+\begin{center}
+\begin{tabular}{c|cc}
+  \toprule
+  state & read $0$ & read $1$ \\
+  \midrule
+  $A$ & $1RB$ & $1RA$ \\
+  $B$ & $0LC$ & $1LE$ \\
+  $C$ & $1LD$ & $1LC$ \\
+  $D$ & $1LA$ & $0LB$ \\
+  $E$ & $1LF$ & $1RE$ \\
+  $F$ & halt  & $0RA$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+For the analysis it is convenient to work with a macro-level
+configuration.  Following the Lean formalisation in
+\texttt{bbchallenge/Antihydra/Antihydra.lean}, for
+$b,m,n,p\in\Nat$ define
+\begin{equation}
+  \label{eq:macro-config}
+  P(b,m,n,p)
+  =
+  \bigl(\text{state }E,\;\text{head }0,\;
+  \text{left}=\ones{m}\,0\,\ones{b},\;
+  \text{right}=\ones{n}\,\zeros{p}\bigr).
+\end{equation}
+The block $\ones{m}$ is the ``value block'', the block $\ones{b}$ is
+a unary counter, and the right block $\ones{n}$ is used during the
+macro step.
+
+The machine-checked macro theorems proved in \texttt{Antihydra.lean}
+are the following.  (We write $C\xrightarrow{t}D$ to mean that the
+configuration $C$ reaches $D$ after exactly $t$ steps.)
+
+\begin{lemma}[Macro loop step]
+  \label{lem:p-step}
+  For all $b,m,n,p\in\Nat$,
+  \[
+    P\bigl(b,m+4,n,p+2\bigr)
+    \xrightarrow{\,2n+12\,}
+    P\bigl(b,m+2,n+3,p+1\bigr).
+  \]
+\end{lemma}
+
+\begin{lemma}[Macro loop, $k$ iterations]
+  \label{lem:p-multistep}
+  For all $b,m,n,p,k\in\Nat$,
+  \[
+    P\bigl(b,m+2+2k,n,p+1+k\bigr)
+    \xrightarrow{\,k(2n+3k+9)\,}
+    P\bigl(b,m+2,n+3k,p+1\bigr).
+  \]
+\end{lemma}
+
+\begin{lemma}[Even endgame]
+  \label{lem:even-endgame}
+  For all $b,N,p\in\Nat$, the configuration $P(b,0,N,p+2)$ halts in
+  exactly $2$ steps.
+\end{lemma}
+
+\begin{lemma}[Odd endgame, counter positive]
+  \label{lem:odd-endgame}
+  For all $b',N,p\in\Nat$,
+  \[
+    P\bigl(b'+1,3,N,p+2\bigr)
+    \xrightarrow{\,3N+20\,}
+    P\bigl(b',N+6,0,p\bigr).
+  \]
+\end{lemma}
+
+\begin{lemma}[Even endgame to next loop]
+  \label{lem:even-to-loop}
+  For all $b,N,p\in\Nat$,
+  \[
+    P\bigl(b,2,N,p+2\bigr)
+    \xrightarrow{\,3N+2b+26\,}
+    P\bigl(b+2,N+5,0,p\bigr).
+  \]
+\end{lemma}
+
+\begin{lemma}[Odd halt endgame]
+  \label{lem:odd-halt}
+  For all $N,p\in\Nat$, the configuration $P(0,3,N,p+2)$ halts in
+  exactly $2N+12$ steps.
+\end{lemma}
+
+These six facts are enough to reduce the behaviour of the machine,
+once it has entered the macro regime, to a discrete dynamical system on
+a pair of nonnegative integers.
+
+\subsection{The integer recurrence}
+\label{subsec:recurrence}
+
+Projecting the macro transitions onto the appropriate integer value
+coordinate gives the following familiar Collatz-like map.  Write the
+integer value as $a\in\Nat$ and the counter as $b\in\Nat$.  The
+macro analysis implies that, as long as $a\ge 2$, the next pair is
+\begin{equation}
+  \label{eq:antihydra-map}
+  (a,b)\longmapsto
+  \begin{cases}
+    \bigl(\lfloor 3a/2\rfloor,\;b+2\bigr), & a\text{ even},\\[4pt]
+    \bigl(\lfloor 3a/2\rfloor,\;b-1\bigr), & a\text{ odd and }b>0,\\[4pt]
+    \text{halt}, & a\text{ odd and }b=0.
+  \end{cases}
+\end{equation}
+Equivalently, writing $a=2n$ when $a$ is even and $a=2n+1$ when $a$ is
+odd,
+\begin{equation}
+  \label{eq:antihydra-map-explicit}
+  (2n,b)\mapsto(3n,b+2),
+  \qquad
+  (2n+1,b)\mapsto
+  \begin{cases}
+    (3n+1,b-1), & b>0,\\
+    \text{halt}, & b=0.
+  \end{cases}
+\end{equation}
+The machine halts precisely when an odd value is encountered while the
+counter is empty.  Antihydra is believed to run forever, because the
+walk on the counter has positive drift ($+2$ with probability $1/2$,
+$-1$ with probability $1/2$).
+
+The initial macro configuration reached after the $58$-step warm-up is
+$P(2,8,0,0)$.  In the mixed-base encoding introduced below this
+configuration is written $\langle fff\rangle$ and has value $a_0=8$ and
+counter $b_0=0$.
+
+\paragraph{Remark on the value coordinate.}
+In \texttt{Antihydra.lean} the abstract \texttt{MathState} tracks the
+length $m$ of the left block $\ones{m}$ in
+\eqref{eq:macro-config}; its even branch reads $2n\mapsto 3n+2$.
+The mixed-base encoding below uses a different Turing-machine invariant,
+namely the value $\val(\lt w\gt)$ of the digit string, which satisfies
+the cleaner Mahler form \eqref{eq:antihydra-map}.  Both invariants give
+the same halting condition, and the Python simulation in
+\texttt{antihydra\_far.py} validates \eqref{eq:antihydra-map} against the
+actual Turing-machine orbit for hundreds of dynamic steps.
+
+\section{Mixed-base rewriting rules}
+\label{sec:rewriting}
+
+\subsection{Alphabet and value function}
+\label{subsec:alphabet}
+
+The mixed binary--ternary encoding uses the alphabet
+\[
+  \Sigma=\{\;\lt\, ,\; \gt\, ,\; f,\; t,\; 0,\; 1,\; 2,\; c\;\}.
+\]
+The symbols $f$ and $t$ are binary digits ($f$ for $2x$, $t$ for
+$2x+1$); the symbols $0,1,2$ are ternary digits ($3x$, $3x+1$,
+$3x+2$).  The symbol $\lt$ is the left boundary, $\gt$ is the right
+boundary of the value word, and $c$ is a unary counter symbol.
+
+A \emph{configuration} is a string of the form
+\begin{equation}
+  \label{eq:config}
+  \lt w\gt c^{b},
+  \qquad w\in\{f,t,0,1,2\}^{*},\; b\in\Nat.
+\end{equation}
+The value of the configuration is computed by reading the value word
+$\lt w\gt$ from left to right:
+\begin{equation}
+  \label{eq:val}
+  \val(\lt w\gt c^{b})
+  =
+  \val_{\lt}(w),
+\end{equation}
+where the partial function $\val_{x}(u)$ is defined recursively by
+\begin{alignat}{2}
+  \val_{x}(\varepsilon) &= x,\nonumber\\
+  \val_{x}(f\,u) &= \val_{2x}(u),\nonumber\\
+  \val_{x}(t\,u) &= \val_{2x+1}(u),\nonumber\\
+  \val_{x}(d\,u) &= \val_{3x+d}(u)\qquad (d\in\{0,1,2\}),\nonumber\\
+  \val_{x}(\gt\,u) &= x.\label{eq:val-rec}
+\end{alignat}
+Thus $\lt$ contributes the initial value $1$, each subsequent digit
+applies the corresponding affine function, and $\gt$ returns the
+current value.  The counter symbols $c$ do not affect the value.
+
+\begin{example}
+  The initial configuration is $\lt fff\gt$.  Its value is
+  \[
+    \val(\lt fff\gt)
+    = 1\xrightarrow{f}2\xrightarrow{f}4\xrightarrow{f}8.
+  \]
+  More generally, a binary word $w$ ending in $f$ or $t$ represents the
+  integer whose binary expansion is the sequence of bits encoded by
+  $w$.
+\end{example}
+
+\subsection{The rewriting system}
+\label{subsec:rules}
+
+The rewriting relation is generated by the following rules.  The
+rules are divided into three groups: dynamic rules, which implement the
+integer map and change the counter; transport rules, which are
+value-preserving and move digits; and boundary rules, which turn a
+ternary digit at the left end back into binary digits.
+
+\paragraph{Dynamic rules.}
+\begin{equation}
+  \label{eq:dyn}
+  \begin{aligned}
+    f\gt &\;\longrightarrow\; 0\gt cc,
+    &&\text{(even value: }2n\mapsto 3n,\; b\mapsto b+2\text{)},\\
+    t\gt c &\;\longrightarrow\; 1\gt,
+    &&\text{(odd value: }2n+1\mapsto 3n+1,\; b\mapsto b-1\text{)}.
+  \end{aligned}
+\end{equation}
+The second rule is applicable only when a counter symbol $c$ is
+present; if the configuration ends in $t\gt$ with no $c$ then no rule
+applies and the configuration is halting.
+
+\paragraph{Transport rules.}
+\begin{equation}
+  \label{eq:transport}
+  \begin{array}{lll}
+    f0\to 0f,\qquad & f1\to 0t,\qquad & f2\to 1f,\\
+    t0\to 1t,\qquad & t1\to 2f,\qquad & t2\to 2t.
+  \end{array}
+\end{equation}
+Each of these rules preserves the represented value: for example,
+$f0(x)=2\cdot(3x)=6x=0f(x)$ and $t1(x)=3\cdot(2x+1)+1=6x+4=2f(x)$.
+
+\paragraph{Boundary rules.}
+\begin{equation}
+  \label{eq:boundary}
+  \lt 0\to\lt t,\qquad
+  \lt 1\to\lt ff,\qquad
+  \lt 2\to\lt ft.
+\end{equation}
+These implement the equation $3=2\cdot1+1$, $4=2\cdot(2\cdot1)$, and
+$5=2\cdot(2\cdot1)+1$ at the left boundary.
+
+The full set of rules is therefore
+\begin{equation}
+  \label{eq:all-rules}
+  \begin{aligned}
+  \mathcal{R}
+  ={}&\{f\gt\to0\gt cc,\; t\gt c\to1\gt\}\\
+  \cup{}&\{f0\to0f,\; f1\to0t,\; f2\to1f,\; t0\to1t,\; t1\to2f,\; t2\to2t\}\\
+  \cup{}&\{\lt0\to\lt t,\; \lt1\to\lt ff,\; \lt2\to\lt ft\}.
+  \end{aligned}
+\end{equation}
+
+\begin{definition}[Initial and halting configurations]
+  The initial configuration is $\lt fff\gt$, which has value $a_0=8$
+  and counter $b_0=0$.  A configuration is \emph{halting} if it ends in
+  $t\gt$ and contains no counter symbol, i.e. it has the form
+  $u\,t\gt$ with $u\in\Sigma^{*}$ and no $c$ occurs.
+\end{definition}
+
+\subsection{Simulation}
+\label{subsec:simulation}
+
+The rewriting system is designed so that the rightmost-rule strategy
+simulates the integer recurrence \eqref{eq:antihydra-map}.  More
+precisely, define a \emph{dynamic firing} to be an application of one
+of the two dynamic rules.  Then:
+
+\begin{itemize}
+\item Every transport or boundary rule preserves both the value
+  $\val(\cdot)$ and the number of counter symbols.
+\item A dynamic firing $f\gt\to0\gt cc$ applies exactly when the
+  current value $a$ is even, and it changes the value to
+  $\lfloor3a/2\rfloor$ while adding two counter symbols.
+\item A dynamic firing $t\gt c\to1\gt$ applies exactly when the
+  current value $a$ is odd and the counter is positive, and it changes
+  the value to $\lfloor3a/2\rfloor$ while removing one counter symbol.
+\item If the value is odd and the counter is empty, the configuration
+  ends in $t\gt$ and no rule applies: this is the halting condition.
+\end{itemize}
+
+A useful structural fact, inherited from the YAH framework, is that
+the counter available at the $j$-th odd step is independent of the
+rewriting strategy: transport and boundary rules preserve the value
+and the counter, and dynamic steps depend only on the parity of the
+current value.  This is the analogue for Antihydra of the
+strategy-independence argument in the proof of Theorem~3.17, Claim~1
+of Yolcu--Aaronson--Heule~(\cite[pp.~20--21]{YAH21}): there the
+auxiliary rules $X=A\cup B$ preserve $\val(\cdot)$ while the dynamic
+rules $DT$ apply the Collatz map $T$ to the value.  Hence the
+nondeterministic closure of the rewriting system decides exactly the
+same halting question as the deterministic integer orbit.
+
+\begin{example}
+  The first few dynamic steps from the initial configuration are:
+  \[
+    \lt fff\gt
+    \xrightarrow{f\gt\to0\gt cc}
+    \lt ff0\gt cc
+    \xrightarrow{\text{transport}}
+    \cdots
+    \xrightarrow{f\gt\to0\gt cc}
+    \lt 0\dots0\gt c^{b}.
+  \]
+  At each dynamic firing the represented value follows
+  $8,12,18,27,\dots$, and the counter follows $0,2,4,6,\dots$,
+  exactly as prescribed by \eqref{eq:antihydra-map}.
+\end{example}
+
+\section{Formal verification in Lean}
+\label{sec:lean}
+
+\begin{sloppypar}
+The claims of the preceding sections have been formalised in Lean~4 in
+the directory \texttt{lean-code/SRS}.  The relevant files are
+\texttt{Basic.lean} (string-rewriting systems),
+\texttt{MixedBaseRepresentation.lean} (the YAH mixed-base value
+function), \texttt{AntihydraSRSaxiom.lean} (a BusyLean-free fragment of
+the Antihydra macro model), \texttt{AntihydraMahler.lean} (the equivalent
+Mahler-form value coordinate \eqref{eq:antihydra-map} and its agreement
+with the macro model), \texttt{AntihydraSRS.lean} (the SRS itself
+and its local correctness proof), and
+\texttt{AntihydraSRSSimulation.lean} (the global faithful simulation
+between arbitrary SRS derivations and the deterministic macro orbit), and
+\texttt{AntihydraSRSForward.lean} (a constructive forward strategy that
+realises the orbit, giving the exact converse of the faithful-simulation
+theorem), and
+\texttt{AntihydraSRSObstruction.lean} (a pumping obstruction showing that
+unbounded future dips of the counter rule out any regular non-halting
+invariant over unary-counter encodings).
+This section records the precise definitions and the main lemmas with
+proofs in mathematical prose.
+\end{sloppypar}
+
+\subsection{String rewriting systems}
+
+Let $\alpha$ be a type of symbols.  Following \texttt{Basic.lean}, a
+\emph{string rewriting system} (SRS) over $\alpha$ is a binary relation
+$R$ on $\List\alpha$; we write $R\,\ell\,r$ or $\ell\to r\in R$ when
+$(\ell,r)$ is a rule.  The \emph{rewrite relation} $\to_R$ is defined
+by
+\begin{equation}
+  \label{eq:rewrite-step}
+  u\to_R v
+  \;\iff\;
+  \exists\,s,t,\ell,r\;\bigl(\ell\to r\in R\;\wedge\;u=s\ell t\;\wedge\;v=srt\bigr).
+\end{equation}
+In words: a rule may be applied inside any surrounding context.  The
+following two closure properties are immediate from the definition.
+
+\begin{lemma}[Rules are rewrite steps]
+  If $\ell\to r\in R$ then $\ell\to_R r$.
+\end{lemma}
+
+\begin{lemma}[Context closure]
+  If $u\to_R v$ then $sut\to_R svt$ for all strings $s,t$.
+\end{lemma}
+
+For systems $R,S$ we write $R\cup S$ for the union of their rule sets.
+
+\subsection{Mixed-base representations}
+\label{subsec:mixed-base}
+
+A \emph{mixed digit} is a pair $(n)_b$ with digit $n\in\Nat$ and base
+$b\in\Nat$; a string of such digits is a mixed-base representation.  In
+the function view of \texttt{MixedBaseRepresentation.lean} the symbol
+$(n)_b$ denotes the affine map
+\[
+  \beta_b^n(x)=b\cdot x+n,
+\]
+and a string $N=(n_1)_{b_1}\cdots(n_k)_{b_k}$ denotes the composite
+\begin{equation}
+  \label{eq:Gamma}
+  \Gamma_N(x)
+  =
+  (\beta_{b_k}^{n_k}\circ\cdots\circ\beta_{b_1}^{n_1})(x),
+\end{equation}
+where the leftmost symbol is applied innermost.  The \emph{value} of the
+string is the natural number
+\begin{equation}
+  \label{eq:val-mixed}
+  \val(N)=\sum_{i=1}^{k} n_i\prod_{j=i+1}^{k} b_j,
+\end{equation}
+with the convention that the empty product is $1$.
+
+\begin{lemma}[\texttt{gamma\_eq}]
+  For every mixed-base string $N$ and every $x\in\Nat$,
+  \[
+    \Gamma_N(x)=\bigl(\prod_{j=1}^{k} b_j\bigr)\cdot x+\val(N).
+  \]
+\end{lemma}
+\begin{proof}
+  By induction on the length of $N$.  The empty string gives
+  $\Gamma_{\emptyset}(x)=x=1\cdot x+0$.  For $N=(n)_b::N'$, the
+  induction hypothesis gives
+  $\Gamma_{N'}(y)=(\prod_{j=2}^{k} b_j)\cdot y+\val(N')$.  Taking
+  $y=\beta_b^n(x)=bx+n$ and using the definition of $\val$ yields the
+  claim after collecting the $x$-term and the constant term.
+\end{proof}
+
+\begin{lemma}[\texttt{gamma\_headBase\_zero}]
+  If the leading base is $b_1=0$, then $\Gamma_N(x)=\val(N)$ for every
+  $x$.
+\end{lemma}
+\begin{proof}
+  In \eqref{eq:Gamma} the innermost map is $\beta_0^{n_1}(x)=n_1$, so
+  the whole composite is constant; by the previous lemma the constant is
+  $\val(N)$.
+\end{proof}
+
+The fundamental local operation is \emph{base swapping}: two adjacent
+symbols can have their bases exchanged without changing the composite,
+at the cost of updating the digits by division with remainder.
+
+\begin{lemma}[\texttt{baseSwap}]
+  \label{lem:base-swap}
+  Let $b,c,n,m\in\Nat$ with $n<b$ and $m<c$.  Define
+  \[
+    n'=\frac{bm+n}{c},
+    \qquad
+    m'=(bm+n)\bmod c.
+  \]
+  Then $n'<b$, $m'<c$, and for every $x$,
+  \[
+    \beta_b^n\bigl(\beta_c^m(x)\bigr)
+    =
+    \beta_c^{m'}\bigl(\beta_b^{n'}(x)\bigr).
+  \]
+\end{lemma}
+\begin{proof}
+  Both sides equal $bcx+bm+n$.  On the right we use the division
+  identity $bm+n=cn'+m'$.  The bound $m'<c$ follows from the definition
+  of the remainder.  For $n'<b$, note that $m<c$ implies
+  $b(m+1)\le bc$, so $bm+n<bm+b\le bc$; hence $(bm+n)/c<b$.
+\end{proof}
+
+\subsection{The Antihydra alphabet and rules}
+\label{subsec:lean-alphabet}
+
+The Antihydra SRS uses the eight-symbol alphabet
+\[
+  \Sigma_{A}=\{f,t,0,1,2,\lt,\gt,c\},
+\]
+where in the Lean code the ternary digits are named $d0,d1,d2$ and the
+boundary markers are $lhd,rhd$.  The symbol maps are
+\begin{equation}
+  \label{eq:symfun}
+  \begin{array}{c|c}
+    \text{symbol }s & \symfun_s(x) \\ \hline
+    f & 2x \\
+    t & 2x+1 \\
+    0 & 3x \\
+    1 & 3x+1 \\
+    2 & 3x+2 \\
+    \lt & 1 \\
+    \gt & x \\
+    c & x
+  \end{array}
+\end{equation}
+Thus $\lt$ contributes the initial value $1$; $\gt$ returns the current
+value; and the counter symbol $c$ is the identity.  For a word
+$w\in\List{\Sigma_A}$ and a starting value $x$, the composite map is the
+left fold
+\[
+  \compFun_w(x)=w.\foldl\bigl((acc,s)\mapsto\symfun_s(acc)\bigr)(x).
+\]
+
+\begin{lemma}[\texttt{compFun\_cons} and \texttt{compFun\_append}]
+  \label{lem:compfun-props}
+  For all symbols $s$, words $u,v$, and values $x$,
+  \[
+    \compFun_{s::w}(x)=\compFun_w\bigl(\symfun_s(x)\bigr)
+  \]
+  and
+  \[
+    \compFun_{u\conc v}(x)=\compFun_v\bigl(\compFun_u(x)\bigr).
+  \]
+\end{lemma}
+\begin{proof}
+  Both are immediate from the definition of a left fold and the
+  associativity of list append.
+\end{proof}
+
+A \emph{configuration} is a string of the form
+\begin{equation}
+  \label{eq:lean-config}
+  \config w b
+  =
+  \lt\;w\;\gt\;c^{b},
+\end{equation}
+where $w\in\{f,t,0,1,2\}^{*}$ is the value word and $b\in\Nat$ is the
+counter.  The value of the configuration is independent of the counter.
+
+\begin{lemma}[\texttt{cfgVal}]
+  \label{lem:cfg-val}
+  For every value word $w$, counter $b$, and value $x\in\Nat$,
+  \[
+    \val(\config w b)=\compFun_{\lt w\gt}(x).
+  \]
+\end{lemma}
+\begin{proof}
+  Since $\symfun_c(x)=x$, the block $c^{b}$ is transparent:
+  \texttt{compFun\_replicate\_c} proves $\compFun_{c^{b}}(x)=x$ by
+  induction on $b$.  Lemma~\ref{lem:compfun-props} therefore gives
+  \[
+    \compFun_{\lt w\gt c^{b}}(x)
+    =\compFun_{c^{b}}\bigl(\compFun_{\lt w\gt}(x)\bigr)
+    =\compFun_{\lt w\gt}(x).\qedhere
+  \]
+\end{proof}
+
+The counter is measured by the number of $c$ symbols:
+\[
+  \countC(w)=\text{the number of occurrences of }c\text{ in }w.
+\]
+It is additive over concatenation: $\countC(uv)=\countC(u)+\countC(v)$.
+
+The rewriting system is the union of three groups of rules.
+
+\paragraph{Dynamic rules.}
+\begin{equation}
+  \label{eq:lean-dyn}
+  \dynRules:\quad
+  f\gt\to 0\gt cc,
+  \qquad
+  t\gt c\to 1\gt.
+\end{equation}
+
+\paragraph{Transport rules.}
+\begin{equation}
+  \label{eq:lean-transport}
+  \auxA:\quad
+  \begin{array}{lll}
+    f0\to 0f, & f1\to 0t, & f2\to 1f, \\
+    t0\to 1t, & t1\to 2f, & t2\to 2t.
+  \end{array}
+\end{equation}
+
+\paragraph{Boundary rules.}
+\begin{equation}
+  \label{eq:lean-boundary}
+  \auxB:\quad
+  \lt 0\to\lt t,
+  \qquad
+  \lt 1\to\lt ff,
+  \qquad
+  \lt 2\to\lt ft.
+\end{equation}
+
+The auxiliary subsystem is $\auxRules=\auxA\cup\auxB$, and the full
+Antihydra SRS is
+\[
+  \antihydraSRS=\dynRules\cup\auxRules.
+\]
+
+\subsection{The macro model}
+\label{subsec:lean-macro}
+
+To state what the SRS represents, we first recall the integer recurrence
+from Section~\ref{subsec:recurrence} in the mixed-base value coordinate.
+Define the (partial) \emph{macro step}
+$\macroStep:\Nat\times\Nat\rightharpoonup\Nat\times\Nat$ by
+\begin{equation}
+  \label{eq:lean-macro-step}
+  \macroStep(a,b)=
+  \begin{cases}
+    \bigl(\lfloor 3a/2\rfloor,\;b+2\bigr), & a\text{ even},\\
+    \text{undefined}, & a\text{ odd and }b=0,\\
+    \bigl(\lfloor 3a/2\rfloor,\;b-1\bigr), & a\text{ odd and }b>0.
+  \end{cases}
+\end{equation}
+Equivalently, writing $a=2x$ or $a=2x+1$,
+\begin{equation}
+  \label{eq:lean-macro-explicit}
+  \macroStep(2x,b)=(3x,b+2),
+  \qquad
+  \macroStep(2x+1,0)=\text{undefined},
+  \qquad
+  \macroStep(2x+1,b+1)=(3x+1,b).
+\end{equation}
+
+In the file \texttt{AntihydraSRSaxiom.lean} the same machine is
+presented in a different, but equivalent, coordinate: the state is a
+pair $(a,b)$ where $a$ is the length $m$ of the left block $\ones{m}$ in
+the macro configuration $P(b,m,n,p)$ of \eqref{eq:macro-config}, and the
+total map is
+\[
+  A(a,b)=\bigl(3\cdot(a/2)+2,\;b+2\bigr)\quad\text{if $a$ even},
+  \qquad
+  A(a,b)=\bigl(3\cdot(a/2)+3,\;b-1\bigr)\quad\text{if $a$ odd}.
+\]
+The partial step $\nextMathState$ returns $\none$ exactly when $a$ is
+odd and $b=0$.  The reason for the $+2$/$+3$ offsets is that this model
+tracks the length $m$ directly, whereas the mixed-base model tracks the
+value $\val(\lt w\gt)$.  Both models agree on the halting condition, and
+the bridge is supplied by the BusyLean proof in
+\texttt{AntihydraMachine.lean} (see
+Section~\ref{subsec:tm-bridge}).  Our SRS correctness theorem is stated
+in the cleaner mixed-base coordinate.
+
+\subsection{Correctness: the SRS represents the macro step}
+\label{subsec:lean-correctness}
+
+The correctness proof has three ingredients: the auxiliary rules
+preserve value and counter, the dynamic rules implement the two branches
+of $\macroStep$, and the halting condition matches.
+
+\begin{lemma}[\texttt{auxRules\_preserve\_value}]
+  \label{lem:aux-value}
+  For every rule $\ell\to r\in\auxRules$ and every $x\in\Nat$,
+  $\compFun_\ell(x)=\compFun_r(x)$.
+\end{lemma}
+\begin{proof}
+  There are nine rules.  Recall that $\compFun$ is a left fold, so a
+  string $s_1s_2\dots s_k$ means: start with $x$, apply $s_1$, then
+  $s_2$, and so on, finishing with $s_k$; the final $\gt$ returns the
+  current accumulator.
+
+  \paragraph{Transport rules.}  The six transport rules are the special
+  cases of Lemma~\ref{lem:base-swap} for bases $2$ and $3$.  Writing the
+  left-fold computation in each case gives
+  \[
+    \begin{aligned}
+      f0(x)&=3\cdot(2x)=6x,            & 0f(x)&=2\cdot(3x)=6x,\\
+      f1(x)&=3\cdot(2x)+1=6x+1,        & 0t(x)&=2\cdot(3x)+1=6x+1,\\
+      f2(x)&=3\cdot(2x)+2=6x+2,        & 1f(x)&=2\cdot(3x+1)=6x+2,\\
+      t0(x)&=3\cdot(2x+1)=6x+3,        & 1t(x)&=2\cdot(3x+1)+1=6x+3,\\
+      t1(x)&=3\cdot(2x+1)+1=6x+4,      & 2f(x)&=2\cdot(3x+2)=6x+4,\\
+      t2(x)&=3\cdot(2x+1)+2=6x+5,      & 2t(x)&=2\cdot(3x+2)+1=6x+5.
+    \end{aligned}
+  \]
+  In every pair the two composites agree.
+
+  \paragraph{Boundary rules.}  Here the leftmost symbol $\lt$ replaces
+  the input by $1$, after which the remaining digits are applied in order
+  and $\gt$ returns the result.  Thus
+  \[
+    \begin{aligned}
+      \compFun_{[\lt,0]}(x)&=0(1)=3,        &
+      \compFun_{[\lt,t]}(x)&=t(1)=2\cdot1+1=3,\\
+      \compFun_{[\lt,1]}(x)&=1(1)=4,        &
+      \compFun_{[\lt,f,f]}(x)&=f(f(1))=2\cdot2=4,\\
+      \compFun_{[\lt,2]}(x)&=2(1)=5,        &
+      \compFun_{[\lt,f,t]}(x)&=t(f(1))=2\cdot2+1=5.
+    \end{aligned}
+  \]
+  All three boundary rules therefore preserve value.
+\end{proof}
+
+\begin{lemma}[\texttt{auxRules\_preserve\_count}]
+  \label{lem:aux-count}
+  Every rule $\ell\to r\in\auxRules$ satisfies $\countC(\ell)=\countC(r)$.
+\end{lemma}
+\begin{proof}
+  None of the nine auxiliary rules mentions the counter symbol $c$.
+\end{proof}
+
+Because rewriting is applied inside a context, preservation extends from
+rules to arbitrary rewrite steps.
+
+\begin{theorem}[\texttt{auxRules\_rewriteStep\_preserve\_value} and
+  \texttt{\_preserve\_count}]
+  \label{thm:aux-step}
+  If $u\to_{\auxRules}v$, then $\compFun_u(x)=\compFun_v(x)$ for all
+  $x$ and $\countC(u)=\countC(v)$.
+\end{theorem}
+\begin{proof}
+  Write $u=s\ell t$ and $v=srt$ with $\ell\to r\in\auxRules$.  Put
+  $y=\compFun_s(x)$.  By Lemma~\ref{lem:compfun-props},
+  \[
+    \compFun_u(x)=\compFun_t\bigl(\compFun_\ell(y)\bigr)
+    \:\text{and}\:
+    \compFun_v(x)=\compFun_t\bigl(\compFun_r(y)\bigr),
+  \]
+  which are equal by Lemma~\ref{lem:aux-value}.  The counter equality
+  follows from $\countC(uv)=\countC(u)+\countC(v)$ and
+  Lemma~\ref{lem:aux-count}.
+\end{proof}
+
+\begin{lemma}[\texttt{dynEven}]
+  \label{lem:dyn-even}
+  For every prefix word $\pre$ and every $x\in\Nat$,
+  \begin{align*}
+    \compFun_{\pre\conc f\gt}(x)&=2\cdot\compFun_\pre(x),\\
+    \compFun_{\pre\conc 0\gt cc}(x)&=3\cdot\compFun_\pre(x),\\
+    \countC(\pre\conc 0\gt cc)&=\countC(\pre\conc f\gt)+2.
+  \end{align*}
+\end{lemma}
+\begin{proof}
+  Direct computation.  We have
+  $\compFun_{\pre\conc f\gt}(x)=\gt\bigl(\symfun_f(\compFun_\pre(x))\bigr)
+  =2\cdot\compFun_\pre(x)$, and similarly
+  $\compFun_{\pre\conc 0\gt cc}(x)=\gt\bigl(\symfun_0(\compFun_\pre(x))\bigr)
+  =3\cdot\compFun_\pre(x)$ because the trailing $cc$ is transparent.
+  The counter changes by exactly the two new $c$ symbols.
+\end{proof}
+
+\begin{lemma}[\texttt{dynOdd}]
+  \label{lem:dyn-odd}
+  For every prefix word $\pre$ and every $x\in\Nat$,
+  \begin{align*}
+    \compFun_{\pre\conc t\gt c}(x)&=2\cdot\compFun_\pre(x)+1,\\
+    \compFun_{\pre\conc 1\gt}(x)&=3\cdot\compFun_\pre(x)+1,\\
+    \countC(\pre\conc t\gt c)&=\countC(\pre\conc 1\gt)+1.
+  \end{align*}
+\end{lemma}
+\begin{proof}
+  Same direct computation, using $\symfun_t(y)=2y+1$ and
+  $\symfun_1(y)=3y+1$.
+\end{proof}
+
+Together, Lemmas \ref{lem:dyn-even} and \ref{lem:dyn-odd} say that a
+dynamic firing on a configuration changes the value word from a binary
+least significant digit $f$ or $t$ to a ternary least significant digit
+$0$ or $1$, while applying exactly the map $a\mapsto\lfloor3a/2\rfloor$
+and updating the counter by $+2$ or $-1$.
+
+\begin{theorem}[\texttt{antihydraSRS\_represents\_macro}]
+  \label{thm:srs-represents-macro}
+  The Antihydra SRS represents the macro step $\macroStep$ in the
+  following sense.
+  \begin{enumerate}
+  \item Every auxiliary rewrite preserves value and counter:
+    if $u\to_{\auxRules}v$ then
+    $\compFun_u(x)=\compFun_v(x)$ for all $x$ and
+    $\countC(u)=\countC(v)$.
+  \item The even dynamic rule realises
+    $(2x,b)\mapsto(3x,b+2)$: for every prefix $\pre$,
+    \begin{align*}
+      \compFun_{\pre\conc f\gt}(x)&=2\cdot\compFun_\pre(x),\\
+      \compFun_{\pre\conc 0\gt cc}(x)&=3\cdot\compFun_\pre(x),
+    \end{align*}
+    and the counter grows by $2$.
+  \item The odd dynamic rule realises
+    $(2x+1,b+1)\mapsto(3x+1,b)$: for every prefix $\pre$,
+    \begin{align*}
+      \compFun_{\pre\conc t\gt c}(x)&=2\cdot\compFun_\pre(x)+1,\\
+      \compFun_{\pre\conc 1\gt}(x)&=3\cdot\compFun_\pre(x)+1,
+    \end{align*}
+    and the counter drops by $1$.
+  \end{enumerate}
+\end{theorem}
+\begin{proof}
+  Part~(1) is Theorem~\ref{thm:aux-step}; parts~(2) and~(3) are
+  Lemmas \ref{lem:dyn-even} and \ref{lem:dyn-odd}.
+\end{proof}
+
+\subsection{Faithful simulation}
+\label{subsec:lean-simulation}
+
+Theorem~\ref{thm:srs-represents-macro} shows that each rule of the SRS
+does the right thing \emph{when it fires}.  It does not yet say that an
+arbitrary SRS derivation must follow the deterministic macro orbit: a
+derivation might, in principle, fire dynamic rules at unexpected
+positions or in an order inconsistent with the value.  The file
+\texttt{AntihydraSRSSimulation.lean} closes this gap by proving that
+\emph{every} derivation from a configuration is faithful to the orbit.
+
+A \emph{digit string} is a word
+$w\in\{f,t,0,1,2\}^{*}$ containing no markers or counter symbol.  A
+\emph{configuration} is therefore $\config w b$ with $w$ a digit string.
+The first structural fact is that a dynamic redex is forced to the
+unique boundary marker $\gt$.
+
+\begin{lemma}[\texttt{dynStep\_config\_dest}]
+\label{lem:dyn-align}
+Let $w$ be a digit string and $b\in\Nat$.  If
+$\config w b\to_{\dynRules}v$, then either
+\begin{itemize}
+\item $w=w'\conc f$ and $v=\config{(w'\conc0)}{(b+2)}$, or
+\item $w=w'\conc t$, $b=b'+1$, and $v=\config{(w'\conc1)}{b'}$.
+\end{itemize}
+\end{lemma}
+\begin{proof}[Proof sketch]
+A dynamic rule contains the marker $\gt$ in its left-hand side, while a
+configuration contains exactly one $\gt$ (because $w$ is a digit
+string).  By counting occurrences of $\gt$ and using injectivity of the
+split around that symbol, the redex must be positioned so that the rule's
+$\gt$ coincides with the configuration's unique $\gt$.  Hence the rule
+sees the last symbol of $w$; if it is $f$ the even rule fires, if it is
+$t$ the odd rule fires and consumes one counter symbol.
+\end{proof}
+
+Consequently the rule that fires is determined by the parity of the
+value $\val(\config w b)$, not by the rewriting strategy.
+
+\begin{lemma}[\texttt{dynStep\_config}]
+\label{lem:dyn-step-config}
+Let $w$ be a digit string and $b\in\Nat$.  If
+$\config w b\to_{\dynRules}v$, then $v=\config{w'}{b'}$ for some digit
+string $w'$ and counter $b'$ with
+\[
+  \val(\config{w'}{b'})=\Bigl\lfloor\frac{3\,\val(\config w b)}2\Bigr\rfloor
+\]
+and
+\[
+  \begin{cases}
+    b'=b+2, & \val(\config w b)\text{ even},\\
+    b=b'+1, & \val(\config w b)\text{ odd}.
+  \end{cases}
+\]
+\end{lemma}
+\begin{proof}
+By Lemma~\ref{lem:dyn-align} the rewrite is either the even rule
+$w=w'\conc f\mapsto w'\conc0$ with $b'=b+2$, or the odd rule
+$w=w'\conc t\mapsto w'\conc1$ with $b=b'+1$.  The value equations are
+exactly Lemmas \ref{lem:dyn-even} and~\ref{lem:dyn-odd}.
+\end{proof}
+
+Auxiliary steps are even better behaved: they never change the shape of
+a configuration.
+
+\begin{lemma}[\texttt{auxStep\_config\_dest}]
+\label{lem:aux-step-config}
+Let $w$ be a digit string and $b\in\Nat$.  If
+$\config w b\to_{\auxRules}v$, then $v=\config{w'}{b}$ for some digit
+string $w'$.
+\end{lemma}
+\begin{proof}[Proof sketch]
+Transport rules have left-hand sides consisting of two digit symbols
+with no marker, so a redex inside $\config w b$ must lie entirely
+inside the digit block $w$; boundary rules have left-hand side
+$\lt d$ with $d$ a digit, so they rewrite the first digit of $w$.
+Neither kind mentions $c$, so the counter $b$ is unchanged.
+\end{proof}
+
+Putting the two kinds of step together gives the main simulation theorem.
+We write $\valOrbit{a_0}{n}$ for the $n$-th iterate of
+$a\mapsto\lfloor3a/2\rfloor$ starting from $a_0$, and
+$\counterZ{b_0}{a_0}{n}$ for the counter after $n$ macro steps when the
+initial counter is $b_0$.
+
+\begin{theorem}[\texttt{antihydraSRS\_simulates}]
+\label{thm:faithful-simulation}
+Let $w_0$ be a digit string and $b_0\in\Nat$, and let $a_0=\val(\config{w_0}{b_0})$.
+For every string $C$ reachable from $\config{w_0}{b_0}$ by the full SRS
+$\antihydraSRS$ there exist a digit string $w$, a counter $b$, and a
+number $k\in\Nat$ of dynamic steps such that
+\[
+  C=\config w b,\qquad
+  \val(\config w b)=\valOrbit{a_0}{k},\qquad
+  b=\counterZ{b_0}{a_0}{k}.
+\]
+In particular, the value and counter after $k$ dynamic steps are
+independent of the auxiliary rewriting strategy.
+\end{theorem}
+\begin{proof}
+By induction on the reflexive-transitive closure of the rewrite
+relation.  The base case $k=0$ is trivial.  For the inductive step,
+use Lemma~\ref{lem:aux-step-config} for auxiliary steps (they keep $k$
+and the counter unchanged and preserve the value by
+Theorem~\ref{thm:aux-step}) and Lemma~\ref{lem:dyn-step-config} for a
+dynamic step (it increments $k$ by one and updates value and counter by
+exactly one macro step).
+\end{proof}
+
+Since the value orbit is deterministic, the number of even and odd
+steps among the first $k$ dynamic steps is fixed.  Theorem~\ref{thm:faithful-simulation}
+therefore implies the strategy-independence of the counter in a form
+that refers directly to SRS derivations.
+
+\begin{corollary}[\texttt{counter\_strategy\_independent}]
+\label{cor:counter-strategy}
+Let $w_0$ be a digit string and $b_0\in\Nat$, and let $a_0=\val(\config{w_0}{b_0})$.
+For every configuration $C$ reachable from $\config{w_0}{b_0}$ there
+exist $k$ and $j$ such that
+\[
+  C=\config w b\quad\text{and}\quad
+  b=b_0+2k-3j,
+\]
+where $j$ is the number of odd steps among the first $k$ macro steps
+from $a_0$.
+\end{corollary}
+\begin{proof}
+Theorem~\ref{thm:faithful-simulation} gives $k$ with
+$b=\counterZ{b_0}{a_0}{k}$.  Writing $e$ for the number of even steps
+and $j$ for the number of odd steps among the first $k$ steps, we have
+$e+j=k$ and $b=b_0+2e-j=b_0+2k-3j$.
+\end{proof}
+
+\subsubsection*{Comparison with the soundness layer.}
+The file \texttt{AntihydraSRS.lean} proves local soundness: each rule
+preserves or correctly updates value and counter.  The file
+\texttt{AntihydraSRSSimulation.lean} lifts those local facts to a global
+statement about arbitrary derivations.  This is exactly the step from
+YAH's Claim~1 (per-rule correctness) to the general simulation lemma of
+Theorem~3.17.
+
+We can also exhibit the macro step as an explicit one-step rewrite on
+configurations.
+
+\begin{lemma}[\texttt{config\_even\_step}]
+  \label{lem:config-even}
+  For every value word $w$ and every counter $b$,
+  \[
+    \config{(w\conc f)}{b}
+    \to_{\antihydraSRS}
+    \config{(w\conc 0)}{b+2}.
+  \]
+\end{lemma}
+\begin{proof}
+  Apply the rule $f\gt\to0\gt cc$ in the context
+  $\lt w$ on the left and $c^{b}$ on the right.  Formally,
+  \[
+    \config{(w\conc f)}{b}
+    =
+    (\lt w)\,(f\gt)\,c^{b},
+    \qquad
+    \config{(w\conc 0)}{b+2}
+    =
+    (\lt w)\,(0\gt cc)\,c^{b}.
+  \]
+\end{proof}
+
+\begin{lemma}[\texttt{config\_odd\_step}]
+  \label{lem:config-odd}
+  For every value word $w$ and every counter $b$,
+  \[
+    \config{(w\conc t)}{b+1}
+    \to_{\antihydraSRS}
+    \config{(w\conc 1)}{b}.
+  \]
+\end{lemma}
+\begin{proof}
+  Apply the rule $t\gt c\to1\gt$ in the context
+  $\lt w$ on the left and $c^{b}$ on the right.  The trailing $c$ of the
+  rule consumes one counter symbol from the $c^{b+1}$ block, leaving
+  $c^{b}$.
+\end{proof}
+
+\begin{lemma}[\texttt{dynRules\_odd\_needs\_counter}]
+  \label{lem:odd-halt-redex}
+  The string $t\gt$ is not the left-hand side of any dynamic rule.
+  Consequently, a configuration of the form $u\,t\gt$ with no counter
+  symbol is irreducible.
+\end{lemma}
+\begin{proof}
+  The two dynamic left-hand sides are $f\gt$ and $t\gt c$; neither
+  equals $t\gt$.
+\end{proof}
+
+The preceding lemma matches the macro halting condition.
+
+\begin{theorem}[\texttt{nextMathState\_halt\_condition}]
+  \label{thm:halt-bridge}
+  For $a\ge2$, the BusyLean-free macro model halts with empty counter,
+  $\nextMathState(a,0)=\none$, if and only if $a$ is odd.
+\end{theorem}
+\begin{proof}
+  By definition $\nextMathState(a,0)$ returns $\none$ exactly on the
+  odd branch of the conditional, which is taken precisely when $a$ is
+  odd.  (The hypothesis $a\ge2$ guarantees that the outer guard
+  $a/2\ge1$ holds.)
+\end{proof}
+
+Thus an odd value with an empty counter is a halting configuration both
+for the SRS (Lemma~\ref{lem:odd-halt-redex}) and for the macro model
+(Theorem~\ref{thm:halt-bridge}).
+
+\subsection{Forward (constructive) simulation}
+\label{subsec:lean-forward}
+
+Theorem~\ref{thm:faithful-simulation} is the \emph{backward} half of a
+simulation theorem: every SRS derivation stays inside the deterministic
+orbit.  It is compatible, in principle, with the SRS making no progress
+at all.  The file \texttt{AntihydraSRSForward.lean} supplies the missing
+\emph{forward} half: an explicit, essentially deterministic rewriting
+strategy that walks the orbit step by step.  Together the two halves give
+an exact characterisation of the reachable configurations.
+
+\subsubsection{Binary digit strings}
+
+For the forward construction it is convenient to restrict attention to
+value words that contain only binary digits.
+
+\begin{definition}[\texttt{IsBinary}]
+A list $w\in\List{\Sigma_A}$ is \emph{binary} if every symbol of $w$ is
+$f$ or $t$.
+\end{definition}
+
+\begin{lemma}[\texttt{IsBinary.isDigits}]
+Every binary string is a digit string.
+\end{lemma}
+\begin{proof}
+A binary symbol is either $f$ or $t$, both of which are digits.
+\end{proof}
+
+\begin{lemma}[\texttt{IsBinary.snoc}]
+If $w$ is binary and $s$ is $f$ or $t$, then $w\conc[s]$ is binary.
+\end{lemma}
+\begin{proof}
+Immediate from the definition.
+\end{proof}
+
+\begin{lemma}[\texttt{IsBinary.exists\_snoc}]
+\label{lem:binary-snoc}
+Every nonempty binary string $w$ splits uniquely as $w=p\conc[s]$ where
+$s\in\{f,t\}$ and $p$ is binary.
+\end{lemma}
+\begin{proof}
+Take $s$ to be the last symbol and $p$ the prefix; the conditions are
+satisfied by construction, and uniqueness follows from the fact that the
+last symbol of a list is unique.
+\end{proof}
+
+On a binary string $w$ the value function has the simple form
+\[
+  \val(\lt w\gt)=\compFun_w(1),
+\]
+which is exactly the natural number whose binary expansion is
+$1\conc w$ (with $f=0$ and $t=1$).  Hence the parity of the value is read
+off the last symbol: $f$ gives an even value and $t$ gives an odd value.
+
+\subsubsection{Lifting auxiliary derivations}
+
+The carry sweep below is built purely from the auxiliary rules
+$\auxRules=\auxA\cup\auxB$.  To make it a derivation of the full SRS we
+need a trivial monotonicity lemma.
+
+\begin{lemma}[\texttt{auxStep\_to\_antihydra}]
+\label{lem:aux-to-full}
+Every single $\auxRules$-rewrite step is an $\antihydraSRS$-rewrite step.
+\end{lemma}
+\begin{proof}
+The full rule set is $\antihydraSRS=\dynRules\cup\auxRules$, so every
+rule of $\auxRules$ is also a rule of $\antihydraSRS$.
+\end{proof}
+
+\begin{theorem}[\texttt{auxDeriv\_to\_antihydra}]
+\label{thm:aux-deriv-to-full}
+If $u\to^{*}_{\auxRules}v$, then $u\to^{*}_{\antihydraSRS}v$.
+\end{theorem}
+\begin{proof}
+Reflexive-transitive closure is monotone with respect to inclusion of the
+underlying relation.  Lemma~\ref{lem:aux-to-full} gives the inclusion of
+single-step relations.
+\end{proof}
+
+\subsubsection{The carry sweep}
+
+A dynamic firing replaces the rightmost binary digit of $w$ by a single
+ternary digit ($f\mapsto0$, $t\mapsto1$).  Before the next dynamic step
+can fire, that ternary digit must be carried leftward through the binary
+block until it reaches the left boundary $\lt$, where it is resolved back
+into binary digits.  The transport rules $\auxA$ perform one leftward
+swap at a time.
+
+\begin{lemma}[\texttt{auxA\_swap}]
+\label{lem:auxa-swap}
+Let $s\in\{f,t\}$ be a binary symbol and $d_k\in\{0,1,2\}$ a ternary
+symbol.  Then there exist a ternary symbol $d_j$ and a binary symbol
+$s_j$ such that $s\,d_k\to d_j\,s_j$ is a rule of $\auxA$ and, for all
+$x\in\Nat$,
+\[
+  \symfun_{d_k}\bigl(\symfun_s(x)\bigr)
+  =
+  \symfun_{s_j}\bigl(\symfun_{d_j}(x)\bigr).
+\]
+\end{lemma}
+\begin{proof}
+There are six cases, corresponding to the six transport rules in
+\eqref{eq:lean-transport}.  Each is a direct computation.  For instance,
+for $t1\to2f$ we have
+$\symfun_1(\symfun_t(x))=3(2x+1)+1=6x+4=2(3x+2)=\symfun_f(\symfun_2(x))$.
+The other five cases are analogous.
+\end{proof}
+
+\begin{theorem}[\texttt{carry\_sweep}]
+\label{thm:carry-sweep}
+Let $p$ be a binary string and $d_k\in\{0,1,2\}$.  For every suffix
+$\textit{rest}$ there exists a binary string $q$ such that
+\[
+  \val(\lt q\gt)=\symfun_{d_k}\bigl(\val(\lt p\gt)\bigr)
+\]
+and
+\[
+  \lt\,p\,d_k\,\textit{rest}
+  \to^{*}_{\auxRules}
+  \lt\,q\,\textit{rest}.
+\]
+\end{theorem}
+\begin{proof}
+By reverse induction on $p$.  If $p=\varepsilon$, the string is
+$\lt\,d_k\,\textit{rest}$ and a single boundary rule resolves it:
+$\lt 0\to\lt t$, $\lt 1\to\lt ff$, or $\lt 2\to\lt ft$.  The resulting $q$
+is $[t]$, $[f,f]$, or $[f,t]$, and the value equation is immediate.
+
+If $p=p'\conc[s]$ with $s\in\{f,t\}$, Lemma~\ref{lem:auxa-swap} gives
+$d_j$ and $s_j$ with $s\,d_k\to d_j\,s_j\in\auxA$ and equal composite
+functions.  One transport step yields
+\[
+  \lt\,p'\,s\,d_k\,\textit{rest}
+  \to_{\auxA}
+  \lt\,p'\,d_j\,s_j\,\textit{rest}.
+\]
+The induction hypothesis applied to $p'$, $d_j$, and
+$\textit{rest}'=s_j\,\textit{rest}$ gives a binary $q'$ with
+$\val(\lt q'\gt)=\symfun_{d_j}(\val(\lt p'\gt))$ and
+$\lt\,p'\,d_j\,s_j\,\textit{rest}\to^{*}_{\auxRules}\lt\,q'\,s_j\,\textit{rest}$.
+Set $q=q'\conc[s_j]$.  Then $q$ is binary by
+Lemma~\ref{lem:binary-snoc}, and
+\[
+  \begin{aligned}
+  \val(\lt q\gt)
+  &=2\,\val(\lt q'\gt)+\delta\\
+  &=\symfun_{s_j}\bigl(\symfun_{d_j}(\val(\lt p'\gt))\bigr)\\
+  &=\symfun_{d_k}\bigl(\symfun_s(\val(\lt p'\gt))\bigr)\\
+  &=\symfun_{d_k}\bigl(\val(\lt p\gt)\bigr).
+  \end{aligned}
+\]
+where $\delta=0$ if $s_j=f$ and $\delta=1$ if $s_j=t$.  Concatenating the
+single transport step with the induction hypothesis gives the required
+derivation.
+\end{proof}
+
+\subsubsection{The macro orbit as an option iteration}
+
+To state the forward theorem compactly, the Lean file defines an
+iteration of the partial macro step.
+
+\begin{definition}[\texttt{macroIter}]
+Define $\macroIter:\Nat\to(\Nat\times\Nat)\to\Option(\Nat\times\Nat)$
+by
+\[
+  \macroIter(0,s)=\some(s),
+  \qquad
+  \macroIter(n+1,s)=\macroIter(n,s)\bind\macroStep,
+\]
+where $u\bind f$ is $\none$ if $u=\none$ and $f(a,b)$ if $u=\some(a,b)$.
+\end{definition}
+
+Thus $\macroIter(n,(a_0,b_0))=\some(a_n,b_n)$ means precisely that the
+macro model has not halted within the first $n$ steps and that
+$(a_n,b_n)$ is the state after $n$ steps.
+
+\subsubsection{The forward simulation theorem}
+
+We can now prove that the SRS does not merely stay inside the orbit, but
+actually walks it.
+
+\begin{theorem}[\texttt{antihydraSRS\_realizes\_orbit}]
+\label{thm:forward-simulation}
+Let $w_0$ be a binary string and $b_0\in\Nat$, and assume
+$a_0=\val(\lt w_0\gt)\ge2$.  For every $n,a_n,b_n\in\Nat$ with
+\[
+  \macroIter(n,(a_0,b_0))=\some(a_n,b_n),
+\]
+there exists a binary string $w_n$ such that
+\[
+  \val(\lt w_n\gt)=a_n,\qquad \val(\lt w_n\gt)\ge2,
+\]
+and
+\[
+  \config{w_0}{b_0}
+  \to^{*}_{\antihydraSRS}
+  \config{w_n}{b_n}.
+\]
+\end{theorem}
+\begin{proof}
+Induction on $n$.  The base case $n=0$ is trivial: take $w_0=w_n$.
+
+For the inductive step, suppose
+$\macroIter(n+1,(a_0,b_0))=\some(a_{n+1},b_{n+1})$.  Unfolding the
+iteration gives $(a_n,b_n)$ with
+$\macroIter(n,(a_0,b_0))=\some(a_n,b_n)$ and
+$\macroStep(a_n,b_n)=\some(a_{n+1},b_{n+1})$.  By the induction
+hypothesis there is a binary $w_n$ with $\val(\lt w_n\gt)=a_n\ge2$ and
+$\config{w_0}{b_0}\to^{*}_{\antihydraSRS}\config{w_n}{b_n}$.
+
+Because $a_n\ge2$, the word $w_n$ is nonempty, so by
+Lemma~\ref{lem:binary-snoc} it splits as $w_n=p\conc[s]$ with
+$s\in\{f,t\}$.  Consider the two parity cases.
+
+\paragraph{Even case ($s=f$).}  Here
+$\val(\lt w_n\gt)=2\,\val(\lt p\gt)$, so $a_n=2\,\val(\lt p\gt)$ and
+\[
+  \macroStep(a_n,b_n)=(3\,\val(\lt p\gt),\,b_n+2).
+\]
+Lemma~\ref{lem:config-even} gives the single dynamic step
+$\config{(p\conc[f])}{b_n}\to_{\antihydraSRS}\config{(p\conc[0])}{b_n+2}$.
+Theorem~\ref{thm:carry-sweep}, with $d_k=0$ and
+$\textit{rest}=\gt\,c^{b_n+2}$, yields a binary $q$ with
+$\val(\lt q\gt)=3\,\val(\lt p\gt)$ and
+$\lt\,p\,0\,\gt\,c^{b_n+2}\to^{*}_{\auxRules}\lt\,q\,\gt\,c^{b_n+2}$.
+By Theorem~\ref{thm:aux-deriv-to-full} this is also a derivation of
+$\antihydraSRS$, so
+$\config{(p\conc[0])}{b_n+2}\to^{*}_{\antihydraSRS}\config{q}{b_n+2}$.
+Set $w_{n+1}=q$; then $(a_{n+1},b_{n+1})=(\val(\lt q\gt),b_n+2)$ as
+required.
+
+\paragraph{Odd case ($s=t$).}  Here
+$\val(\lt w_n\gt)=2\,\val(\lt p\gt)+1$, so $a_n=2\,\val(\lt p\gt)+1$.
+Since $\macroStep(a_n,b_n)$ is defined, the counter is positive; write
+$b_n=b'+1$.  Then
+\[
+  \macroStep(a_n,b_n)=(3\,\val(\lt p\gt)+1,\,b').
+\]
+Lemma~\ref{lem:config-odd} gives
+$\config{(p\conc[t])}{b'+1}\to_{\antihydraSRS}\config{(p\conc[1])}{b'}$,
+and Theorem~\ref{thm:carry-sweep} with $d_k=1$ carries the digit $1$ to a
+binary $q$ with $\val(\lt q\gt)=3\,\val(\lt p\gt)+1$.  Again set
+$w_{n+1}=q$.
+
+In both cases we have extended the derivation from $\config{w_0}{b_0}$ to
+$\config{w_{n+1}}{b_{n+1}}$, completing the induction.
+\end{proof}
+
+The value produced by $\macroIter$ is exactly the deterministic value
+orbit.
+
+\begin{lemma}[\texttt{macroIter\_fst\_eq\_valOrbit}]
+\label{lem:macroiter-valorbit}
+For all $a_0,b_0,n,a_n,b_n$, if
+\[
+  \macroIter(n,(a_0,b_0))=\some(a_n,b_n),
+\]
+then $a_n=\valOrbit{a_0}{n}$.
+\end{lemma}
+\begin{proof}
+By induction on $n$, using the fact that $\macroStep$ applies the map
+$a\mapsto\lfloor3a/2\rfloor$ on both the even and the odd branch
+(Lemmas \ref{lem:dyn-even} and~\ref{lem:dyn-odd}).
+\end{proof}
+
+Repackaging Theorem~\ref{thm:forward-simulation} against the value orbit
+gives the following direct converse of
+Theorem~\ref{thm:faithful-simulation}.
+
+\begin{theorem}[\texttt{antihydraSRS\_realizes\_valOrbit}]
+\label{thm:forward-valorbit}
+Let $w_0$ be binary with $a_0=\val(\lt w_0\gt)\ge2$, and let
+$\macroIter(n,(a_0,b_0))=\some(a_n,b_n)$.  Then there exists a binary
+$w_n$ such that
+\[
+  \val(\lt w_n\gt)=\valOrbit{a_0}{n}
+  \qquad\text{and}\qquad
+  \config{w_0}{b_0}
+  \to^{*}_{\antihydraSRS}
+  \config{w_n}{b_n}.
+\]
+\end{theorem}
+\begin{proof}
+Combine Theorem~\ref{thm:forward-simulation} with
+Lemma~\ref{lem:macroiter-valorbit}.
+\end{proof}
+
+Finally, the backward and forward theorems together give an exact
+characterisation of reachability.
+
+\begin{theorem}[\texttt{antihydraSRS\_orbit\_exact}]
+\label{thm:orbit-exact}
+Let $w_0$ be binary with $a_0=\val(\lt w_0\gt)\ge2$ and let
+$\macroIter(n,(a_0,b_0))=\some(a_n,b_n)$.  Then:
+\begin{enumerate}
+\item There exists a binary $w_n$ with
+  $\val(\lt w_n\gt)=\valOrbit{a_0}{n}$ and
+  $\config{w_0}{b_0}\to^{*}_{\antihydraSRS}\config{w_n}{b_n}$.
+\item Conversely, for every configuration $C$ reachable from
+  $\config{w_0}{b_0}$ there exist $k$, $w$, and $b$ such that
+  $C=\config{w}{b}$ and $\val(\lt w\gt)=\valOrbit{a_0}{k}$.
+\end{enumerate}
+In other words, the configurations reachable from
+$\config{w_0}{b_0}$ are exactly the orbit configurations.
+\end{theorem}
+\begin{proof}
+Part~(1) is Theorem~\ref{thm:forward-valorbit}; part~(2) is
+Theorem~\ref{thm:faithful-simulation}.
+\end{proof}
+
+\begin{corollary}[\texttt{antihydraSRS\_realizes\_orbit\_from\_eight}]
+\label{cor:from-eight}
+For every $b_0,n,a_n,b_n$ with
+$\macroIter(n,(8,b_0))=\some(a_n,b_n)$, there exists a binary $w_n$ such
+that
+$\val(\lt w_n\gt)=\valOrbit{8}{n}$ and
+$\config{[f,f,f]}{b_0}\to^{*}_{\antihydraSRS}\config{w_n}{b_n}$.
+\end{corollary}
+\begin{proof}
+The word $[f,f,f]$ is binary and $\val(\lt fff\gt)=8$, so
+Theorem~\ref{thm:forward-valorbit} applies.
+\end{proof}
+
+\subsubsection*{Comparison with the soundness and backward layers}
+The chain of files is now complete.  \texttt{AntihydraSRS.lean} proves
+local soundness (each rule preserves or correctly updates value and
+counter); \texttt{AntihydraSRSSimulation.lean} lifts this to the global
+backward statement that arbitrary derivations are faithful to the orbit;
+and \texttt{AntihydraSRSForward.lean} supplies the constructive forward
+strategy that realises the orbit.  Theorem~\ref{thm:orbit-exact} is the
+exact analogue, for Antihydra, of YAH's Theorem~3.17 in full: Claims~1
+and~2 give the backward simulation, and Claim~3 gives the forward
+realisation.
+
+\subsection{Bridge to the Turing machine}
+\label{subsec:tm-bridge}
+
+The file \texttt{AntihydraMachine.lean} contains the BusyLean proof
+that the macro model simulates the actual Antihydra Turing machine.  The
+main ingredients are the six macro theorems of
+Section~\ref{subsec:macro}, which are lifted from finite padded
+configurations $P(b,m,n,p)$ to stream configurations $SP(b,m,n)$ and
+assembled into the simulation theorem
+\texttt{stm\_simulates\_math}.  This theorem says that for every
+$a\ge2$ and every $b$, there is a positive number of TM steps $k$ such
+that the machine from $SP(b,a,0)$ reaches $SP(b',a',0)$ if
+$\nextMathState(a,b)=\some(a',b')$, and halts if
+$\nextMathState(a,b)=\none$.
+
+The halting predicate $\mathHalts$ is defined inductively from
+$\nextMathState$ in the usual way, and the crucial bridge
+(\texttt{mathHalts\_iff\_Aiter\_8\_2} in
+\texttt{AntihydraSRSaxiom.lean}) states that
+\begin{equation}
+  \label{eq:halts-iter}
+  \mathHalts(8,2)
+  \;\iff\;
+  \exists i\;\bigl(A^{i}(8,2).1\text{ is odd}\;\wedge\;A^{i}(8,2).1/2\ge1\;\wedge\;A^{i}(8,2).2=0\bigr),
+\end{equation}
+where $A^{i}$ is the $i$-th iterate of the total macro map $A$.  In
+\texttt{AntihydraMachine.lean} this equivalence is proved directly from
+the definitions of $\nextMathState$ and $\mathHalts$, and then combined
+with \texttt{stm\_simulates\_math} to give the main TM-level result
+\texttt{antihydra\_halts\_iff}: the Antihydra TM halts if and only if
+the right-hand side of \eqref{eq:halts-iter} holds.
+
+Composing this with Theorem~\ref{thm:srs-represents-macro} and
+Theorem~\ref{thm:halt-bridge}, we obtain the intended interpretation of
+the SRS:
+
+\begin{corollary}
+  \label{cor:srs-tm}
+  The Antihydra SRS is non-terminating from the initial configuration
+  $\lt fff\gt$ if and only if the Antihydra Turing machine does not
+  halt.
+\end{corollary}
+
+\begin{proof}[Proof sketch]
+  By Lemma~\ref{lem:initial-config} below, $\lt fff\gt$ represents
+  $(a,b)=(8,0)$.  The mixed-base macro step $\macroStep$ and the
+  $m$-coordinate partial step $\nextMathState$ have the same halting
+  condition (Theorem~\ref{thm:halt-bridge}), and the total map $A$ is
+  the totalisation of $\nextMathState$.  The BusyLean proof identifies
+  non-halting of the TM with the statement that no iterate of $A$ from
+  the appropriate starting point reaches an odd value with empty counter.
+  Hence a non-terminating SRS derivation corresponds exactly to an
+  infinite Antihydra orbit, and a halting SRS configuration corresponds
+  exactly to a halting TM configuration.
+\end{proof}
+
+\paragraph{Relation to the general YAH simulation lemma.}
+The proof template used above is the Antihydra analogue of
+Theorem~3.17 of Yolcu--Aaronson--Heule~\cite[pp.~20--21]{YAH21}: one
+introduces a mixed-base SRS whose auxiliary rules preserve the
+represented integer value while the dynamic rules implement the iterated
+map, then proves that the SRS is non-terminating exactly when the
+original system does not halt.  In the Antihydra case the dynamic rules
+realise the lower $3/2$-map with a unary counter, whereas YAH's original
+system realises the Collatz map~$T$.  The same strategy-independence,
+value-preservation, and halting-characterization lemmas apply whenever
+the macro dynamics can be written as a piecewise-affine digit update on a
+mixed-base representation.  The broader research program, recorded in
+Report~B3 (\S8) and in \texttt{3-forward-strategy.html}
+(\S5)~\cite{ReportB3,ForwardStrategy}, is to extract this pattern into a
+single general simulation lemma for the full YAH rewriting framework,
+prove it once in Lean, and use it as a verified front-end for all
+certificate-producing termination proofs of Collatz-like systems.  The
+formalization in this section is a worked instance of that program.
+
+\subsection{Initial configuration}
+
+\begin{lemma}[\texttt{initial\_config}]
+  \label{lem:initial-config}
+  The configuration $\config{[f,f,f]}{0}=\lt fff\gt$ has value $8$ and
+  counter $0$.
+\end{lemma}
+\begin{proof}
+  Compute the left fold:
+  $0\xrightarrow{\lt}1\xrightarrow{f}2\xrightarrow{f}4\xrightarrow{f}8\xrightarrow{\gt}8$.
+  There are no counter symbols.
+\end{proof}
+
+\section{FAR/CPS window saturation}
+\label{sec:far}
+
+A \emph{window} of width $w$ over a string $s$ is a length-$w$ factor of
+the $(w-1)$-padded string $\lpad^{\,w-1}s\,\rpad^{\,w-1}$, where \lpad
+and \rpad are fresh left/right padding symbols.  The FAR/CPS method
+searches for a regular (finite-window) superset of all reachable
+configurations: a set $W$ of width-$w$ windows that contains every window
+of the initial configuration and is closed under the rewriting rules.
+
+\paragraph{Saturation procedure.}
+Starting from $W_0=\grams{\lt fff\gt}{w}$, repeatedly apply every rule
+$\ell\to r$ in every left context of length $w-1$ and every right
+context of length $w-1$ whose windows are already known to be reachable,
+and add all windows of the resulting string to the set.  More
+formally, if $u\ell v$ is such that every length-$w$ window of
+$u\ell v$ lies in the current $W$, then every length-$w$ window of
+$urv$ is added to $W$.  The process is repeated until a fixpoint is
+reached.  The implementation is in \texttt{antihydra\_far.py}, functions
+\texttt{grams}, \texttt{left\_contexts}, \texttt{right\_contexts}, and
+\texttt{saturate}.
+
+When the fixpoint is computed, two properties are checked:
+\begin{itemize}
+\item \textbf{Control:} the window $2\gt$ (ternary digit $2$ adjacent
+to the boundary) is absent from $W$.  This is a genuine invariant:
+Antihydra's even dynamic rule appends ternary digit $0$ and the odd
+rule appends ternary digit $1$, so a ternary ending $2$ can never
+appear.
+\item \textbf{Target:} no string ending in $t\gt$ (an odd value with
+empty counter, i.e.\ a halting configuration) has all its windows in
+$W$.  If such a string exists, it is a \emph{phantom}: the abstraction
+admits a halting configuration that is not actually reachable.
+\end{itemize}
+
+Table~\ref{tab:far} shows the results for widths $2$--$6$.
+
+\begin{table}[ht]
+\centering
+\caption{FAR/CPS window saturation for Antihydra.}
+\label{tab:far}
+\begin{tabular}{rrrrlll}
+\toprule
+$w$ & $|W|$ & passes & time & control & target & phantom \\
+\midrule
+2 & 39 & 7 & $<0.01$s & yes & no & $\lt t\gt$ \\
+3 & 185 & 11 & $0.01$s & yes & no & $\lt ft\gt$ \\
+4 & 889 & 18 & $0.35$s & yes & no & $\lt ftt\gt$ \\
+5 & 4333 & 29 & $16$s & yes & no & $\lt fttt\gt$ \\
+6 & 21187 & 37 & $542$s ($\approx$9\,min) & yes & no & $\lt tftt\gt$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The phantom family.}
+At every width the target fails: the abstraction admits a halting
+configuration that is not actually reachable.  For widths $2$--$5$ the
+minimal such phantom is
+\[
+  \lt f\,t^{\,w-2}\gt
+\]
+(with the convention that for $w=2$ this is $\lt t\gt$).  Its value is
+\[
+  \val(\lt f\,t^{\,w-2}\gt)=3\cdot2^{\,w-2}-1,
+\]
+an odd number whose binary expansion ends in a run of $w-2$ ones.  Such
+a value commits to $w-2$ consecutive odd macro steps, each decreasing
+the counter by $1$, but the abstraction sees an empty counter at the
+boundary and cannot compare the length of the odd run with the amount
+of counter available.  These are the \emph{$-1$-shadow} configurations
+of Deliverable~4: integers locally indistinguishable from the
+(negative) fixed point $-1$, whose odd-run length is the $2$-adic budget
+$\nu_2(a+1)$.  At width $w=6$ a shorter phantom, $\lt tftt\gt$,
+appears; it is admitted by the width-$6$ window language while the
+previous phantom $\lt ftttt\gt$ is excluded.  Thus each increment of
+$w$ kills some phantoms and admits new ones, and no finite window width
+can exclude all halting configurations.
+
+\section{Pumping obstruction to regular invariants}
+\label{sec:obstruction}
+
+A FAR-style non-halting proof exhibits a regular set $S$ of configurations
+that (i) contains every reachable configuration, (ii) is closed under one
+rewriting step, and (iii) contains no halting configuration.  The file
+\texttt{AntihydraSRSObstruction.lean} proves a hard limitation of such
+proofs for Antihydra when the counter is stored as a contiguous unary
+block: if $S$ is recognized with $p$ automaton states, then the future
+dips of the counter are bounded by $p$.
+
+Let $(a_n,b_n)$ be the state of the deterministic macro orbit after $n$
+steps, starting from a binary configuration $\config{w_0}{b_0}$ with
+$a_0=\val(\lt w_0\gt)\ge2$.  Define the \emph{future-dip sequence}
+\begin{equation}
+  \label{eq:future-dip}
+  D(n)=b_n-\min_{m\ge n}b_m.
+\end{equation}
+Thus $D(n)$ measures how far the counter falls from its current level
+before recovering.  The main result is:
+
+\begin{proposition}[Pumping obstruction]
+\label{prop:pumping-obstruction}
+Let $S$ be a set of configurations satisfying \textup{(i)--(iii)} above
+and suppose $S$ admits unary-counter pumping below $p$: whenever
+$\config{w}{b}\in S$ with $b\ge p$, there exists $b'<p$ such that
+$\config{w}{b'}\in S$.  Then for every $n$ with $b_n\ge p$,
+\[
+  D(n)<p.
+\]
+Equivalently, $b_n<b_m+p$ for all $m\ge n$ whenever $b_n\ge p$.
+\end{proposition}
+
+Before giving the proof, we isolate the necessary orbit arithmetic and the
+notion of a halting configuration.
+
+\subsection{Orbit arithmetic}
+
+The following lemmas are proved in
+\texttt{AntihydraSRSObstruction.lean}.  They say that the value orbit is
+additive in the step index, that shifting the initial counter shifts the
+counter orbit by the same amount, and that the partial iterate
+$\macroIter$ agrees with the deterministic orbits while it has not halted.
+
+\begin{lemma}[\texttt{valOrbit\_add}]
+\label{lem:valOrbit-add}
+For all $a_0,n,j\in\Nat$,
+\[
+  \valOrbit{a_0}{n+j}=\valOrbit{\bigl(\valOrbit{a_0}{n}\bigr)}{j}.
+\]
+\end{lemma}
+\begin{proof}
+By induction on $j$, using the definition
+$\valOrbit{a}{j+1}=\bigl\lfloor\frac32\valOrbit{a}{j}\bigr\rfloor$.
+\end{proof}
+
+\begin{lemma}[\texttt{counterZ\_shift}]
+\label{lem:counterZ-shift}
+For all integers $b,b'$ and all $a_0,j\in\Nat$,
+\[
+  \counterZ{b'}{a_0}{j}=\counterZ{b}{a_0}{j}+(b'-b).
+\]
+\end{lemma}
+\begin{proof}
+Both sides satisfy the same recurrence in $j$ with the same initial value,
+because counter increments depend only on the value orbit, not on the
+absolute counter level.
+\end{proof}
+
+\begin{lemma}[\texttt{counterZ\_add}]
+\label{lem:counterZ-add}
+For all $b_0\in\ZZ$, $a_0,n,j\in\Nat$,
+\[
+  \counterZ{b_0}{a_0}{n+j}
+  =
+  \counterZ{\bigl(\counterZ{b_0}{a_0}{n}\bigr)}{\bigl(\valOrbit{a_0}{n}\bigr)}{j}.
+\]
+\end{lemma}
+\begin{proof}
+By induction on $j$, using Lemma~\ref{lem:valOrbit-add} and the recurrence
+for $\counterZ{}{}{}$.
+\end{proof}
+
+\begin{lemma}[\texttt{macroIter\_eq\_orbit}]
+\label{lem:macroiter-eq-orbit}
+If $\macroIter(n,(a_0,b_0))=\some(a_n,b_n)$, then
+$a_n=\valOrbit{a_0}{n}$ and $b_n=\counterZ{b_0}{a_0}{n}$.
+\end{lemma}
+\begin{proof}
+By induction on $n$, using the fact that $\macroStep$ applies
+$a\mapsto\lfloor3a/2\rfloor$ on both parity branches and updates the
+counter by $+2$ or $-1$ accordingly.
+\end{proof}
+
+\begin{lemma}[\texttt{valOrbit\_ge\_two}]
+\label{lem:valOrbit-ge-two}
+If $a_0\ge2$ then $\valOrbit{a_0}{n}\ge2$ for every $n$.
+\end{lemma}
+\begin{proof}
+The map $a\mapsto\lfloor3a/2\rfloor$ preserves the property $a\ge2$.
+\end{proof}
+
+\begin{lemma}[\texttt{macroStep\_eq\_none\_iff}]
+\label{lem:macroStep-none}
+$\macroStep(a,b)=\none$ if and only if $a$ is odd and $b=0$.
+\end{lemma}
+\begin{proof}
+Immediate from the definition of $\macroStep$.
+\end{proof}
+
+\begin{lemma}[\texttt{exists\_first\_none}]
+\label{lem:first-none}
+If $\macroIter(N,(a_0,b_0))=\none$, then there exist $j,a_j,b_j$ such
+that $\macroIter(j,(a_0,b_0))=\some(a_j,b_j)$ and
+$\macroIter(j+1,(a_0,b_0))=\none$.
+\end{lemma}
+\begin{proof}
+By induction on $N$.
+\end{proof}
+
+\begin{lemma}[\texttt{mem\_of\_reflTransGen}]
+\label{lem:mem-reflTransGen}
+If $S$ is closed under one rewriting step and $u\in S$, then every
+configuration $v$ with $u\to^{*}_{\antihydraSRS}v$ lies in $S$.
+\end{lemma}
+\begin{proof}
+By induction on the reflexive-transitive closure.
+\end{proof}
+
+\subsection{Halting configurations}
+
+\begin{definition}[\texttt{IsHalting}]
+\label{def:halting}
+A configuration is \emph{halting} if it has the form $\config{w}{0}$
+where $w$ is binary and $\val(\lt w\gt)$ is odd.
+\end{definition}
+
+Such a configuration is irreducible: the only applicable dynamic rule for
+an odd value is $t\gt c\to1\gt$, which requires a counter symbol $c$; the
+counter is empty, so no rule fires.  By Lemma~\ref{lem:macroStep-none} this
+is exactly the macro halting condition.
+
+\subsection{Proof of the pumping obstruction}
+
+\begin{proof}[Proof of Proposition~\ref{prop:pumping-obstruction}]
+Fix $n$ with $b_n\ge p$ and any $m\ge n$.  By
+Theorem~\ref{thm:forward-simulation} there is a binary word $W_n$ with
+$\val(\lt W_n\gt)=a_n$ and a derivation
+\[
+  \config{w_0}{b_0}\to^{*}_{\antihydraSRS}\config{W_n}{b_n}.
+\]
+Since $S$ contains all reachable configurations,
+$\config{W_n}{b_n}\in S$.  The pumping hypothesis gives $b'<p$ such that
+$\config{W_n}{b'}\in S$.
+
+Suppose, for a contradiction, that $b_n\ge b_m+p$.  Consider the partial
+iteration from $(a_n,b')$ for $m-n$ steps.  We claim it halts, i.e.
+\[
+  \macroIter(m-n,(a_n,b'))=\none.
+\]
+If not, suppose it returns $\some(a'',b'')$.  By
+Lemma~\ref{lem:macroiter-eq-orbit},
+\[
+  b''=\counterZ{b'}{a_n}{m-n}.
+\]
+Using Lemma~\ref{lem:counterZ-shift} and Lemma~\ref{lem:counterZ-add},
+\[
+  \counterZ{b'}{a_n}{m-n}
+  =\counterZ{b_n}{a_n}{m-n}+(b'-b_n)
+  =b_m+b'-b_n,
+\]
+which is negative because $b_n\ge b_m+p$ and $b'<p$.  This is impossible
+for a natural-number counter, so the iteration must indeed halt.
+
+By Lemma~\ref{lem:first-none} there is a first halting transition from
+$(a_n,b')$: some $j$ with
+\[
+  \macroIter(j,(a_n,b'))=\some(a_j,b_j)
+\]
+and
+\[
+  \macroIter(j+1,(a_n,b'))=\none.
+\]
+Lemma~\ref{lem:macroStep-none} gives that $a_j$ is odd and $b_j=0$.
+Apply
+Theorem~\ref{thm:forward-simulation} again, this time starting from
+$\config{W_n}{b'}$: there is a binary word $W_j$ with
+$\val(\lt W_j\gt)=a_j$ (hence odd) and
+\[
+  \config{W_n}{b'}\to^{*}_{\antihydraSRS}\config{W_j}{0}.
+\]
+By Lemma~\ref{lem:mem-reflTransGen} and closure of $S$, the halting
+configuration $\config{W_j}{0}$ lies in $S$, contradicting assumption~(iii).
+
+Therefore $b_n<b_m+p$ for every $m\ge n$, i.e. $D(n)<p$.
+\end{proof}
+
+\subsection{Regular invariants and the corollary}
+
+The hypotheses of Proposition~\ref{prop:pumping-obstruction} are bundled
+in \texttt{AntihydraSRSObstruction.lean} into a structure.
+
+\begin{definition}[\texttt{RegularInvariant}]
+\label{def:regular-invariant}
+A \emph{regular invariant} with $p$ states for the orbit from
+$\config{w_0}{b_0}$ is a set $S$ of configurations such that:
+\begin{enumerate}
+\item[\textup{(reach)}] every configuration reachable from
+  $\config{w_0}{b_0}$ lies in $S$;
+\item[\textup{(closed)}] if $u\in S$ and $u\to_{\antihydraSRS}v$, then
+  $v\in S$;
+\item[\textup{(noHalt)}] $S$ contains no halting configuration;
+\item[\textup{(pump)}] if $\config{w}{b}\in S$ with $b\ge p$, then there
+  exists $b'<p$ with $\config{w}{b'}\in S$.
+\end{enumerate}
+\end{definition}
+
+The \emph{orbit counter} is defined by
+\[
+  \orbitCounter{w_0}{b_0}{n}=(\macroIter(n,(\val(\lt w_0\gt),b_0))).\getD((0,0)).2,
+\]
+which reads off $b_n$ while the orbit has not halted.  With this notation,
+Proposition~\ref{prop:pumping-obstruction} becomes:
+
+\begin{theorem}[\texttt{orbitDip\_lt}]
+\label{thm:orbit-dip}
+Let $S$ be a regular invariant with $p$ states for the orbit from
+$\config{w_0}{b_0}$.  Then for all $n,m$ with $n\le m$ and
+$\orbitCounter{w_0}{b_0}{n}\ge p$,
+\[
+  \orbitCounter{w_0}{b_0}{n}
+  <
+  \orbitCounter{w_0}{b_0}{m}+p.
+\]
+\end{theorem}
+\begin{proof}
+Use Lemma~\ref{lem:macroiter-eq-orbit} to replace
+$\orbitCounter{w_0}{b_0}{n}$ by $b_n$ and
+$\orbitCounter{w_0}{b_0}{m}$ by $b_m$, then apply
+Proposition~\ref{prop:pumping-obstruction}.
+\end{proof}
+
+In the language of future dips:
+
+\begin{theorem}[\texttt{futureDip\_lt\_card}]
+\label{thm:future-dip-lt}
+Let $S$ be a regular invariant with $p$ states.  Then for every $n$ with
+$\orbitCounter{w_0}{b_0}{n}\ge p$,
+\[
+  \futureDip(\orbitCounter{w_0}{b_0}{\cdot},n)<p.
+\]
+\end{theorem}
+
+\begin{corollary}[\texttt{no\_regular\_invariant\_of\_unbounded\_dips}]
+\label{cor:no-regular-invariant}
+If the future dips of the orbit counter are unbounded, i.e.
+\[
+  \forall q\;\exists n\quad
+  \bigl(\orbitCounter{w_0}{b_0}{n}\ge q\;\wedge\;
+  \futureDip(\orbitCounter{w_0}{b_0}{\cdot},n)\ge q\bigr),
+\]
+then no regular invariant of any size exists for the orbit from
+$\config{w_0}{b_0}$.
+\end{corollary}
+\begin{proof}
+A $p$-state invariant would force
+\[
+  \futureDip(\orbitCounter{w_0}{b_0}{\cdot},n)<p
+\]
+whenever $\orbitCounter{w_0}{b_0}{n}\ge p$
+(Theorem~\ref{thm:future-dip-lt}),
+contradicting unboundedness at $q=p$.
+\end{proof}
+
+\subsection{The pumping property from a finite automaton}
+
+The abstract pumping property~(pump) in
+Definition~\ref{def:regular-invariant} is exactly what a DFA recognizer
+with a contiguous unary counter block provides.  We make this literal.
+
+\begin{lemma}[\texttt{exists\_iterate\_lt\_card}]
+\label{lem:iterate-pigeonhole}
+Let $\sigma$ be a finite type, $g:\sigma\to\sigma$, $q\in\sigma$, and
+$n\ge|\sigma|$.  Then there exists $k<|\sigma|$ such that
+$g^{[k]}(q)=g^{[n]}(q)$.
+\end{lemma}
+\begin{proof}
+The sequence $g^{[0]}(q),g^{[1]}(q),\dots,g^{[n]}(q)$ has $n+1>|
+sigma|$ entries, so two of them coincide by the pigeonhole principle.  The
+periodic behaviour of iterates then reduces the larger index to a smaller
+one.
+\end{proof}
+
+\begin{lemma}[\texttt{dfa\_pump}]
+\label{lem:dfa-pump}
+Let $M$ be a DFA over $\Sigma_A$ with state set $\sigma$ and let
+$p=|\sigma|$.  If $M$ accepts $\config{w}{b}$ with $b\ge p$, then $M$
+also accepts $\config{w}{b'}$ for some $b'<p$.
+\end{lemma}
+\begin{proof}
+After reading the value prefix $\lt w\gt$, the DFA enters some state
+$q$.  Reading the counter block $c^{b}$ iterates the $c$-transition
+$b$ times.  Since $b\ge p=|\sigma|$,
+Lemma~\ref{lem:iterate-pigeonhole} gives $k<p$ with the same final state
+as $b$, so $M$ accepts $\config{w}{k}$.
+\end{proof}
+
+\begin{theorem}[\texttt{regularInvariant\_of\_dfa}]
+\label{thm:regularInvariant-of-dfa}
+Let $M$ be a DFA with state set $\sigma$ whose accepted language $L(M)$
+contains every configuration reachable from $\config{w_0}{b_0}$, is closed
+under one $\antihydraSRS$-step, and contains no halting configuration.
+Then $L(M)$ is a regular invariant with $p=|\sigma|$ states.
+\end{theorem}
+\begin{proof}
+Hypotheses~(i)--(iii) are exactly reachability, closure, and no-halt.
+Lemma~\ref{lem:dfa-pump} supplies property~(pump).
+\end{proof}
+
+\begin{corollary}[\texttt{no\_dfa\_invariant\_of\_unbounded\_dips}]
+\label{cor:no-dfa-invariant}
+If the future dips of the orbit counter from $\config{w_0}{b_0}$ are
+unbounded, then no DFA recognizes a closed, reachable-containing,
+halting-free set of configurations.  In particular, no FAR-style
+non-halting proof of Antihydra over unary-counter encodings exists at any
+number of states.
+\end{corollary}
+\begin{proof}
+Combine Theorem~\ref{thm:regularInvariant-of-dfa} with
+Corollary~\ref{cor:no-regular-invariant}.
+\end{proof}
+
+\subsection{Relation to the FAR/CPS search}
+
+The window-saturation experiments of Section~\ref{sec:far} produce, for
+each width $w$, a regular over-approximation of the reachable
+configurations.  The obstruction of this section says that any genuine
+regular invariant for Antihydra must bound future dips by the number of
+automaton states.  Since the Antihydra counter performs a random walk with
+positive drift, future dips are believed to be unbounded; if that is true,
+then no finite automaton can witness non-halting, and the FAR/CPS method is
+fundamentally incomplete for this machine.  The phantom configurations
+observed in Table~\ref{tab:far} are the concrete symptom: the window
+abstraction is too weak to remember the counter budget needed to survive
+long odd runs.
+
+It is worth noting the logical strength of the conclusion.  The statement
+``no finite automaton can witness non-halting'' is weaker than the
+statement ``Antihydra does not halt.''  The pumping obstruction gives
+$\text{FAR witness}\Rightarrow\text{dips bounded}$, so unbounded dips
+yields two consequences: (1)~the machine does not halt, because halting
+would cap every future dip by the maximum counter value ever reached;
+and (2)~no FAR-style certificate exists.  Thus unbounded dips is a
+strictly stronger result than either conclusion alone; the FAR
+incompleteness theorem is the additional meta-mathematical information
+that one natural class of certificates is too weak to establish the
+true non-halting behaviour.
+
+\begin{thebibliography}{9}
+\bibitem{YAH21}
+Emre Yolcu, Scott Aaronson, and Marijn J.~H. Heule,
+\textit{An Automated Approach to the Collatz Conjecture},
+arXiv:2105.14697v3 [cs.LO], 2022.
+
+\bibitem{AntihydraMachine}
+Ralf Stephan (with Claude Code), \texttt{AntihydraMachine.lean}: BusyLean
+machine-checked macro analysis of the Antihydra BB(6) candidate, 2026.
+
+\bibitem{AntihydraSRS}
+Ralf Stephan (with Claude Code), \texttt{AntihydraSRS.lean}: the
+mixed-base string-rewriting system for Antihydra and its correctness
+proof, 2026.
+
+\bibitem{AntihydraSRSSimulation}
+Ralf Stephan (with Claude Code), \texttt{AntihydraSRSSimulation.lean}:
+faithful simulation of the Antihydra macro orbit by arbitrary SRS
+derivations, 2026.
+
+\bibitem{AntihydraSRSForward}
+Ralf Stephan (with Claude Code), \texttt{AntihydraSRSForward.lean}:
+constructive forward simulation of the Antihydra macro orbit by an
+explicit rewriting strategy, 2026.
+
+\bibitem{AntihydraSRSObstruction}
+Ralf Stephan (with Claude Code), \texttt{AntihydraSRSObstruction.lean}:
+pumping obstruction to regular invariants of Antihydra over
+unary-counter encodings, 2026.
+
+\bibitem{AntihydraSRSaxiom}
+Ralf Stephan (with Claude Code), \texttt{AntihydraSRSaxiom.lean}: the
+BusyLean-free Antihydra macro model used by \texttt{AntihydraSRS.lean},
+2026.
+
+\bibitem{AntihydraMahler}
+Ralf Stephan (with Claude Code), \texttt{AntihydraMahler.lean}: the
+Mahler-form value coordinate for Antihydra and its equivalence to the
+BusyLean-free macro model, 2026.
+
+\bibitem{MixedBase}
+Ralf Stephan (with Claude Code), \texttt{MixedBaseRepresentation.lean}:
+mixed-base representations and the base-swap lemma, 2026.
+
+\bibitem{BasicSRS}
+Ralf Stephan (with Claude Code), \texttt{Basic.lean}: string rewriting
+systems, rewrite steps, and termination (Book--Otto \S2), 2026.
+
+\bibitem{ReportB3}
+Ralf Stephan (with Claude Code), \textit{Report B3 --- Detailed plans
+for every research idea in Deliverable 3}, project internal report,
+\S8 ``Formal verification track in Lean 4'', 2026.
+
+\bibitem{ForwardStrategy}
+Ralf Stephan (with Claude Code), \textit{3-forward-strategy.html} ---
+Forward-strategy analysis of the YAH paper, project internal report,
+\S5 ``Formal verification track'', 2026.
+\end{thebibliography}
+
+\end{document}

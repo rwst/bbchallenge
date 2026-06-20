@@ -367,9 +367,10 @@ theorem cascade_strong_aux : ∀ phi : Nat, ∀ mr : Nat,
           obtain ⟨h_head, _⟩ := h_2s; omega
       | @step_R3 a r' e L' middle_init _ _ h_prev _ _ _ h_safe h_strict_safe h_phi_side =>
         -- h_safe : ∀ R, cfg' ≠ M [] 3 R. Closes mk_M_empty_3 directly.
-        -- h_strict_safe (2026-05-07 v2): ∃ L_suf v R_out, cfg' = M L_suf v R_out ∧
-        --   ((∃ x ∈ L_suf, x ≥ 5) ∨ (v = a + 4 ∧ L_suf = L')).
+        -- h_strict_safe is now 4-case (2026-05-08); derive 2-disjunct form for legacy callers.
         obtain ⟨L_suf, v, R_out, hcfg_M, h_disj⟩ := h_strict_safe
+        have h_disj_2 := strict_safe_2_disjunct_of_4cases
+          (AllGe1_cons.mp h_prev.macroInvariant.1).1 h_disj
         cases h_in with
         | mk_M_empty_3 R => exact h_safe R rfl
         | @mk_M_2spine_3 L R₀ h_2s h_ne =>
@@ -378,7 +379,7 @@ theorem cascade_strong_aux : ∀ phi : Nat, ∀ mr : Nat,
           obtain ⟨hL_eq, hv_eq, _⟩ := hcfg_M
           subst hL_eq
           subst hv_eq
-          rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
+          rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, _⟩
           · have := h_2s.mem_eq_2 x hx; omega
           · -- v = 3 = a + 4 → a = -1, impossible (a : Nat).
             omega
@@ -388,7 +389,7 @@ theorem cascade_strong_aux : ∀ phi : Nat, ∀ mr : Nat,
           obtain ⟨hL_eq, hv_eq, _⟩ := hcfg_M
           subst hL_eq
           subst hv_eq
-          rcases h_disj with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, hL_eq⟩
+          rcases h_disj_2 with ⟨x, hx, hx_ge⟩ | ⟨h_v_eq, hL_eq⟩
           · -- ∃ x ∈ (1 :: L_2s), x ≥ 5: max ≤ 2 ⊥.
             rcases List.mem_cons.mp hx with rfl | hx_tail
             · omega
@@ -418,12 +419,48 @@ theorem cascade_strong_aux : ∀ phi : Nat, ∀ mr : Nat,
                   (InCascade.mk_M_empty_3 (d :: R'_pred)) h_or_pred
                 omega)
               h_prev
-        | mk_M_empty_7 _ =>
-          -- cfg = M L_suf v R_out vs M [] (c+4) R: L_suf = [], v = c+4.
-          -- h_disj: (∃ x ∈ [], x ≥ 5) ⊥ OR (v = a+4 ∧ L_suf = L'). So a = c, L' = [].
-          -- Predecessor h_prev : OrbitReachable (M0 [c] ((r'+3) :: e :: middle_init ++ [1, 2])).
-          -- Stubbed (requires backward exclusion of M0 [c] (...)).
-          sorry
+        | mk_M_empty_7 R =>
+          -- cfg = M [] 7 R. cfg' = cfg, so L_suf = [], v = 7. 4-case:
+          -- Cases 1, 2, 3: L_suf nonempty vs []. ⊥.
+          -- Case 4: a+4 = 7 (a=3), L'=[], r'=0, e=1, middle_init all 1s.
+          -- Pred = M0 [3] (3 :: 1 :: middle_init ++ [1, 2]). Parametric — SORRY.
+          rw [MacroConfig.M.injEq] at hcfg_M
+          obtain ⟨hL_eq, hv_eq, hR_eq⟩ := hcfg_M
+          subst hL_eq
+          subst hv_eq
+          subst hR_eq
+          rcases h_disj with ⟨mi_A, _, _, _, hLsuf⟩ |
+            ⟨_, _, hLsuf⟩ | ⟨_, _, _, hLsuf⟩ | ⟨_, _, _, _, _⟩
+          · -- Case 1: |L_suf|=0 < 3 ⊥.
+            have h_len :
+                (mi_A.reverse ++ e :: (r' + 1) :: (a + 4) :: L').length =
+                ([] : List Nat).length := by
+              rw [← hLsuf]
+            simp [List.length_append, List.length_cons] at h_len
+          · -- Case 2: L_suf = (r'+1)::(a+4)::L' = []. ⊥.
+            exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+          · -- Case 3: L_suf = (a+4)::L' = []. ⊥.
+            exact absurd hLsuf.symm (List.cons_ne_nil _ _)
+          · -- Case 4: a+4=7 (a=3), L'=[], r'=0, e=1, middle_init all 1s.
+            -- Pred = M0 [3] (3 :: 1 :: middle_init ++ [1, 2]).
+            -- Closes via chain helpers: not_M0_3_for_X_via_ih.
+            rename_i h_mi_one h_e h_r hav hLsuf
+            have ha : a = 3 := by omega
+            have hL' : L' = [] := hLsuf.symm
+            subst ha
+            subst hL'
+            subst h_e
+            subst h_r
+            apply OrbitReachable.not_M0_3_for_X_via_ih middle_init (by rfl)
+              (h_excl_R1_pred := fun {d_pre} {R'_pre} h_or_pred h_phi_lt => by
+                refine ih_phi (MacroConfig.M [] 3 (d_pre :: R'_pre)).phi ?_
+                  (MacroConfig.M [] 3 (d_pre :: R'_pre)).mr
+                  (MacroConfig.M [] 3 (d_pre :: R'_pre)) rfl rfl
+                  (InCascade.mk_M_empty_3 (d_pre :: R'_pre)) h_or_pred
+                simp only [MacroConfig.phi_M, MacroConfig.phi_M0,
+                  List.sum_append, List.sum_cons, List.sum_nil] at h_phi_lt h_phi_side ⊢
+                omega)
+              h_prev
       | @step_R1 d_pre R'_pre _ _ h_pred _ _ _ h_phi =>
         -- predecessor M [] 3 (d_pre :: R'_pre). cfg.phi ≥ pred.phi + 2.
         -- Recurse via ih_phi at smaller phi.
